@@ -79,8 +79,13 @@ else
   TMP="$(mktemp -d)"
   URL="https://github.com/$REPO.git"
   say "  код:       $URL${REF:+ @ $REF}"
-  run git clone --depth 1 ${REF:+--branch "$REF"} "$URL" "$TMP/src" >/dev/null 2>&1 || die "не удалось клонировать $URL"
-  SRC="$TMP/src"
+  if [ "$DRY" = "1" ]; then
+    say "  [dry] git clone --depth 1 ${REF:+--branch $REF }$URL <tmp>/src"
+    SRC="$(cd "$(dirname "$0")/../.." && pwd)"   # при preview берём дерево, из которого запущен скрипт
+  else
+    git clone --depth 1 ${REF:+--branch "$REF"} "$URL" "$TMP/src" >/dev/null 2>&1 || die "не удалось клонировать $URL"
+    SRC="$TMP/src"
+  fi
 fi
 # the tree may be the repository root, Server/ itself, or a release archive that unpacked to mse-<ver>/
 [ -d "$SRC/Server" ] && SRC="$SRC/Server"
@@ -225,18 +230,48 @@ fi
 
 # ---------------------------------------------------------------- 6. TUI
 if [ "$DRY" = "0" ]; then
+  rm -f "$PREFIX/stack/tui.py" 2>/dev/null || true
   cat > /usr/local/bin/mse <<TUI
 #!/usr/bin/env bash
-exec python3 $PREFIX/stack/tui.py "\$@"
+# панель управления MSE: тот же движок экранов, что у `sudo obhod`
+exec python3 $PREFIX/stack/mse_setup.py "\$@"
 TUI
   chmod 755 /usr/local/bin/mse
 fi
 say "  TUI:       sudo mse"
 
 # ---------------------------------------------------------------- 7. туннель
+# apt_update_safe: чужой сломанный репозиторий (например, 404 у стороннего зеркала) не должен валить установку.
+# Ошибки `apt-get update` тут не фатальны: нужен только свежий индекс для пакета tailscale.
+apt_update_safe() {
+  if [ "$DRY" = "1" ]; then say "  [dry] apt-get update (ошибки чужих репозиториев игнорируются)"; return 0; fi
+  if have apt-get; then
+    apt-get update -q 2>&1 | grep -E "^(Err|E:|W:)" | sed 's/^/  apt: /' || true
+    return 0
+  fi
+  return 0
+}
 if [ "$WITH_TUNNEL" = "1" ]; then
   if [ "$DRY" = "0" ] && have mse-tunnel.sh; then
-    mse-tunnel.sh install || note "tailscale не установился: поставьте вручную"
+    # своя, идемпотентная установка: не через `curl | sh` апстрима (тот делает apt-get update и падает на чужой
+    # 404-репозитории), а пакетом из официального репозитория tailscale
+    if ! have tailscale; then
+      apt_update_safe
+      if have apt-get; then
+        (curl -fsSL https://pkgs.tailscale.com/stable/$(. /etc/os-release 2>/dev/null && echo "$ID")/$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME").noarmor.gpg \
+          | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null 2>&1) || true
+        (echo "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/$(. /etc/os-release 2>/dev/null && echo "$ID") $(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME") main" \
+          > /etc/apt/sources.list.d/tailscale.list) || true
+        apt-get update -q -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/tailscale.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 >/dev/null 2>&1 || true
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -q tailscale >/dev/null 2>&1 \
+          && say "  tunnel:    tailscale установлен ($(tailscale version 2>/dev/null | head -1))" \
+          || note "tailscale не встал из apt: поставьте вручную (https://tailscale.com/download)"
+      else
+        note "нет apt-get: tailscale ставится вручную (https://tailscale.com/download)"
+      fi
+    else
+      say "  tunnel:    tailscale уже есть ($(tailscale version 2>/dev/null | head -1))"
+    fi
     if grep -q '^MSE_TAILSCALE_KEY=..*' "$ENV_FILE"; then
       MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh up || note "tailscale up не сработал: sudo mse → туннель"
       MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh funnel "${MSE_PORT:-8788}" >/dev/null \

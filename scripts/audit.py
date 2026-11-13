@@ -124,6 +124,7 @@ LIVE_HOST_OK = (
     'code.google.com', 'pegjs.org', 'bugzil.la', 'addons.mozilla.org', 'chrome.google.com',
     'microsoftedge.microsoft.com', 'apps.apple.com', 'play.google.com', 'violentmonkey.github.io',
     'www.tampermonkey.net', 'tampermonkey.net', 'github.com', 'raw.githubusercontent.com',
+    'pkgs.tailscale.com', 'tailscale.com', 'archive.ubuntu.com', 'security.ubuntu.com',
 )
 RULE_HOST = _r('live-moodle-host', r'\bhttps?://([a-z0-9][a-z0-9.-]*\.[a-z]{2,})', 'хост вне разрешённых заглушек')
 

@@ -222,7 +222,7 @@ fi
 if [ "$DRY" = "0" ]; then
   cat > /usr/local/bin/mse <<TUI
 #!/usr/bin/env bash
-exec python3 $PREFIX/stack/tui.py "\$@"
+exec python3 $PREFIX/stack/mse_setup.py "\$@"
 TUI
   chmod 755 /usr/local/bin/mse
 fi
