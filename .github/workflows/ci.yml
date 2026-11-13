@@ -29,8 +29,10 @@ jobs:
         run: node --test --test-concurrency=1 tests/gateway.test.js
       - name: install --dry-run
         run: bash Server/stack/install.sh --dry-run --no-tunnel --yes
-      - name: tui --once
-        run: python3 Server/stack/tui.py --once
+      - name: panel (no tty → status)
+        run: python3 Server/stack/mse_setup.py --status || true
+      - name: panel renders with a pty
+        run: python3 tests/tui_smoke.py
 
   bot:
     name: telegram panel

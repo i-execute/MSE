@@ -15,7 +15,7 @@
 | шлюз 1.0.0 (прежний, без прокси) | `server-mse/mse-server.js` | G1–G14 |
 | tailscale вместо cloudflared | `server-mse/stack/mse-tunnel.sh` | `mse-tunnel.sh status --json` |
 | установка «как OBHOD» | `server-mse/stack/install.sh` | `bash install.sh --dry-run` |
-| TUI `sudo mse` | `server-mse/stack/tui.py` | `python3 tui.py --once` |
+| TUI `sudo mse` | `server-mse/stack/mse_setup.py` | `python3 mse_setup.py --status` |
 | TG-панель (goygram) | `server-mse/bot/{main,ui,client}.py` | `python3 tests/bot_selftest.py` (15/15) |
 
 ## 2. Архитектура (главное)

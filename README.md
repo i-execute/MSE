@@ -39,19 +39,23 @@ curl -fsSL https://raw.githubusercontent.com/i-execute/MSE/main/Storage/get.sh |
 Скрипт ставит:
 
 ```
-/opt/mse/            код (роутер, бот, TUI, туннель)
+/opt/mse/            код (роутер, бот, панель, туннель)
 /etc/mse/mse.env     настройки, права 600
 /var/lib/mse/        состояние: устройства, allow-лист, журнал
 systemd              mse-router.service, mse-bot.service
-sudo mse             панель управления (TUI)
+sudo mse             панель управления (меню, экраны, живые проверки)
 ```
 
 Дальше:
 
 ```bash
-sudo mse                          # туннель, модель, квота, токены, статус
+sudo mse                          # панель: Health, Install/Self-Heal, Services, Tunnel, Model & Keys, Uninstall
+sudo mse --status                 # то же без вопросов: таблица здоровья (для скриптов)
 curl -s localhost:8788/health     # что шлюз о себе думает
 ```
+
+Панель — порт установщика [OBHOD](https://github.com/i-execute/OBHOD): стрелки двигают выбор, Space отмечает,
+Enter выполняет; флагов нет, всё делается в меню.
 
 ## Архитектура
 
