@@ -1,0 +1,297 @@
+{
+  "version": "2.0.0",
+  "brand": "MSE",
+  "base": "2.22.0",
+  "bundles": {
+    "commons": {
+      "file": "js/commons.js",
+      "bytes": 448969,
+      "sha256": "2b8f1b026ba4e31795e2bb81dd0cca89522b8dcca26864f1e069ea66dd1aa463",
+      "assets": []
+    },
+    "background": {
+      "file": "js/background.js",
+      "bytes": 45294,
+      "sha256": "ffdf86606732d8575474e17e4a10c329b0b7f45302930252d4ddadbb08a48980",
+      "assets": []
+    },
+    "quiz_attempt": {
+      "file": "js/quiz_attempt.js",
+      "bytes": 109936,
+      "sha256": "1586558f06a797a1bbd3826d82f3ac1699b47e95feb07fd7d5d193a2b1f0caa8",
+      "assets": []
+    },
+    "quiz_overview": {
+      "file": "js/quiz_overview.js",
+      "bytes": 4201,
+      "sha256": "98198f8ac6d5705a5f886707a7bedf3518614c6857c5a3dada45c0279a8e6914",
+      "assets": []
+    },
+    "quiz_board": {
+      "file": "js/quiz_board.js",
+      "bytes": 18849,
+      "sha256": "3fe78d8e088d4fa36613de321e849ad7ba1f860dd74ebabfaeeabe44b92b7db0",
+      "assets": []
+    },
+    "popup": {
+      "file": "js/popup.js",
+      "bytes": 132229,
+      "sha256": "4cd935f9c8f486ba91f97318209741fc2adf48df7ca94b484d66d94d26f77843",
+      "assets": [
+        {
+          "file": "74d85fb11d53487d88e3.png",
+          "bytes": 29491,
+          "sha256": "34f35e60901d7974469557ab8a337c79f4905909a3920a8bed6a7416b716f898"
+        }
+      ]
+    },
+    "popper": {
+      "file": "js/popper.min.js",
+      "bytes": 18418,
+      "sha256": "1687f19dc5bbf6d17028a85728cb4c3de2df1716f739cf012a0b9453bc0920a1",
+      "assets": []
+    },
+    "bootstrap": {
+      "file": "js/bootstrap.min.js",
+      "bytes": 60073,
+      "sha256": "7fbae53dbdb3038f0aa95f06a586ab165a07e00b22f4330a95df54814a34cb6b",
+      "assets": []
+    }
+  },
+  "branding": {
+    "strings": 73,
+    "locales": 2,
+    "files": [
+      {
+        "where": "_locales/en/changelogTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/en/serviceUnreachableTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/en/serviceUnreachableContent",
+        "replaced": 4
+      },
+      {
+        "where": "_locales/en/highDemandTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/en/highDemandContent",
+        "replaced": 2
+      },
+      {
+        "where": "_locales/en/maintenanceTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/en/maintenanceContent",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/en/updateAvailableTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/en/updateAvailableContent",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/en/installTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/en/installContent",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/en/parallelAttemptsTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/en/parallelAttemptsContent",
+        "replaced": 2
+      },
+      {
+        "where": "_locales/en/syncshare",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/en/headHuntContent",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/changelogTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/serviceUnreachableTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/serviceUnreachableContent",
+        "replaced": 4
+      },
+      {
+        "where": "_locales/ru/highDemandTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/highDemandContent",
+        "replaced": 2
+      },
+      {
+        "where": "_locales/ru/maintenanceTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/maintenanceContent",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/updateAvailableTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/updateAvailableContent",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/installTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/installContent",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/parallelAttemptsTitle",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/parallelAttemptsContent",
+        "replaced": 2
+      },
+      {
+        "where": "_locales/ru/syncshare",
+        "replaced": 1
+      },
+      {
+        "where": "_locales/ru/headHuntContent",
+        "replaced": 1
+      },
+      {
+        "where": "html/popup/popup.html",
+        "replaced": 1
+      },
+      {
+        "where": "src/runtime.js",
+        "replaced": 20
+      },
+      {
+        "where": "js/commons.js",
+        "replaced": 1
+      },
+      {
+        "where": "js/popup.js",
+        "replaced": 4
+      },
+      {
+        "where": "manifest.name",
+        "replaced": 1
+      },
+      {
+        "where": "manifest.browser_action.default_title",
+        "replaced": 1
+      },
+      {
+        "where": "src/debug.js",
+        "replaced": 5
+      }
+    ],
+    "droppedMessages": 8
+  },
+  "pageScripts": {
+    "mse-ui": {
+      "bytes": 66244,
+      "sha256": "eee663d632a63f4089385948fd169dbb1f512119332bb3ae4eb3978e79b3eb2a",
+      "sanitizer": {
+        "comments": 84,
+        "strings": 2,
+        "templates": 0,
+        "regexps": 9,
+        "windowRefs": 0,
+        "windowProps": 0
+      }
+    },
+    "mse-auth": {
+      "bytes": 7456,
+      "sha256": "93950cecab722cf9fcad04eea3dfedecee1a64f045b3c4932622f58c100b13c1",
+      "sanitizer": {
+        "comments": 16,
+        "strings": 0,
+        "templates": 0,
+        "regexps": 2,
+        "windowRefs": 0,
+        "windowProps": 0
+      }
+    },
+    "mse-bridge": {
+      "bytes": 13486,
+      "sha256": "d7a29ad782753396401be2c816ae3077bb344a0ce73856bb3cefa549bf75eb25",
+      "sanitizer": {
+        "comments": 14,
+        "strings": 1,
+        "templates": 0,
+        "regexps": 6,
+        "windowRefs": 0,
+        "windowProps": 0
+      }
+    },
+    "debug": {
+      "bytes": 42360,
+      "sha256": "7fe6a23f8e383dae397ae5d1fdbc23c110e4fbf3bfeee4580ea9540fbcab5bce",
+      "sanitizer": {
+        "comments": 32,
+        "strings": 0,
+        "templates": 0,
+        "regexps": 2,
+        "windowRefs": 0,
+        "windowProps": 0
+      }
+    }
+  },
+  "userscript": {
+    "file": "Storage/artifacts/mse.user.js",
+    "bytes": 1624281,
+    "sha256": "2bf0a50fb2893fc0b54a1e61f674b7e5274ece4ff7edd146d1f4e96ebee31e8b"
+  },
+  "sanitizer": {
+    "comments": 65,
+    "strings": 97,
+    "templates": 3,
+    "regexps": 36,
+    "windowRefs": 87,
+    "windowProps": 35
+  },
+  "service": {
+    "serviceUrl": "https://syncshare.ru/api/",
+    "accountsUrl": "https://syncshare.ru/api/"
+  },
+  "leaks": {
+    "brandWord": 0,
+    "brandWordLower": 28,
+    "note": "the answer service of the original is the only place the old name may remain"
+  },
+  "matches": [
+    "*://*/mod/quiz/attempt.php*",
+    "*://*/mod/quiz/review.php*",
+    "*://*/mod/quiz/summary.php*",
+    "*://*/mod/quiz/view.php*",
+    "*://*/my/",
+    "*://*/my/*",
+    "*://*/my/index.php*"
+  ]
+}

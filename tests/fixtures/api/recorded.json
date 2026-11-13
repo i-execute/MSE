@@ -1,0 +1,564 @@
+[
+ {
+  "method": "POST",
+  "path": "/api/ofrep/v1/evaluate/flags",
+  "request": {
+   "context": {
+    "targetingKey": "extension",
+    "client": {
+     "version": "2.22.0",
+     "platform": "firefox"
+    }
+   }
+  },
+  "forwarded": true,
+  "status": 200,
+  "etag": "\"15362dd57480c49b9fd8d4da0d1c32ef7ecae74aa75b72d00dffd157c09935e6\"",
+  "json": {
+   "flags": [
+    {
+     "key": "ai-public-launch",
+     "reason": "UNKNOWN",
+     "variant": "off",
+     "value": false
+    },
+    {
+     "key": "ai-solve-images",
+     "reason": "UNKNOWN",
+     "variant": "on",
+     "value": true
+    },
+    {
+     "key": "ai-solve-unsupported",
+     "reason": "STATIC",
+     "variant": "on",
+     "value": true
+    },
+    {
+     "key": "ai-solve-web-search",
+     "reason": "STATIC",
+     "variant": "on",
+     "value": true
+    },
+    {
+     "key": "cookie-consent",
+     "reason": "STATIC",
+     "variant": "variant-a",
+     "value": {
+      "metrika": {
+       "id": 106854242,
+       "options": {
+        "accurateTrackBounce": true,
+        "clickmap": true,
+        "ssr": true,
+        "trackLinks": true,
+        "webvisor": true
+       }
+      },
+      "version": 1
+     }
+    },
+    {
+     "key": "quiz-view",
+     "reason": "STATIC",
+     "variant": "on",
+     "value": true
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/v2/quiz/solution?client=2.22.0&host=school.moodledemo.net&courseId=66&quizId=789&attemptId=89&moodleId=56&questionIdentity=63686872&questionType=multichoice&questionId=1346",
+  "request": null,
+  "forwarded": true,
+  "status": 200,
+  "etag": "W/\"e3-2J7Sl8IeKbTtQLjUZP0WSRw1bRU\"",
+  "json": [
+   {
+    "anchor": [
+     "A hashtag"
+    ],
+    "suggestions": [
+     {
+      "correctness": 2,
+      "confidence": 0.91,
+      "label": "A hashtag",
+      "data": {
+       "anchor": [
+        "A hashtag"
+       ]
+      }
+     }
+    ],
+    "submissions": [
+     {
+      "correctness": 2,
+      "count": 57,
+      "label": "A hashtag",
+      "data": {
+       "anchor": [
+        "A hashtag"
+       ]
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/v2/quiz/solution?client=2.22.0&host=school.moodledemo.net&courseId=66&quizId=789&attemptId=89&moodleId=56&questionIdentity=103423&questionType=shortanswer&questionId=1348",
+  "request": null,
+  "forwarded": true,
+  "status": 200,
+  "etag": "W/\"4a3-/OWM5Hs1dOBeXm1K7OMcLSSgRGY\"",
+  "json": [
+   {
+    "anchor": null,
+    "suggestions": [
+     {
+      "correctness": 2,
+      "confidence": 0.99,
+      "label": "tweet",
+      "data": "tweet"
+     }
+    ],
+    "submissions": [
+     {
+      "correctness": -1,
+      "count": 1,
+      "label": "gfd",
+      "data": "gfd"
+     },
+     {
+      "correctness": 0,
+      "count": 1,
+      "label": "test2139",
+      "data": "test2139"
+     },
+     {
+      "correctness": 0,
+      "count": 13,
+      "label": "tsdfdfasdasd",
+      "data": "tsdfdfasdasd"
+     },
+     {
+      "correctness": 0,
+      "count": 8,
+      "label": "test0005",
+      "data": "test0005"
+     },
+     {
+      "correctness": 2,
+      "count": 9,
+      "label": "tweet",
+      "data": "tweet"
+     },
+     {
+      "correctness": 0,
+      "count": 4,
+      "label": "Test1112",
+      "data": "Test1112"
+     },
+     {
+      "correctness": 0,
+      "count": 2,
+      "label": "test1212",
+      "data": "test1212"
+     },
+     {
+      "correctness": 0,
+      "count": 1,
+      "label": "tweet0010val",
+      "data": "tweet0010val"
+     },
+     {
+      "correctness": 0,
+      "count": 2,
+      "label": "test1054",
+      "data": "test1054"
+     },
+     {
+      "correctness": 0,
+      "count": 1,
+      "label": "tweet1012",
+      "data": "tweet1012"
+     },
+     {
+      "correctness": 0,
+      "count": 1,
+      "label": "tweet1031",
+      "data": "tweet1031"
+     },
+     {
+      "correctness": 0,
+      "count": 1,
+      "label": "tweet1041",
+      "data": "tweet1041"
+     },
+     {
+      "correctness": 0,
+      "count": 3,
+      "label": "tweet2156ggg",
+      "data": "tweet2156ggg"
+     },
+     {
+      "correctness": 0,
+      "count": 1,
+      "label": "tweet1336a",
+      "data": "tweet1336a"
+     },
+     {
+      "correctness": 0,
+      "count": 1,
+      "label": "1550cons",
+      "data": "1550cons"
+     },
+     {
+      "correctness": 0,
+      "count": 36,
+      "label": "tweet1854dead",
+      "data": "tweet1854dead"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/v2/quiz/solution?client=2.22.0&host=school.moodledemo.net&courseId=66&quizId=789&attemptId=89&moodleId=56&questionIdentity=125138885&questionType=match&questionId=1349",
+  "request": null,
+  "forwarded": true,
+  "status": 200,
+  "etag": "W/\"418-3xPA6xAuGhiG/Gs28d832XnvFVw\"",
+  "json": [
+   {
+    "anchor": [
+     "",
+     "-1510145339"
+    ],
+    "suggestions": [
+     {
+      "correctness": 2,
+      "confidence": 0.99,
+      "label": "LinkedIn",
+      "data": "LinkedIn"
+     }
+    ],
+    "submissions": [
+     {
+      "correctness": 2,
+      "count": 2,
+      "label": "LinkedIn",
+      "data": "LinkedIn"
+     }
+    ]
+   },
+   {
+    "anchor": [
+     "",
+     "1860956741"
+    ],
+    "suggestions": [
+     {
+      "correctness": 2,
+      "confidence": 0.99,
+      "label": "Yelp",
+      "data": "Yelp"
+     }
+    ],
+    "submissions": [
+     {
+      "correctness": -1,
+      "count": 1,
+      "label": "Facetime",
+      "data": "Facetime"
+     },
+     {
+      "correctness": 2,
+      "count": 2,
+      "label": "Yelp",
+      "data": "Yelp"
+     }
+    ]
+   },
+   {
+    "anchor": [
+     "",
+     "-1859093350"
+    ],
+    "suggestions": [
+     {
+      "correctness": 2,
+      "confidence": 0.99,
+      "label": "Instagram",
+      "data": "Instagram"
+     }
+    ],
+    "submissions": [
+     {
+      "correctness": 2,
+      "count": 2,
+      "label": "Instagram",
+      "data": "Instagram"
+     }
+    ]
+   },
+   {
+    "anchor": [
+     "",
+     "1414805592"
+    ],
+    "suggestions": [
+     {
+      "correctness": 2,
+      "confidence": 0.99,
+      "label": "Snapchat",
+      "data": "Snapchat"
+     }
+    ],
+    "submissions": [
+     {
+      "correctness": 2,
+      "count": 3,
+      "label": "Snapchat",
+      "data": "Snapchat"
+     }
+    ]
+   },
+   {
+    "anchor": [
+     "",
+     "-838024996"
+    ],
+    "suggestions": [
+     {
+      "correctness": 2,
+      "confidence": 0.99,
+      "label": "Twitter",
+      "data": "Twitter"
+     }
+    ],
+    "submissions": [
+     {
+      "correctness": 2,
+      "count": 2,
+      "label": "Twitter",
+      "data": "Twitter"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/v2/quiz/solution?client=2.22.0&host=school.moodledemo.net&courseId=66&quizId=789&attemptId=89&moodleId=56&questionIdentity=31162788&questionType=truefalse&questionId=1350",
+  "request": null,
+  "forwarded": true,
+  "status": 200,
+  "etag": "W/\"ce-Nw7q5ih4b2FeEoLPfAiBQOTrSN0\"",
+  "json": [
+   {
+    "anchor": [
+     "False"
+    ],
+    "suggestions": [
+     {
+      "correctness": 2,
+      "confidence": 0.87,
+      "label": "False",
+      "data": {
+       "anchor": [
+        "False"
+       ]
+      }
+     }
+    ],
+    "submissions": [
+     {
+      "correctness": 2,
+      "count": 4,
+      "label": "False",
+      "data": {
+       "anchor": [
+        "False"
+       ]
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/api/ofrep/v1/evaluate/flags",
+  "request": {
+   "context": {
+    "targetingKey": "extension",
+    "client": {
+     "version": "2.22.0",
+     "platform": "firefox"
+    }
+   }
+  },
+  "forwarded": true,
+  "status": 200,
+  "etag": "\"15362dd57480c49b9fd8d4da0d1c32ef7ecae74aa75b72d00dffd157c09935e6\"",
+  "json": {
+   "flags": [
+    {
+     "key": "ai-public-launch",
+     "reason": "UNKNOWN",
+     "variant": "off",
+     "value": false
+    },
+    {
+     "key": "ai-solve-images",
+     "reason": "UNKNOWN",
+     "variant": "on",
+     "value": true
+    },
+    {
+     "key": "ai-solve-unsupported",
+     "reason": "STATIC",
+     "variant": "on",
+     "value": true
+    },
+    {
+     "key": "ai-solve-web-search",
+     "reason": "STATIC",
+     "variant": "on",
+     "value": true
+    },
+    {
+     "key": "cookie-consent",
+     "reason": "STATIC",
+     "variant": "variant-a",
+     "value": {
+      "metrika": {
+       "id": 106854242,
+       "options": {
+        "accurateTrackBounce": true,
+        "clickmap": true,
+        "ssr": true,
+        "trackLinks": true,
+        "webvisor": true
+       }
+      },
+      "version": 1
+     }
+    },
+    {
+     "key": "quiz-view",
+     "reason": "STATIC",
+     "variant": "on",
+     "value": true
+    }
+   ]
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/ofrep/v1/evaluate/flags",
+  "request": {
+   "context": {
+    "targetingKey": "extension",
+    "client": {
+     "version": "2.22.0",
+     "platform": "firefox"
+    }
+   }
+  },
+  "forwarded": true,
+  "status": 200,
+  "etag": "\"15362dd57480c49b9fd8d4da0d1c32ef7ecae74aa75b72d00dffd157c09935e6\"",
+  "json": {
+   "flags": [
+    {
+     "key": "ai-public-launch",
+     "reason": "UNKNOWN",
+     "variant": "off",
+     "value": false
+    },
+    {
+     "key": "ai-solve-images",
+     "reason": "UNKNOWN",
+     "variant": "on",
+     "value": true
+    },
+    {
+     "key": "ai-solve-unsupported",
+     "reason": "STATIC",
+     "variant": "on",
+     "value": true
+    },
+    {
+     "key": "ai-solve-web-search",
+     "reason": "STATIC",
+     "variant": "on",
+     "value": true
+    },
+    {
+     "key": "cookie-consent",
+     "reason": "STATIC",
+     "variant": "variant-a",
+     "value": {
+      "metrika": {
+       "id": 106854242,
+       "options": {
+        "accurateTrackBounce": true,
+        "clickmap": true,
+        "ssr": true,
+        "trackLinks": true,
+        "webvisor": true
+       }
+      },
+      "version": 1
+     }
+    },
+    {
+     "key": "quiz-view",
+     "reason": "STATIC",
+     "variant": "on",
+     "value": true
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/v2/status?client=2.22.0",
+  "request": null,
+  "forwarded": true,
+  "status": 200,
+  "etag": "W/\"28-5zKcXBR9L6I2eAO0XaSApHQIGlw\"",
+  "json": {
+   "maintenance": false,
+   "highDemand": false
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/v2/quiz/completion?client=2.22.0&host=school.moodledemo.net&quizId=789",
+  "request": null,
+  "forwarded": true,
+  "status": 200,
+  "etag": "W/\"1a-+klJAK7VHIY6EQ05qUn86Z6D3wk\"",
+  "json": {
+   "result": "Inavalid auth"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/v2/update?client=2.22.0",
+  "request": null,
+  "forwarded": true,
+  "status": 200,
+  "etag": "W/\"30-jrVwczwdrF4c33K0zThdl0OM+5w\"",
+  "json": {
+   "updateRequired": false,
+   "latestVersion": "1.1.6"
+  }
+ }
+]

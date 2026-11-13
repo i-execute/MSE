@@ -1,0 +1,248 @@
+{
+ "m1": {
+  "pill": {
+   "text": "MSE",
+   "left": "334px",
+   "top": "588px",
+   "w": 54,
+   "h": 28,
+   "badge": "2"
+  },
+  "pop": {
+   "w": 272,
+   "h": 189
+  },
+  "text": "iMSE · вопрос 1×✓A hashtag83%A tweet17%сеть в порядкежурнал"
+ },
+ "m2": {
+  "early": {
+   "visible": true,
+   "hasPop": true
+  },
+  "after": {
+   "visible": false,
+   "pill": {
+    "text": "MSE",
+    "left": "334px",
+    "top": "588px",
+    "w": 54,
+    "h": 28,
+    "badge": "2"
+   }
+  }
+ },
+ "m3": {
+  "after": {
+   "x": 24,
+   "y": 180
+  },
+  "dragged": {
+   "pos": {
+    "x": 84,
+    "y": 100
+   },
+   "open": false
+  }
+ },
+ "m4": {
+  "question": {
+   "text": "You are watching the TV news and see this appear on the scre",
+   "type": "multichoice",
+   "answers": [
+    "A hashtag",
+    "A tweet",
+    "A tag"
+   ],
+   "identity": 231701,
+   "supported": true
+  },
+  "meta": {
+   "host": "school.moodledemo.net",
+   "courseId": "66",
+   "quizId": "789",
+   "attemptId": "89",
+   "moodleId": "56",
+   "missing": [],
+   "identity": {
+    "id": "56",
+    "name": null,
+    "login": null,
+    "source": "data-userid"
+   }
+  },
+  "rows": [
+   {
+    "label": "A hashtag",
+    "correctness": 2,
+    "count": 57,
+    "confidence": 0.91,
+    "share": 83
+   },
+   {
+    "label": "A tweet",
+    "correctness": 0,
+    "count": 12,
+    "confidence": null,
+    "share": 17
+   }
+  ],
+  "asked": "/api/v2/quiz/solution?client=2.22.0&host=school.moodledemo.net&courseId=66&quizId=789&attemptId=89&moodleId=56&questionIdentity=63686872&questionType=multichoice&questionId=1346",
+  "chosen": {
+   "value": "0",
+   "label": "A hashtag"
+  }
+ },
+ "m5": {
+  "map": {
+   "multichoice": {
+    "type": "multichoice",
+    "supported": true,
+    "kind": "choice",
+    "label": "один ответ"
+   },
+   "ddwtos": {
+    "type": "ddwtos",
+    "supported": false,
+    "kind": null,
+    "label": null
+   },
+   "shortanswer": {
+    "type": "shortanswer",
+    "supported": true,
+    "kind": "text",
+    "label": "короткий ответ"
+   },
+   "match": {
+    "type": "match",
+    "supported": true,
+    "kind": "select",
+    "label": "сопоставление"
+   },
+   "truefalse": {
+    "type": "truefalse",
+    "supported": true,
+    "kind": "choice",
+    "label": "верно/неверно"
+   }
+  }
+ },
+ "m6": {
+  "identity": {
+   "id": "12345",
+   "idSource": "M.cfg.userid",
+   "name": "Тестовый Пользователь",
+   "nameSource": "меню пользователя",
+   "login": "testuser",
+   "site": "981484524"
+  },
+  "text": "iMSE · аккаунт×АККАУНТ МУДЛID12345логинtestuserФИОТестовый ПользовательУСТРОЙСТВОключmse_f44c76649cfc778f3f4b54d367a1d56053f35922dc7ebe3c334fe2fd9f980f37ключ не провереншлюзжурнал сетиоткрыть"
+ },
+ "m7": {
+  "text": "Тестовый Пользователь\nПрофиль",
+  "modals": 0,
+  "pill": "MSE"
+ },
+ "m8": {
+  "asked": 5,
+  "posted": 0
+ },
+ "m9": {
+  "journal": [
+   {
+    "t": 1794577457118,
+    "kind": "answers",
+    "ok": false,
+    "text": "база ответов: 500",
+    "ms": 4
+   }
+  ],
+  "text": "←MSE · сеть×ЖУРНАЛ СЕТИ1 сбаза ответов: 500 · 4 мсочистить"
+ },
+ "m10": {
+  "meta": {
+   "host": "school.moodledemo.net",
+   "courseId": null,
+   "quizId": null,
+   "attemptId": null,
+   "moodleId": "12345",
+   "missing": [
+    "courseId",
+    "quizId",
+    "attemptId"
+   ],
+   "identity": {
+    "id": "12345",
+    "name": null,
+    "login": null,
+    "source": "M.cfg.userid"
+   }
+  },
+  "text": "iMSE · вопрос 1×нет данных страницы: курс, тест, попыткаповторитьнет данных страницы: курс, тест, попытка — запрос не отправленжурнал"
+ },
+ "m11": {
+  "key": "mse_c511fb…",
+  "reg": "pending",
+  "agent": {
+   "state": "ok",
+   "answer": "A hashtag",
+   "model": "mock-model"
+  },
+  "journal": [
+   {
+    "t": 1794577467708,
+    "kind": "answers",
+    "ok": true,
+    "text": "база ответов: 1 записей",
+    "ms": 6
+   },
+   {
+    "t": 1794577468204,
+    "kind": "gateway",
+    "ok": true,
+    "text": "шлюз на связи · 2 моделей",
+    "ms": 7
+   },
+   {
+    "t": 1794577471406,
+    "kind": "agent",
+    "ok": true,
+    "text": "агент: A hashtag",
+    "ms": 9
+   }
+  ]
+ },
+ "m12a": {
+  "before": null,
+  "after": "12345",
+  "asked": 1,
+  "rows": 2
+ },
+ "m12b": {
+  "text": "iMSE · вопрос 1×нет данных страницы: ID пользователявзять ID со страницы /my/нет данных страницы: ID пользователя — запрос не отправленжурнал",
+  "journal": [
+   {
+    "t": 1794577475548,
+    "kind": "gateway",
+    "ok": false,
+    "text": "на /my/ тоже нет ID",
+    "ms": 4
+   },
+   {
+    "t": 1794577475549,
+    "kind": "answers",
+    "ok": false,
+    "text": "нет данных страницы: ID пользователя — запрос не отправлен"
+   }
+  ]
+ },
+ "m13": {
+  "base": "iMSE · вопрос 1×ответов пока нетсеть в порядкежурнал",
+  "ai": {
+   "state": "ok",
+   "text": "A hashtag",
+   "model": null
+  },
+  "chatHits": 1,
+  "tier": "owner"
+ }
+}

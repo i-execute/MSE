@@ -1,0 +1,14 @@
+{
+  "name": "mse-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MSE gateway: an OpenAI-compatible bridge for the MSE extension, with per-device keys, an allow-list by Moodle id, quotas and streaming",
+  "main": "mse-server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node mse-server.js",
+    "mock": "node mock-upstream.js",
+    "check": "node -e \"require('./mse-server.js');console.log('loads fine')\""
+  },
+  "dependencies": {}
+}
