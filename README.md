@@ -1,0 +1,128 @@
+<div align="center">
+
+# MSE
+
+**Панель ответов для Moodle: пилюля на странице, ответы из базы и от своей модели.**
+Расширение-юзерскрипт + шлюз, который живёт на вашей машине и снаружи виден только через tailscale.
+
+`userscript` · `node` · `python` · `tailscale` · `systemd`
+
+</div>
+
+## Что это
+
+MSE — две части, которые работают вместе:
+
+| часть | что делает | где лежит |
+|---|---|---|
+| **Расширение** | маленькая пилюля `MSE` на странице попытки Moodle: варианты ответов из общей базы, тап — и ответ в форме | `Extensions/` |
+| **Шлюз** | принимает запросы снаружи, решает кому можно (ключ устройства + allow-лист по Moodle ID), считает квоту и проксирует на локальный AI-бэкенд | `Server/` |
+
+Ключ модели живёт только в AI-бэкенде на вашей машине. В расширении и в шлюзе его нет.
+
+## Клиенты
+
+| клиент | как ставится | инструкция |
+|---|---|---|
+| **iOS / iPadOS / macOS** | Stay for Safari → файл `mse.user.js` | [`Extensions/iOS`](Extensions/iOS/README.md) |
+| **Android** | Kiwi (расширения) или Firefox + Violentmonkey | [`Extensions/Android`](Extensions/Android/README.md) |
+| **Desktop** | Tampermonkey в Chrome / Edge / Brave | [`Extensions/Desktop`](Extensions/Desktop/README.md) |
+
+Один и тот же файл `Storage/artifacts/mse.user.js` — для всех трёх.
+
+## Установка сервера
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/i-execute/MSE/main/Storage/get.sh | sudo bash
+```
+
+Скрипт ставит:
+
+```
+/opt/mse/            код (роутер, бот, TUI, туннель)
+/etc/mse/mse.env     настройки, права 600
+/var/lib/mse/        состояние: устройства, allow-лист, журнал
+systemd              mse-router.service, mse-bot.service
+sudo mse             панель управления (TUI)
+```
+
+Дальше:
+
+```bash
+sudo mse                          # туннель, модель, квота, токены, статус
+curl -s localhost:8788/health     # что шлюз о себе думает
+```
+
+## Архитектура
+
+```
+iPhone / Android / Desktop
+        │  https  (tailscale funnel, стабильный адрес)
+        ▼
+  <host>.<tailnet>.ts.net
+        │  127.0.0.1:8788
+  mse-router.js ──── ключ устройства, allow-лист по Moodle ID, квота, журнал
+        │  127.0.0.1:8799 (только loopback)
+  AI-бэкенд (OpenAI-совместимый; здесь и только здесь — ключ модели)
+```
+
+Роутер ничего не знает про модели и их ключи: он проверяет, кому можно, и стримит ответ как есть.
+Telegram-бот (`Server/bot`) — та же админка шлюза, но в чате: заявки устройств, `/allow`, `/revoke`, квота,
+модель, журнал, включение funnel.
+
+## Приёмка (curl)
+
+```bash
+curl -s localhost:8788/health | jq '{name,version,role,backend,model,quota}'
+# → {"name":"MSE gateway","version":"2.0.0","role":"router","backend":"tailscale",…}
+
+KEY=mse_$(openssl rand -hex 32)
+curl -s -X POST localhost:8788/mse/v1/register -H 'content-type: application/json' \
+  -d "{\"key\":\"$KEY\",\"moodleId\":\"12345\",\"name\":\"Test User\"}" | jq '.device.status'
+# → "pending"
+
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8788/v1/chat/completions \
+  -H "authorization: Bearer $KEY" -H 'content-type: application/json' \
+  -d '{"messages":[{"role":"user","content":"hi"}]}'
+# → 403  (никто не пустил — модель недоступна)
+
+TOKEN=$(grep '^MSE_ADMIN_TOKEN=' /etc/mse/mse.env | cut -d= -f2)
+curl -s -X POST localhost:8788/admin/allow -H "x-admin-token: $TOKEN" \
+  -H 'content-type: application/json' -d '{"moodleId":"12345"}' | jq '.allow'
+
+curl -s localhost:8788/v1/chat/completions -H "authorization: Bearer $KEY" \
+  -H 'content-type: application/json' -d '{"stream":true,"messages":[{"role":"user","content":"hi"}]}' | head -3
+# → data: {"choices":[{"delta":{"content":"…"}}]} …
+```
+
+## Разработка
+
+```bash
+npm i                      # acorn, playwright — для сборки и тестов расширения
+python3 scripts/audit.py --strict      # «ноль отпечатков», это же гоняет CI
+node --test tests/gateway.test.js tests/router.test.js
+python3 tests/bot_selftest.py
+SS_BROWSER=webkit node --test --test-concurrency=1 tests/mse.test.js
+bash Extensions/build/build.sh         # → Storage/artifacts/mse.user.js
+```
+
+Сборка userscript-а требует вендорскую папку исходной сборки (её нет в репозитории):
+
+```bash
+MSE_VENDOR_DIR=/path/to/syncshare-<ver> bash Extensions/build/build.sh
+```
+
+## Структура
+
+```
+Server/          роутер, бот, TUI, туннель, установка, гайд агента
+Extensions/      iOS · Android · Desktop (инструкции) + src/ (наш слой) + build/ (сборка)
+Storage/         get.sh, релизные артефакты, суммы оригиналов
+scripts/         audit.py (ноль отпечатков)
+tests/           роутер, шлюз, расширение (WebKit), бот
+.github/         CI: audit + тесты
+```
+
+## Лицензия
+
+См. [`LICENSE`](LICENSE).

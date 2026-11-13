@@ -1,0 +1,29 @@
+{
+  "courses": [
+    "https://school.moodledemo.net/course/view.php?id=66",
+    "https://school.moodledemo.net/course/view.php?id=59",
+    "https://school.moodledemo.net/course/view.php?id=80",
+    "https://school.moodledemo.net/course/view.php?id=62",
+    "https://school.moodledemo.net/course/view.php?id=63",
+    "https://school.moodledemo.net/course/view.php?id=39",
+    "https://school.moodledemo.net/course/view.php?id=56",
+    "https://school.moodledemo.net/course/view.php?id=51",
+    "https://school.moodledemo.net/course/view.php?id=6",
+    "https://school.moodledemo.net/course/view.php?id=67"
+  ],
+  "quizzes": [
+    "https://school.moodledemo.net/mod/quiz/view.php?id=789",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=761",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=723",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=757",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=730",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=702",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=699",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=700",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=235",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=236",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=237",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=238",
+    "https://school.moodledemo.net/mod/quiz/view.php?id=240"
+  ]
+}
