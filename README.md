@@ -1,0 +1,2 @@
+# MSE
+Moodle Solver Extension
