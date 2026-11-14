@@ -1,170 +1,273 @@
 #!/usr/bin/env bash
-# MSE 2.0 — установка сервера «обход + AI-мост» одной командой:
+# MSE 2.0 — one-line server install (router + AI bridge + telegram bot + tailscale tunnel).
 #
-#     curl -fsSL https://raw.githubusercontent.com/i-execute/MSE/main/Storage/get.sh | sudo bash
+#     curl -fsSL https://raw.githubusercontent.com/i-execute/MSE/main/Storage/get.sh | bash
 #
-# (get.sh скачивает релиз и зовёт этот файл; руками его тоже можно: MSE_SRC_DIR=<клон репозитория> bash install.sh)
+# No arguments are required. The installer:
+#   . installs what is missing (node, python3, git, curl, openssl, tailscale) with the system package manager;
+#   . asks for sudo itself when it needs root — you do not have to remember it;
+#   . takes the values from the environment when they are already there, so a fully unattended install is:
+#       MSE_BOT_TOKEN=... MSE_OWNER_ID=... MSE_API_ID=... MSE_API_HASH=... MSE_TAILSCALE_KEY=... \
+#         bash install.sh
+#   . brings the tailscale tunnel up and turns the funnel on as soon as a key is present.
 #
-# Что ставится:
-#   /opt/mse/            код (роутер, бот, TUI, скрипт туннеля)
-#   /opt/mse/venv/       python-окружение бота (goygram)
-#   /etc/mse/mse.env     единственный файл настроек (права 600)
-#   /var/lib/mse/        состояние (устройства, allow-лист, журнал, admin-токен)
-#   /usr/local/bin/mse           TUI (как `sudo obhod` в OBHOD)
+# What it places:
+#   /opt/mse/            the code (router, bot, panel, tunnel script)
+#   /opt/mse/venv/       python environment of the bot (goygram)
+#   /etc/mse/mse.env     the only settings file (mode 600)
+#   /var/lib/mse/        state (devices, allow list, log, admin token)
+#   /usr/local/bin/mse           the panel (`sudo mse`)
 #   /usr/local/bin/mse-tunnel.sh tailscale: up / funnel / serve / status
 #   systemd: mse-router.service, mse-bot.service
 #
-# Флаги: --yes (без вопросов, всё из env или по умолчанию), --no-venv, --no-bot, --no-tunnel, --dry-run.
+# Flags: --yes  --update  --dry-run  --no-bot  --no-tunnel  --no-venv
 set -euo pipefail
 
 REPO="${MSE_REPO:-i-execute/MSE}"
 REF="${MSE_REF:-}"
 SRC_DIR="${MSE_SRC_DIR:-}"
 PREFIX="${MSE_PREFIX:-/opt/mse}"
-ENV_DIR="/etc/mse"
+ENV_DIR="${MSE_ENV_DIR:-/etc/mse}"
 ENV_FILE="$ENV_DIR/mse.env"
-STATE_DIR="/var/lib/mse"
+STATE_DIR="${MSE_STATE_DIR:-/var/lib/mse}"
 ASSUME_YES=0
 WITH_VENV=1
 WITH_BOT=1
 WITH_TUNNEL=1
 DRY=0
+UPDATE=0
 
 for arg in "$@"; do
   case "$arg" in
     --yes|-y) ASSUME_YES=1 ;;
+    --update|--upgrade) UPDATE=1; ASSUME_YES=1 ;;
     --no-venv) WITH_VENV=0 ;;
     --no-bot) WITH_BOT=0 ;;
     --no-tunnel) WITH_TUNNEL=0 ;;
     --dry-run) DRY=1 ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
-    *) echo "неизвестный флаг: $arg" >&2; exit 2 ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+    *) echo "unknown flag: $arg" >&2; exit 2 ;;
   esac
 done
 
 say() { printf '%s\n' "$*"; }
 note() { printf '%s\n' "$*" >&2; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
-run() { if [ "$DRY" = "1" ]; then say "  [dry] $*"; else "$@"; fi; }
-need_root() {
-  if [ "$DRY" = "1" ] || [ "${MSE_ALLOW_NONROOT:-0}" = "1" ]; then return 0; fi
-  [ "$(id -u)" = "0" ] || die "нужен root: sudo bash install.sh"
-}
 have() { command -v "$1" >/dev/null 2>&1; }
+run() { if [ "$DRY" = "1" ]; then say "  [dry] $*"; else "$@"; fi; }
 
-need_root
-say "MSE 2.0 · установка"
-say "  префикс:  $PREFIX"
-say "  настройки: $ENV_FILE"
-say "  состояние: $STATE_DIR"
-
-# ---------------------------------------------------------------- 1. что уже есть на машине
-have node || die "нужен node (18+): apt-get install -y nodejs"
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$NODE_MAJOR" -ge 18 ] || die "node слишком старый: $NODE_MAJOR (нужен 18+)"
-say "  node:      $(node -v)"
-
-if [ "$WITH_BOT" = "1" ] && [ "$WITH_VENV" = "1" ]; then
-  have python3 || die "нужен python3 (для бота) или запустите с --no-bot"
-  say "  python:    $(python3 -V)"
-fi
-
-# ---------------------------------------------------------------- 2. код
-TMP=""
-if [ -n "$SRC_DIR" ]; then
-  SRC="$SRC_DIR"
-  say "  код:       из $SRC (локально)"
-else
-  have git || die "нужен git (или --src через MSE_SRC_DIR)"
-  TMP="$(mktemp -d)"
-  URL="https://github.com/$REPO.git"
-  say "  код:       $URL${REF:+ @ $REF}"
-  if [ "$DRY" = "1" ]; then
-    say "  [dry] git clone --depth 1 ${REF:+--branch $REF }$URL <tmp>/src"
-    SRC="$(cd "$(dirname "$0")/../.." && pwd)"   # при preview берём дерево, из которого запущен скрипт
-  else
-    git clone --depth 1 ${REF:+--branch "$REF"} "$URL" "$TMP/src" >/dev/null 2>&1 || die "не удалось клонировать $URL"
-    SRC="$TMP/src"
+# ------------------------------------------------------------------ root, without the ritual
+# The script is written for root, but nobody has to remember sudo: when it is started as a normal user and sudo
+# exists, it re-runs itself under sudo. Only if there is no sudo at all does it continue with a warning.
+ensure_root() {
+  if [ "$DRY" = "1" ]; then return 0; fi
+  [ "$(id -u)" = "0" ] && return 0
+  [ "${MSE_ALLOW_NONROOT:-0}" = "1" ] && return 0
+  if have sudo; then
+    say "root is needed for /opt/mse and systemd: re-running under sudo"
+    exec sudo -E bash "$0" "$@"
   fi
-fi
-# the tree may be the repository root, Server/ itself, or a release archive that unpacked to mse-<ver>/
-[ -d "$SRC/Server" ] && SRC="$SRC/Server"
-if [ ! -f "$SRC/mse-router.js" ]; then
-  found="$(find "$SRC" -maxdepth 3 -type f -name mse-router.js 2>/dev/null | head -1)"
-  [ -n "$found" ] && SRC="$(dirname "$found")"
-fi
-[ -f "$SRC/mse-router.js" ] || die "в $SRC нет mse-router.js — это не дерево MSE"
-run mkdir -p "$PREFIX" "$ENV_DIR" "$STATE_DIR" /opt/mse/logs
-run cp -r "$SRC/." "$PREFIX/"
-run chmod 755 "$PREFIX/stack/mse-tunnel.sh" "$PREFIX/stack/install.sh"
-run ln -sf "$PREFIX/stack/mse-tunnel.sh" /usr/local/bin/mse-tunnel.sh
-say "  код:       установлен в $PREFIX"
+  note "warning: no root and no sudo — continuing, but systemd units and /opt/mse may fail"
+  note "warning: run the same command with sudo for a complete install"
+}
 
-# ---------------------------------------------------------------- 3. настройки
-gen_token() { if have openssl; then openssl rand -hex 24; else node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"; fi; }
-if [ -f "$ENV_FILE" ]; then
-  say "  настройки: уже есть, не трогаю"
-else
-  ADMIN="$(gen_token)"
+# ------------------------------------------------------------------ packages
+PKG=""
+pkg_manager() {
+  for m in apt-get dnf yum apk zypper pacman; do have "$m" && { PKG="$m"; return 0; }; done
+  return 1
+}
+pkg_install() {
+  [ -z "$PKG" ] && return 1
+  if [ "$DRY" = "1" ]; then say "  [dry] $PKG install $*"; return 0; fi
+  case "$PKG" in
+    apt-get)
+      # a broken third-party repository must never stop the install: its errors are printed, not fatal
+      apt-get update -q 2>&1 | grep -E '^(Err|E:|W:)' | sed 's/^/  apt: /' || true
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends "$@" >/dev/null 2>&1
+      ;;
+    dnf|yum) "$PKG" install -y -q "$@" >/dev/null 2>&1 ;;
+    apk) apk add --quiet "$@" >/dev/null 2>&1 ;;
+    zypper) zypper --quiet install -y "$@" >/dev/null 2>&1 ;;
+    pacman) pacman -S --noconfirm --needed "$@" >/dev/null 2>&1 ;;
+  esac
+}
+
+NODE_BIN=""
+NODE_MAJOR=0
+PY_BIN=""
+find_node() {
+  NODE_BIN="$(command -v node || true)"
+  [ -n "$NODE_BIN" ] || return 1
+  NODE_MAJOR="$("$NODE_BIN" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+  [ "$NODE_MAJOR" -ge 18 ]
+}
+
+install_deps() {
+  pkg_manager || note "no known package manager: dependencies must already be in place"
+  find_node || {
+    say "  deps:      node is missing or older than 18 — installing"
+    if [ -n "$PKG" ]; then
+      pkg_install ca-certificates curl git || true
+      case "$PKG" in
+        apt-get)
+          # the distribution node is old on many images: the NodeSource setup script is the reliable way
+          if have curl; then
+            curl -fsSL "https://deb.nodesource.com/setup_20.x" -o /tmp/mse-nodesource.sh 2>/dev/null \
+              && run bash /tmp/mse-nodesource.sh >/dev/null 2>&1 && run rm -f /tmp/mse-nodesource.sh || true
+          fi
+          pkg_install nodejs || true
+          ;;
+        *) pkg_install nodejs npm || pkg_install node || true ;;
+      esac
+    fi
+    find_node || die "node 18+ could not be installed: install it and run this again"
+  }
+  say "  node:      $("$NODE_BIN" -v)"
+
+  if [ "$WITH_BOT" = "1" ] && [ "$WITH_VENV" = "1" ]; then
+    PY_BIN="$(command -v python3 || true)"
+    if [ -z "$PY_BIN" ]; then
+      say "  deps:      python3 is missing — installing"
+      pkg_install python3 python3-venv python3-pip || pkg_install python3 || true
+      PY_BIN="$(command -v python3 || true)"
+    fi
+    [ -n "$PY_BIN" ] || die "python3 could not be installed (needed by the bot; use --no-bot to skip it)"
+    # Debian splits venv out of the main package: without it `python3 -m venv` fails with a long confusing error
+    "$PY_BIN" -c 'import venv, ensurepip' >/dev/null 2>&1 || pkg_install python3-venv python3-pip || true
+    say "  python:    $("$PY_BIN" -V 2>&1)"
+  fi
+
+  have curl || pkg_install curl || note "curl is missing: the tunnel and updates may not work"
+  have git || pkg_install git || true
+}
+
+# ------------------------------------------------------------------ source tree
+fetch_source() {
+  TMP=""
+  if [ -n "$SRC_DIR" ]; then
+    SRC="$SRC_DIR"
+    say "  code:      from $SRC (local)"
+  else
+    have git || die "git is required to fetch the code"
+    TMP="$(mktemp -d)"
+    URL="https://github.com/$REPO.git"
+    say "  code:      $URL${REF:+ @ $REF}"
+    if [ "$DRY" = "1" ]; then
+      say "  [dry] git clone --depth 1 ${REF:+--branch $REF }$URL <tmp>/src"
+      SRC="$(cd "$(dirname "$0")/../.." && pwd)"
+    else
+      git clone --depth 1 ${REF:+--branch "$REF"} "$URL" "$TMP/src" >/dev/null 2>&1 || die "could not clone $URL"
+      SRC="$TMP/src"
+    fi
+  fi
+  if [ -d "$SRC/Server" ]; then SRC="$SRC/Server"; fi
+  if [ ! -f "$SRC/mse-router.js" ]; then
+    found="$(find "$SRC" -maxdepth 3 -type f -name mse-router.js 2>/dev/null | head -1)"
+    if [ -n "$found" ]; then SRC="$(dirname "$found")"; fi
+  fi
+  [ -f "$SRC/mse-router.js" ] || die "$SRC has no mse-router.js — this is not the MSE tree"
+}
+
+gen_token() {
+  if have openssl; then openssl rand -hex 24
+  elif [ -n "$NODE_BIN" ]; then "$NODE_BIN" -e 'console.log(require("crypto").randomBytes(24).toString("hex"))'
+  else head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n'; fi
+}
+
+env_get() { # env_get KEY -> current value from the file (empty when absent)
+  [ -f "$ENV_FILE" ] || return 0
+  sed -n "s/^$1=//p" "$ENV_FILE" | tail -1
+}
+env_set() { # env_set KEY VALUE — replace in place, never duplicates a key
+  local k="$1" v="$2"
+  [ -f "$ENV_FILE" ] || return 0
+  if grep -q "^$k=" "$ENV_FILE"; then
+    local tmp="$ENV_FILE.tmp"
+    awk -v k="$k" -v v="$v" 'BEGIN{FS=OFS="="} $1==k{print k "=" v; next} {print}' "$ENV_FILE" > "$tmp" && mv "$tmp" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$k" "$v" >> "$ENV_FILE"
+  fi
+  chmod 600 "$ENV_FILE"
+}
+
+write_env() {
+  if [ -f "$ENV_FILE" ]; then
+    say "  settings:  already there, keeping it ($ENV_FILE)"
+    UPDATE=1
+    return 0
+  fi
   run install -m 600 /dev/null "$ENV_FILE"
-  if [ "$DRY" = "0" ]; then
-    cat > "$ENV_FILE" <<ENV
-# MSE 2.0 · единственный файл настроек. Права 600, владелец root.
+  if [ "$DRY" = "1" ]; then say "  settings:  [dry] would create $ENV_FILE"; return 0; fi
+  cat > "$ENV_FILE" <<ENV
+# MSE 2.0 · the only settings file. Mode 600, owner root.
 #
-# роутер (снаружи только через tailscale)
-MSE_PORT=8788
+# router (the outside world reaches it only through tailscale)
+MSE_PORT=${MSE_PORT:-8788}
 MSE_HOST=127.0.0.1
 MSE_PUBLIC_URL=
-MSE_ADMIN_TOKEN=$ADMIN
-MSE_DAILY_QUOTA=200
+MSE_ADMIN_TOKEN=$(gen_token)
+MSE_DAILY_QUOTA=${MSE_DAILY_QUOTA:-200}
 MSE_ALLOW_ORIGINS=*
-# AI-бэкенд: локальный порт, ключ модели живёт ТОЛЬКО там
+# AI backend: a local port; the model key lives there and nowhere else
 MSE_UPSTREAM_HOST=127.0.0.1
-MSE_UPSTREAM_PORT=8799
+MSE_UPSTREAM_PORT=${MSE_UPSTREAM_PORT:-8799}
 MSE_UPSTREAM_KEY=
-MSE_MODEL=gemini-3-flash
-MSE_MODELS=gemini-3-flash,gpt-4o-mini
-# tailscale вместо cloudflared
-MSE_TAILSCALE_KEY=
-MSE_TAILSCALE_HOSTNAME=mse-gateway
+MSE_MODEL=${MSE_MODEL:-gemini-3-flash}
+MSE_MODELS=${MSE_MODELS:-gemini-3-flash,gpt-4o-mini}
+# tailscale instead of cloudflared
+MSE_TAILSCALE_KEY=${MSE_TAILSCALE_KEY:-}
+MSE_TAILSCALE_HOSTNAME=${MSE_TAILSCALE_HOSTNAME:-mse-gateway}
 MSE_TAILSCALE_TAGS=
-# бот (goygram)
-MSE_BOT_TOKEN=
-MSE_OWNER_ID=
-MSE_OWNER_USERNAME=
-MSE_ADMIN_URL=http://127.0.0.1:8788
+# telegram bot (goygram)
+MSE_BOT_TOKEN=${MSE_BOT_TOKEN:-}
+MSE_OWNER_ID=${MSE_OWNER_ID:-}
+# optional: the MTProto transport of the bot (my.telegram.org). The bot itself needs only the token.
+MSE_API_ID=${MSE_API_ID:-}
+MSE_API_HASH=${MSE_API_HASH:-}
+MSE_OWNER_USERNAME=${MSE_OWNER_USERNAME:-}
+MSE_ADMIN_URL=http://127.0.0.1:${MSE_PORT:-8788}
 ENV
-  fi
-  say "  настройки: созданы ($ENV_FILE)"
-  if [ "$ASSUME_YES" = "0" ] && [ -t 0 ]; then
-    note ""
-    note "Впишите значения в $ENV_FILE (или запустите TUI: sudo mse)."
-    note "Минимум: MSE_TAILSCALE_KEY, MSE_BOT_TOKEN, MSE_OWNER_ID, MSE_MODEL."
-  fi
-fi
+  chmod 600 "$ENV_FILE"
+  say "  settings:  created ($ENV_FILE)"
+}
 
-# ---------------------------------------------------------------- 4. окружение бота
-if [ "$WITH_BOT" = "1" ]; then
+# values handed in through the environment win over an empty file — that is what makes the install unattended
+merge_env_from_environment() {
+  if [ "$DRY" = "1" ]; then return 0; fi
+  [ -f "$ENV_FILE" ] || return 0
+  for key in MSE_BOT_TOKEN MSE_OWNER_ID MSE_OWNER_USERNAME MSE_API_ID MSE_API_HASH MSE_TAILSCALE_KEY MSE_MODEL MSE_DAILY_QUOTA MSE_UPSTREAM_PORT MSE_PORT; do
+    val="${!key:-}"
+    [ -n "$val" ] || continue
+    [ "$(env_get "$key")" = "$val" ] && continue
+    env_set "$key" "$val"
+    say "  settings:  $key taken from the environment"
+  done
+}
+
+# ------------------------------------------------------------------ bot
+setup_bot_env() {
+  [ "$WITH_BOT" = "1" ] || return 0
   if [ "$WITH_VENV" = "1" ]; then
-    if [ ! -x "$PREFIX/venv/bin/python" ]; then
-      run python3 -m venv "$PREFIX/venv"
-    fi
+    [ -x "$PREFIX/venv/bin/python" ] || run "$PY_BIN" -m venv "$PREFIX/venv"
     if [ "$DRY" = "0" ]; then
       "$PREFIX/venv/bin/pip" install --quiet --upgrade pip >/dev/null 2>&1 || true
-      "$PREFIX/venv/bin/pip" install --quiet goygram || note "goygram не установился: бот не поднимется, остальное работает"
+      say "  bot:       installing goygram"
+      "$PREFIX/venv/bin/pip" install --quiet goygram || note "goygram did not install: the bot will not start, everything else works"
     fi
-    say "  бот:       venv $PREFIX/venv"
+    say "  bot:       venv $PREFIX/venv"
   else
-    say "  бот:       системный python"
+    say "  bot:       system python"
   fi
-fi
+}
 
-# ---------------------------------------------------------------- 5. systemd
-if have systemctl; then
-  if [ "$DRY" = "0" ]; then
-    cat > /etc/systemd/system/mse-router.service <<UNIT
+# ------------------------------------------------------------------ systemd
+write_units() {
+  have systemctl || { note "no systemctl: the router is not registered as a service"; return 0; }
+  if [ "$DRY" != "0" ]; then say "  [dry] would write mse-router.service and mse-bot.service"; return 0; fi
+  cat > /etc/systemd/system/mse-router.service <<UNIT
 [Unit]
-Description=MSE router (tailscale funnel → local AI backend)
+Description=MSE router (tailscale funnel -> local AI backend)
 After=network-online.target tailscaled.service
 Wants=network-online.target
 
@@ -173,7 +276,7 @@ Type=simple
 EnvironmentFile=$ENV_FILE
 Environment=HOME=/root
 WorkingDirectory=$PREFIX
-ExecStart=$(command -v node) $PREFIX/mse-router.js
+ExecStart=$NODE_BIN $PREFIX/mse-router.js
 Restart=always
 RestartSec=3
 UMask=0077
@@ -187,7 +290,7 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 UNIT
-    cat > /etc/systemd/system/mse-bot.service <<UNIT
+  cat > /etc/systemd/system/mse-bot.service <<UNIT
 [Unit]
 Description=MSE telegram control panel (goygram)
 After=network-online.target mse-router.service
@@ -213,80 +316,141 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 UNIT
-  fi
+}
+
+start_services() {
+  have systemctl || return 0
   run systemctl daemon-reload
   run systemctl enable mse-router.service >/dev/null 2>&1 || true
-  [ "$WITH_BOT" = "1" ] && run systemctl enable mse-bot.service >/dev/null 2>&1 || true
-  run systemctl restart mse-router.service || note "mse-router не стартовал: journalctl -u mse-router"
-  if [ "$WITH_BOT" = "1" ] && grep -q '^MSE_BOT_TOKEN=..*' "$ENV_FILE" 2>/dev/null; then
-    run systemctl restart mse-bot.service || note "mse-bot не стартовал: journalctl -u mse-bot"
-  else
-    note "бот не запущен: MSE_BOT_TOKEN пуст (или --no-bot)"
+  run systemctl restart mse-router.service || note "mse-router did not start: journalctl -u mse-router -n 40"
+  if [ "$WITH_BOT" = "1" ] && [ -n "$(env_get MSE_BOT_TOKEN)" ]; then
+    run systemctl enable mse-bot.service >/dev/null 2>&1 || true
+    run systemctl restart mse-bot.service || note "mse-bot did not start: journalctl -u mse-bot -n 40"
+    say "  bot:       mse-bot.service is running"
+  elif [ "$WITH_BOT" = "1" ]; then
+    note "bot is not started yet: no bot token. Add it in the panel (Model, Quota & Keys) or set MSE_BOT_TOKEN"
   fi
-  say "  systemd:   mse-router.service, mse-bot.service"
-else
-  note "systemctl нет: роутер не зарегистрирован как сервис"
-fi
+}
 
-# ---------------------------------------------------------------- 6. TUI
-if [ "$DRY" = "0" ]; then
-  rm -f "$PREFIX/stack/tui.py" 2>/dev/null || true
-  cat > /usr/local/bin/mse <<TUI
-#!/usr/bin/env bash
-# панель управления MSE: тот же движок экранов, что у `sudo obhod`
-exec python3 $PREFIX/stack/mse_setup.py "\$@"
-TUI
-  chmod 755 /usr/local/bin/mse
-fi
-say "  TUI:       sudo mse"
-
-# ---------------------------------------------------------------- 7. туннель
-# apt_update_safe: чужой сломанный репозиторий (например, 404 у стороннего зеркала) не должен валить установку.
-# Ошибки `apt-get update` тут не фатальны: нужен только свежий индекс для пакета tailscale.
-apt_update_safe() {
-  if [ "$DRY" = "1" ]; then say "  [dry] apt-get update (ошибки чужих репозиториев игнорируются)"; return 0; fi
-  if have apt-get; then
-    apt-get update -q 2>&1 | grep -E "^(Err|E:|W:)" | sed 's/^/  apt: /' || true
-    return 0
-  fi
+# ------------------------------------------------------------------ tunnel
+wait_for_router() {
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    curl -fsS "http://127.0.0.1:${MSE_PORT:-8788}/health" >/dev/null 2>&1 && return 0
+    sleep 1
+  done
   return 0
 }
-if [ "$WITH_TUNNEL" = "1" ]; then
-  if [ "$DRY" = "0" ] && have mse-tunnel.sh; then
-    # своя, идемпотентная установка: не через `curl | sh` апстрима (тот делает apt-get update и падает на чужой
-    # 404-репозитории), а пакетом из официального репозитория tailscale
-    if ! have tailscale; then
-      apt_update_safe
-      if have apt-get; then
-        (curl -fsSL https://pkgs.tailscale.com/stable/$(. /etc/os-release 2>/dev/null && echo "$ID")/$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME").noarmor.gpg \
-          | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null 2>&1) || true
-        (echo "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/$(. /etc/os-release 2>/dev/null && echo "$ID") $(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME") main" \
-          > /etc/apt/sources.list.d/tailscale.list) || true
-        apt-get update -q -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/tailscale.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 >/dev/null 2>&1 || true
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -q tailscale >/dev/null 2>&1 \
-          && say "  tunnel:    tailscale установлен ($(tailscale version 2>/dev/null | head -1))" \
-          || note "tailscale не встал из apt: поставьте вручную (https://tailscale.com/download)"
-      else
-        note "нет apt-get: tailscale ставится вручную (https://tailscale.com/download)"
+
+setup_tunnel() {
+  [ "$WITH_TUNNEL" = "1" ] || return 0
+  if [ "$DRY" = "1" ]; then say "  [dry] tailscale install / up / funnel"; return 0; fi
+  have mse-tunnel.sh || { note "mse-tunnel.sh is not in PATH: skipping the tunnel"; return 0; }
+
+  if ! have tailscale; then
+    say "  tunnel:    installing tailscale"
+    # the official repository only, with an isolated sourcelist: a broken third-party mirror cannot break it
+    if [ "$PKG" = "apt-get" ] && have curl; then
+      distro="$(. /etc/os-release 2>/dev/null && echo "$ID")"
+      codename="$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME")"
+      if [ -n "$distro" ] && [ -n "$codename" ]; then
+        curl -fsSL "https://pkgs.tailscale.com/stable/$distro/$codename.noarmor.gpg" \
+          | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null 2>&1 || true
+        echo "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/$distro $codename main" \
+          > /etc/apt/sources.list.d/tailscale.list
+        apt-get update -q -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/tailscale.list \
+          -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 >/dev/null 2>&1 || true
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -q tailscale >/dev/null 2>&1 || true
       fi
     else
-      say "  tunnel:    tailscale уже есть ($(tailscale version 2>/dev/null | head -1))"
-    fi
-    if grep -q '^MSE_TAILSCALE_KEY=..*' "$ENV_FILE"; then
-      MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh up || note "tailscale up не сработал: sudo mse → туннель"
-      MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh funnel "${MSE_PORT:-8788}" >/dev/null \
-        && say "  tunnel:    $(MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh url)" \
-        || note "funnel не включился: разрешите его в ACL tailnet (sudo mse → туннель)"
-    else
-      note "адрес появится после MSE_TAILSCALE_KEY (или tailscale up в TUI)"
+      pkg_install tailscale || true
     fi
   fi
-fi
+  if have tailscale; then
+    say "  tunnel:    tailscale $(tailscale version 2>/dev/null | head -1)"
+  else
+    note "tailscale could not be installed: the tunnel stays off (https://tailscale.com/download)"
+    return 0
+  fi
 
-[ -n "$TMP" ] && rm -rf "$TMP" || true
+  key="$(env_get MSE_TAILSCALE_KEY)"
+  if [ -n "$key" ]; then
+    say "  tunnel:    tailscale up (key from the settings)"
+    MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh up || note "tailscale up failed: see the panel (Tunnel)"
+  else
+    note "no tailscale key: the address appears after Tunnel -> tailscale up in the panel (or set MSE_TAILSCALE_KEY)"
+    note "the node can also be logged in on the machine once: sudo tailscale up"
+    return 0
+  fi
+
+  wait_for_router
+  say "  tunnel:    funnel -> 127.0.0.1:${MSE_PORT:-8788}"
+  if url="$(MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh funnel "${MSE_PORT:-8788}" 2>/dev/null | tail -1)"; then
+    case "$url" in
+      https://*)
+        env_set MSE_PUBLIC_URL "$url"
+        have systemctl && run systemctl restart mse-router.service >/dev/null 2>&1 || true
+        say "  tunnel:    $url"
+        ;;
+      *) note "funnel did not report an address: allow Funnel for this node in the tailnet ACL (panel -> Tunnel)" ;;
+    esac
+  else
+    note "funnel did not turn on: allow Funnel for this node in the tailnet ACL (panel -> Tunnel)"
+  fi
+}
+
+# ------------------------------------------------------------------ main
+ensure_root "$@"
+say "MSE 2.0 · installer"
+say "  prefix:    $PREFIX"
+say "  settings:  $ENV_FILE"
+say "  state:     $STATE_DIR"
+if [ "$UPDATE" = "1" ]; then say "  mode:      update (settings and state are kept)"; fi
+
+install_deps
+fetch_source
+
+run mkdir -p "$PREFIX" "$ENV_DIR" "$STATE_DIR" "$PREFIX/logs"
+if [ "$UPDATE" = "1" ] && [ "$DRY" = "0" ]; then
+  # an update replaces the code only: settings, devices and the allow list stay where they are
+  find "$PREFIX" -mindepth 1 -maxdepth 1 ! -name venv ! -name logs -exec rm -rf {} + 2>/dev/null || true
+fi
+run cp -r "$SRC/." "$PREFIX/"
+run chmod 755 "$PREFIX/stack/mse-tunnel.sh" "$PREFIX/stack/install.sh"
+run ln -sf "$PREFIX/stack/mse-tunnel.sh" /usr/local/bin/mse-tunnel.sh
+say "  code:      installed into $PREFIX"
+
+write_env
+merge_env_from_environment
+setup_bot_env
+write_units
+start_services
+
+# the panel: `sudo mse` opens it, `sudo mse update` updates the stack, `sudo mse --status` reports and exits
+if [ "$DRY" = "0" ]; then
+  rm -f "$PREFIX/stack/tui.py" 2>/dev/null || true
+  cat > /usr/local/bin/mse <<PANEL
+#!/usr/bin/env bash
+# MSE panel — the same screen engine as `sudo obhod`
+case "\${1:-}" in
+  update|upgrade) shift; exec bash $PREFIX/stack/install.sh --update "\$@" ;;
+esac
+exec $PY_BIN $PREFIX/stack/mse_setup.py "\$@"
+PANEL
+  chmod 755 /usr/local/bin/mse
+fi
+say "  panel:     sudo mse   (update: sudo mse update)"
+
+setup_tunnel
+
+if [ -n "${TMP:-}" ]; then rm -rf "$TMP"; fi
 
 say ""
-say "готово. Дальше:"
-say "  sudo mse                 — панель управления (туннель, модель, токены, статус)"
-say "  curl localhost:8788/health"
+if [ "$UPDATE" = "1" ]; then
+  say "updated. Settings, devices and the allow list were kept."
+else
+  say "done. Next:"
+fi
+say "  sudo mse                     panel: health, install, services, tunnel, model and keys"
+say "  sudo mse update              update the code and dependencies in place"
+say "  curl localhost:${MSE_PORT:-8788}/health"
 say "  journalctl -u mse-router -f"

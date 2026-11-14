@@ -25,6 +25,11 @@ class Gateway:
         self.token = str(admin_token or "")
         self.timeout = timeout
 
+    # ------------------------------------------------------------------ applications
+    def applications(self, take: bool = True) -> dict[str, Any]:
+        """The queue of new device applications. `take=True` drains it, so the owner is pinged once per person."""
+        return self._call("GET", "/admin/applications?take=" + ("1" if take else "0"))
+
     # ------------------------------------------------------------------ plumbing
     def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -45,11 +50,11 @@ class Gateway:
                 message = str(exc)
             raise GatewayError(str(message), exc.code)
         except (urllib.error.URLError, OSError) as exc:
-            raise GatewayError("шлюз не отвечает: " + str(getattr(exc, "reason", exc)), 0)
+            raise GatewayError("the gateway does not answer: " + str(getattr(exc, "reason", exc)), 0)
         try:
             return json.loads(raw.decode("utf-8", "replace") or "{}")
         except Exception:
-            raise GatewayError("шлюз ответил не по формату", 0)
+            raise GatewayError("the gateway answered in an unexpected format", 0)
 
     def health(self) -> dict[str, Any]:
         req = urllib.request.Request(self.base + "/health", headers={"accept": "application/json"})
@@ -57,9 +62,9 @@ class Gateway:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 return json.loads(resp.read(1 << 20).decode("utf-8", "replace") or "{}")
         except urllib.error.HTTPError as exc:
-            raise GatewayError("шлюз ответил " + str(exc.code), exc.code)
+            raise GatewayError("the gateway answered " + str(exc.code), exc.code)
         except (urllib.error.URLError, OSError) as exc:
-            raise GatewayError("шлюз не отвечает: " + str(getattr(exc, "reason", exc)), 0)
+            raise GatewayError("the gateway does not answer: " + str(getattr(exc, "reason", exc)), 0)
 
     def admin_state(self) -> dict[str, Any]:
         return self._call("GET", "/admin/state")

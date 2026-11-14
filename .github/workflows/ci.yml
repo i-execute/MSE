@@ -7,7 +7,7 @@ on:
 
 jobs:
   audit:
-    name: audit (ноль отпечатков)
+    name: audit (zero fingerprints)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +29,10 @@ jobs:
         run: node --test --test-concurrency=1 tests/gateway.test.js
       - name: install --dry-run
         run: bash Server/stack/install.sh --dry-run --no-tunnel --yes
+      - name: install --dry-run (update mode)
+        run: bash Server/stack/install.sh --dry-run --update --no-tunnel
+      - name: get.sh finds the local tree
+        run: bash Storage/get.sh --dry-run --no-tunnel --yes
       - name: panel (no tty → status)
         run: python3 Server/stack/mse_setup.py --status || true
       - name: panel renders with a pty

@@ -36,9 +36,9 @@
     ':host,*{box-sizing:border-box}',
     '.mse{',
       /* the palette of the reference: paper #0a0a0b, rule oklch(22%), ink oklch(98%) */
-      '--paper:#0a0a0b;--paper-2:#111113;--paper-3:#17171a;',
-      '--ink:#fafafa;--ink-2:#c9c9cd;--muted:#8f8f96;--rule:#2e2e33;--rule-2:#4a4a52;',
-      '--glow:rgba(255,255,255,.16);--glow-hard:rgba(255,255,255,.34);',
+      '--paper:#0d1420;--paper-2:#121b2a;--paper-3:#182335;',
+      '--ink:#eaf2ff;--ink-2:#c3d2e8;--muted:#8ba0bd;--rule:#243349;--rule-2:#334762;',
+      '--glow:rgba(169,205,255,.22);--glow-hard:rgba(198,222,255,.42);',
       '--r:12px;--r-panel:16px;--pill:999px;',
       '--ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);',
       'font:14px/1.45 "Onest",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink);',
@@ -48,51 +48,51 @@
     /* ---------- the pill: tiny, dark, only the letters carry light ---------- */
     '.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;',
       'height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);',
-      'background:#08080a;border:1px solid rgba(255,255,255,.16);color:var(--ink);',
+      'background:#101a2b;border:1px solid rgba(160,200,255,.24);color:var(--ink);',
       'font:700 10.5px/1 "Tektur","Onest",sans-serif;letter-spacing:.16em;text-indent:.16em;',
-      'text-shadow:0 0 8px rgba(255,255,255,.45),0 0 18px rgba(255,255,255,.18);',
+      'text-shadow:0 0 9px rgba(180,214,255,.55),0 0 20px rgba(150,196,255,.26);',
       'cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;',
       'transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}',
     '.pill.dragging{opacity:.9}',
     '.pill:active{transform:scale(.97)}',
     '.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;',
-      'background:#e8e8e8;color:#08080a;font:700 9px/14px "Onest",sans-serif;text-align:center;text-indent:0;text-shadow:none}',
-    '.pill.lit{animation:pill-press .9s linear;border-color:rgba(255,255,255,.45)}',
-    '@keyframes pill-press{0%,100%{text-shadow:0 0 8px rgba(255,255,255,.45),0 0 18px rgba(255,255,255,.18)}',
-      '8%{text-shadow:0 0 12px rgba(255,255,255,.8),0 0 28px rgba(255,255,255,.4)}',
-      '40%{text-shadow:0 0 10px rgba(255,255,255,.6),0 0 22px rgba(255,255,255,.26)}}',
+      'background:#a9cdff;color:#0d1420;font:700 9px/14px "Onest",sans-serif;text-align:center;text-indent:0;text-shadow:none}',
+    '.pill.lit{animation:pill-press .9s linear;border-color:rgba(169,205,255,.55)}',
+    '@keyframes pill-press{0%,100%{text-shadow:0 0 9px rgba(180,214,255,.55),0 0 20px rgba(150,196,255,.26)}',
+      '8%{text-shadow:0 0 13px rgba(206,228,255,.9),0 0 30px rgba(160,200,255,.55)}',
+      '40%{text-shadow:0 0 11px rgba(190,220,255,.65),0 0 24px rgba(150,196,255,.34)}}',
 
     /* ---------- every control inside takes the light on press ---------- */
     '.press{position:relative;isolation:isolate}',
     '.press::before,.press::after{content:"";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;',
       'opacity:0;transition:opacity .2s var(--ease-out)}',
     '.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;',
-      'box-shadow:0 0 12px 1px rgba(255,255,255,.62),0 0 34px 6px rgba(255,255,255,.3),0 0 84px 20px rgba(255,255,255,.13)}',
-    '.press::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.26);',
-      'box-shadow:0 0 24px 3px rgba(255,255,255,.46),0 0 72px 18px rgba(255,255,255,.2),inset 0 0 12px 1px rgba(255,255,255,.28)}',
+      'box-shadow:0 0 12px 1px rgba(190,220,255,.55),0 0 34px 6px rgba(150,196,255,.28),0 0 84px 20px rgba(120,170,255,.12)}',
+    '.press::after{top:0;right:0;bottom:0;left:0;background:rgba(169,205,255,.22);',
+      'box-shadow:0 0 24px 3px rgba(170,206,255,.42),0 0 72px 18px rgba(140,190,255,.18),inset 0 0 12px 1px rgba(190,220,255,.24)}',
     /* the exact curve of the reference, done with a keyframed custom property */
-    '.press.hot{animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards;border-color:rgba(255,255,255,.55)}',
+    '.press.hot{animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards;border-color:rgba(169,205,255,.62)}',
     '@property --press{syntax:"<number>";inherits:false;initial-value:0}',
     '@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}',
       '18%{--press:.52;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.3}74%{--press:.15}to{--press:0}}',
-    '@keyframes press-ink{0%{text-shadow:0 0 12px rgba(255,255,255,0),0 0 26px rgba(255,255,255,0)}',
-      '4%{text-shadow:0 0 13px rgba(255,255,255,.5),0 0 30px rgba(255,255,255,.32)}',
-      '18%{text-shadow:0 0 11px rgba(255,255,255,.26),0 0 26px rgba(255,255,255,.17)}',
-      '46%{text-shadow:0 0 9px rgba(255,255,255,.15),0 0 22px rgba(255,255,255,.1)}',
-      '74%{text-shadow:0 0 8px rgba(255,255,255,.07),0 0 18px rgba(255,255,255,.05)}',
-      'to{text-shadow:0 0 6px rgba(255,255,255,0),0 0 14px rgba(255,255,255,0)}}',
+    '@keyframes press-ink{0%{text-shadow:0 0 12px rgba(169,205,255,0),0 0 26px rgba(169,205,255,0)}',
+      '4%{text-shadow:0 0 13px rgba(206,228,255,.55),0 0 30px rgba(160,200,255,.36)}',
+      '18%{text-shadow:0 0 11px rgba(190,220,255,.3),0 0 26px rgba(150,196,255,.2)}',
+      '46%{text-shadow:0 0 9px rgba(170,206,255,.17),0 0 22px rgba(140,190,255,.12)}',
+      '74%{text-shadow:0 0 8px rgba(160,200,255,.08),0 0 18px rgba(130,180,255,.06)}',
+      'to{text-shadow:0 0 6px rgba(169,205,255,0),0 0 14px rgba(169,205,255,0)}}',
     '.press.hot::before{opacity:var(--press)}',
     '.press.hot::after{opacity:calc(var(--press) * .82)}',
     /* a control that stays lit (the chosen answer): quieter than the flash, and it does not go out */
-    '.press.lit{border-color:rgba(255,255,255,.5);text-shadow:0 0 11px rgba(255,255,255,.45),0 0 26px rgba(255,255,255,.22)}',
+    '.press.lit{border-color:rgba(169,205,255,.55);text-shadow:0 0 11px rgba(190,220,255,.5),0 0 26px rgba(150,196,255,.26)}',
     '.press.lit::before{opacity:.42}',
     '.press.lit::after{opacity:.28}',
     '.press:active{transform:scale(.985)}',
 
     /* ---------- the panel ---------- */
     '.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:272px;max-width:calc(100vw - 16px);',
-      'background:linear-gradient(180deg,#0c0c0e,#08080a 62%);border:1px solid var(--rule);border-radius:var(--r-panel);',
-      'box-shadow:0 22px 54px rgba(0,0,0,.72),0 0 0 1px rgba(255,255,255,.04);overflow:hidden;',
+      'background:linear-gradient(180deg,#111b2c,#0b1220 62%);border:1px solid var(--rule);border-radius:var(--r-panel);',
+      'box-shadow:0 22px 54px rgba(4,10,22,.78),0 0 0 1px rgba(150,196,255,.07);overflow:hidden;',
       'transform-origin:var(--ox,100%) var(--oy,100%);',
       'opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);',
       'transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}',
@@ -103,7 +103,7 @@
     '@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}',
     '.ph{display:flex;align-items:center;gap:6px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.07)}',
     '.ph .t{flex:1 1 auto;min-width:0;font:700 11px/1 "Tektur","Onest",sans-serif;letter-spacing:.15em;',
-      'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 0 10px rgba(255,255,255,.3)}',
+      'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 0 10px rgba(169,205,255,.34)}',
     '.ph .t em{font:400 10.5px/1 "Onest",sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none}',
     '.ib{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;',
       'border-radius:9px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);',
@@ -115,39 +115,39 @@
 
     /* ---------- answers ---------- */
     '.ans{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;margin:0 0 6px;padding:7px 9px;',
-      'border-radius:var(--r);border:1px solid #333338;background:#101013;color:#ededf0;',
+      'border-radius:var(--r);border:1px solid #2a3b52;background:#121c2c;color:#e4eefc;',
       'font:400 13px/1.3 inherit;text-align:left;cursor:pointer}',
-    '.ans .mark{flex:0 0 auto;width:17px;height:17px;border-radius:5px;border:1px solid #4d4d55;',
-      'display:flex;align-items:center;justify-content:center;font:700 10px/1 inherit;color:#0a0a0b}',
-    '.ans.best .mark{background:#ededf0;border-color:#ededf0}',
+    '.ans .mark{flex:0 0 auto;width:17px;height:17px;border-radius:5px;border:1px solid #3c5470;',
+      'display:flex;align-items:center;justify-content:center;font:700 10px/1 inherit;color:#0d1420}',
+    '.ans.best .mark{background:#a9cdff;border-color:#a9cdff}',
     '.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}',
     '.ans .pct{flex:0 0 auto;font:600 10.5px/1 "Onest",sans-serif;color:var(--muted)}',
     '.ans.agent{border-style:dashed}',
-    '.ans.ai{border-style:dotted;border-color:#6a6a74}',
+    '.ans.ai{border-style:dotted;border-color:#5b7899}',
     '.ans.ai.busy .lbl{color:var(--muted)}',
     '.tag{font:600 9px/1 "Tektur","Onest",sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:4px}',
 
     /* ---------- one status line, not a paragraph ---------- */
-    '.row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border-radius:10px;border:1px solid #2c2c31;',
-      'background:#0e0e11;color:var(--ink-2);font:400 11.5px/1.35 inherit;text-align:left;cursor:pointer}',
-    '.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:#6b6b73}',
-    '.row .dot.ok{background:#8ee6a4;box-shadow:0 0 8px rgba(142,230,164,.7)}',
+    '.row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border-radius:10px;border:1px solid #23364d;',
+      'background:#101a2a;color:var(--ink-2);font:400 11.5px/1.35 inherit;text-align:left;cursor:pointer}',
+    '.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:#5f7a9c}',
+    '.row .dot.ok{background:#8fd8f0;box-shadow:0 0 8px rgba(143,216,240,.7)}',
     '.row .dot.warn{background:#f2c26b;box-shadow:0 0 8px rgba(242,194,107,.7)}',
     '.row .dot.bad{background:#ff8f8f;box-shadow:0 0 8px rgba(255,143,143,.7)}',
     '.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.row .more{flex:0 0 auto;font-size:10.5px;color:var(--muted)}',
     '.btn{flex:1 1 auto;min-width:0;height:32px;padding:0 10px;border-radius:10px;border:1px solid var(--rule-2);',
-      'background:#101013;color:#ececf0;font:600 12px/1 inherit;cursor:pointer;white-space:nowrap}',
-    '.btn.solid{background:#ededf0;color:#0a0a0b;border-color:#ededf0}',
+      'background:#152135;color:#e4eefc;font:600 12px/1 inherit;cursor:pointer;white-space:nowrap}',
+    '.btn.solid{background:#a9cdff;color:#0d1420;border-color:#a9cdff}',
     '.frow{display:flex;gap:6px;flex-wrap:wrap}',
-    '.inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 9px;border-radius:10px;border:1px solid #34343a;',
-      'background:#08080a;color:#ededf0;font:12.5px/1 "Onest",sans-serif;outline:none}',
-    '.inp:focus{border-color:#6c6c76}',
-    '.sec{font:700 9.5px/1 "Tektur","Onest",sans-serif;letter-spacing:.18em;color:#86868e;margin:9px 0 6px}',
+    '.inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 9px;border-radius:10px;border:1px solid #2b3f59;',
+      'background:#0e1726;color:#e4eefc;font:12.5px/1 "Onest",sans-serif;outline:none}',
+    '.inp:focus{border-color:#7ea6d8}',
+    '.sec{font:700 9.5px/1 "Tektur","Onest",sans-serif;letter-spacing:.18em;color:#8ba0bd;margin:9px 0 6px}',
     '.sec:first-child{margin-top:2px}',
     /* the copy value: no frame that can cut it, a tap copies and flashes */
     '.val{display:flex;align-items:center;gap:8px;width:100%;padding:8px 9px;margin:0 0 6px;border-radius:10px;',
-      'border:1px solid #2c2c31;background:#0e0e11;color:var(--ink);font:400 12px/1.35 "JetBrains Mono",ui-monospace,Menlo,monospace;',
+      'border:1px solid #23364d;background:#101a2a;color:var(--ink);font:400 12px/1.35 "JetBrains Mono",ui-monospace,Menlo,monospace;',
       'text-align:left;cursor:pointer}',
     '.val .k{flex:0 0 46px;font:600 9.5px/1.4 "Onest",sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}',
     '.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}',
@@ -156,21 +156,21 @@
     '.val.human .v{overflow-wrap:break-word}',
     '.val .copy{flex:0 0 auto;font:600 9.5px/1 "Onest",sans-serif;color:var(--muted)}',
     '.models{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}',
-    '.chip{padding:4px 8px;border-radius:999px;border:1px solid #333338;background:#0e0e11;',
+    '.chip{padding:4px 8px;border-radius:999px;border:1px solid #2a3b52;background:#101a2a;',
       'font:500 10.5px/1 "JetBrains Mono",ui-monospace,Menlo,monospace;color:var(--ink-2)}',
     '.log{font:400 10.5px/1.5 "JetBrains Mono",ui-monospace,Menlo,monospace;color:var(--ink-2)}',
     '.log .ln{display:flex;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05);word-break:break-word}',
-    '.log .ln .g{flex:0 0 auto;width:6px;height:6px;margin-top:5px;border-radius:50%;background:#6b6b73}',
+    '.log .ln .g{flex:0 0 auto;width:6px;height:6px;margin-top:5px;border-radius:50%;background:#5f7a9c}',
     '.log .ln.ok .g{background:#8ee6a4}',
     '.log .ln.warn .g{background:#f2c26b}',
     '.log .ln.bad .g{background:#ff8f8f}',
     '.log .ln .t{flex:0 0 auto;color:#6f6f78}',
     '.log .ln .m{flex:1 1 auto;min-width:0}',
     '.empty{padding:12px 4px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5}',
-    '.spin{width:14px;height:14px;margin:8px auto;border-radius:50%;border:1.5px solid #34343a;border-top-color:#fff;animation:sp .7s linear infinite}',
+    '.spin{width:14px;height:14px;margin:8px auto;border-radius:50%;border:1.5px solid #2b3f59;border-top-color:#bcd8ff;animation:sp .7s linear infinite}',
     '@keyframes sp{to{transform:rotate(360deg)}}',
     '.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:8px 13px;',
-      'border-radius:999px;background:#101013;border:1px solid #3a3a41;color:#ececf0;font:12px/1.35 inherit;text-align:center;',
+      'border-radius:999px;background:#152135;border:1px solid #34496a;color:#e4eefc;font:12px/1.35 inherit;text-align:center;',
       'box-shadow:0 0 20px rgba(255,255,255,.12);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:2147483647}',
     '.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}',
     '@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}'
@@ -179,29 +179,29 @@
   /* ------------------------------------------------------------------ per-type knowledge */
   /* the types the answer service of the original understands, and how each is read and filled here */
   var TYPE_INFO = {
-    multichoice: { label: 'один ответ', kind: 'choice' },
-    multichoiceset: { label: 'несколько ответов', kind: 'choice' },
-    truefalse: { label: 'верно/неверно', kind: 'choice' },
-    shortanswer: { label: 'короткий ответ', kind: 'text' },
-    numerical: { label: 'число', kind: 'text' },
-    match: { label: 'сопоставление', kind: 'select' },
-    gapselect: { label: 'выбор из списка', kind: 'select' },
-    multianswer: { label: 'вложенные вопросы', kind: 'select' },
-    gapfill: { label: 'пропуски', kind: 'text' },
-    coderunner: { label: 'код', kind: 'text' },
-    calculated: { label: 'вычисляемый', kind: 'text' },
-    calculatedsimple: { label: 'вычисляемый', kind: 'text' },
-    calculatedmulti: { label: 'вычисляемый', kind: 'text' }
+    multichoice: { label: 'one answer', kind: 'choice' },
+    multichoiceset: { label: 'several answers', kind: 'choice' },
+    truefalse: { label: 'true/false', kind: 'choice' },
+    shortanswer: { label: 'short answer', kind: 'text' },
+    numerical: { label: 'number', kind: 'text' },
+    match: { label: 'matching', kind: 'select' },
+    gapselect: { label: 'choose from a list', kind: 'select' },
+    multianswer: { label: 'nested questions', kind: 'select' },
+    gapfill: { label: 'gaps', kind: 'text' },
+    coderunner: { label: 'code', kind: 'text' },
+    calculated: { label: 'calculated', kind: 'text' },
+    calculatedsimple: { label: 'calculated', kind: 'text' },
+    calculatedmulti: { label: 'calculated', kind: 'text' }
   };
   /* the ones nobody can answer through their service: said plainly instead of a silent failure */
   var UNSUPPORTED = {
-    ddwtos: 'перетаскивание в текст',
-    ddimageortext: 'перетаскивание на картинку',
-    ddmarker: 'маркеры на картинке',
-    dragdrop: 'перетаскивание',
-    ordering: 'упорядочивание',
-    essay: 'эссе',
-    description: 'описание (не вопрос)'
+    ddwtos: 'drag into text',
+    ddimageortext: 'drag onto an image',
+    ddmarker: 'markers on an image',
+    dragdrop: 'drag and drop',
+    ordering: 'ordering',
+    essay: 'essay',
+    description: 'description (not a question)'
   };
 
   function boot() {
@@ -243,9 +243,9 @@
     }
     function ago(ts) {
       var s = Math.round((Date.now() - ts) / 1000);
-      if (s < 60) return s + ' с';
-      if (s < 3600) return Math.round(s / 60) + ' мин';
-      return Math.round(s / 3600) + ' ч';
+      if (s < 60) return s + ' s';
+      if (s < 3600) return Math.round(s / 60) + ' min';
+      return Math.round(s / 3600) + ' h';
     }
 
     /* ---------------------------------------------------------------- identity */
@@ -301,16 +301,16 @@
       for (var i = 0; i < links.length && i < 12; i++) {
         var href = links[i].getAttribute('href') || '';
         var m = /[?&](?:id|userid)=(\d+)/.exec(href) || /\/user\/(?:profile|view)\/(\d+)/.exec(href);
-        if (m) { candidates.push([idFromValue(m[1]), 'ссылка на профиль']); break; }
+        if (m) { candidates.push([idFromValue(m[1]), 'profile link']); break; }
       }
       /* 4. a hidden field of some form (course, profile, message) */
       var hidden = doc.querySelector('input[name="userid"], input[name="user_id"], input[name="id"][type="hidden"]');
       if (hidden) {
         var ctx = String(hidden.form && hidden.form.getAttribute('action') || '');
-        if (/user|profile|message|course/.test(ctx) || hidden.name !== 'id') candidates.push([idFromValue(hidden.value), 'скрытое поле']);
+        if (/user|profile|message|course/.test(ctx) || hidden.name !== 'id') candidates.push([idFromValue(hidden.value), 'hidden field']);
       }
       /* 5. what this host answered before on /my/ or anywhere else */
-      candidates.push([idFromValue(ls.get(learnedKey(), null)), 'запомнено с /my/']);
+      candidates.push([idFromValue(ls.get(learnedKey(), null)), 'remembered from /my/']);
 
       for (var c = 0; c < candidates.length; c++) {
         if (candidates[c][0]) { out.id = candidates[c][0]; out.idSource = candidates[c][1]; break; }
@@ -324,16 +324,16 @@
       for (var n = 0; n < nameSel.length && !out.name; n++) {
         var node = doc.querySelector(nameSel[n]);
         var t = node ? String(node.textContent || '').replace(/\s+/g, ' ').trim() : '';
-        if (t && t.length > 1 && t.length < 120) { out.name = t; out.nameSource = 'меню пользователя'; }
+        if (t && t.length > 1 && t.length < 120) { out.name = t; out.nameSource = 'user menu'; }
       }
       if (!out.name) {
         var pic = doc.querySelector('img.userpicture, img.avatar, img[src*="/user/icon"], img[src*="u/"]');
         var alt = pic && String(pic.getAttribute('alt') || pic.getAttribute('title') || '').replace(/^picture of\s*/i, '').trim();
-        if (alt && alt.length > 1 && alt.length < 120) { out.name = alt; out.nameSource = 'аватар'; }
+        if (alt && alt.length > 1 && alt.length < 120) { out.name = alt; out.nameSource = 'avatar'; }
       }
       if (!out.name) {
         var kept = ls.get(learnedKey() + '.name', null);
-        if (kept) { out.name = kept; out.nameSource = 'запомнено'; }
+        if (kept) { out.name = kept; out.nameSource = 'remembered'; }
       }
       if (!out.login) {
         var keptLogin = ls.get(learnedKey() + '.login', null);
@@ -398,15 +398,15 @@
           var id = readIdFromHtml(html);
           var name = readNameFromHtml(html);
           if (!id) {
-            logAdd('gateway', false, 'на /my/ тоже нет ID', { ms: Date.now() - started });
-            return { ok: false, message: 'на /my/ тоже нет ID' };
+            logAdd('gateway', false, 'no id on /my/ either', { ms: Date.now() - started });
+            return { ok: false, message: 'no id on /my/ either' };
           }
           learnId(id, name, null);
-          logAdd('gateway', true, 'ID взят со страницы /my/: ' + id, { ms: Date.now() - started });
+          logAdd('gateway', true, 'id taken from /my/: ' + id, { ms: Date.now() - started });
           return { ok: true, id: id, name: name };
         }, function (e) {
-          logAdd('gateway', false, 'страница /my/ не открылась: ' + ((e && e.message) || 'сеть'), { ms: Date.now() - started });
-          return { ok: false, message: 'страница /my/ не открылась' };
+          logAdd('gateway', false, '/my/ page did not open: ' + ((e && e.message) || 'network'), { ms: Date.now() - started });
+          return { ok: false, message: '/my/ page did not open' };
         });
     }
 
@@ -618,7 +618,7 @@
       var started = Date.now();
       if (meta.missing.length) {
         var why = missingSentence(meta);
-        logAdd('answers', false, why + ' — запрос не отправлен');
+        logAdd('answers', false, why + ' — request not sent');
         return Promise.reject(new Error(why));
       }
       var url = serviceUrl(q, meta);
@@ -626,35 +626,35 @@
         var ms = Date.now() - started;
         if (r.status === 400) {
           return r.text().then(function (body) {
-            logAdd('answers', false, 'база ответов: 400 (данные страницы неполные или сервис не принял запрос)', { ms: ms });
-            throw new Error('база ответов: 400 — ' + String(body || '').slice(0, 120));
+            logAdd('answers', false, 'answer database: 400 (page data incomplete or the service rejected the request)', { ms: ms });
+            throw new Error('answer database: 400 — ' + String(body || '').slice(0, 120));
           });
         }
         if (!r.ok) {
-          logAdd('answers', false, 'база ответов: ' + r.status, { ms: ms });
-          throw new Error('база ответов: ' + r.status);
+          logAdd('answers', false, 'answer database: ' + r.status, { ms: ms });
+          throw new Error('answer database: ' + r.status);
         }
         return r.json().then(function (json) {
-          logAdd('answers', true, 'база ответов: ' + (Array.isArray(json) ? json.length : 0) + ' записей', { ms: ms });
+          logAdd('answers', true, 'answer database: ' + (Array.isArray(json) ? json.length : 0) + ' records', { ms: ms });
           return json;
         });
       }, function (e) {
-        logAdd('answers', false, 'база ответов не ответила: ' + ((e && e.message) || 'сеть'), { ms: Date.now() - started });
-        throw new Error('нет связи с базой ответов');
+        logAdd('answers', false, 'answer database did not respond: ' + ((e && e.message) || 'network'), { ms: Date.now() - started });
+        throw new Error('no connection to the answer database');
       });
     }
     function nameOfParam(k) {
       return {
-        courseId: 'курс',
-        quizId: 'тест',
-        attemptId: 'попытка',
-        moodleId: 'ID пользователя'
+        courseId: 'course',
+        quizId: 'quiz',
+        attemptId: 'attempt',
+        moodleId: 'user id'
       }[k] || k;
     }
-    /* a readable sentence: «нет данных страницы: ID пользователя» — and, for the id, what was tried */
+    /* a readable sentence: «page data missing: user id» — and, for the id, what was tried */
     function missingSentence(meta) {
       var names = meta.missing.map(nameOfParam).join(', ');
-      return 'нет данных страницы: ' + names;
+      return 'page data missing: ' + names;
     }
 
     /* their answer, turned into rows of ours */
@@ -912,14 +912,14 @@
       var lead = leading === 'back'
         ? press(el('button', 'ib back', '←'), function () { state.route = 'account'; render(); })
         : press(el('button', 'ib', 'i'), function () { state.route = state.route === 'account' ? 'answers' : 'account'; render(); });
-      lead.setAttribute('aria-label', leading === 'back' ? 'назад' : 'ваш ID');
+      lead.setAttribute('aria-label', leading === 'back' ? 'back' : 'your id');
       lead.style.fontFamily = leading === 'back' ? '' : 'Georgia,serif';
       h.appendChild(lead);
       var t = el('div', 't', titleText);
       if (sub) t.appendChild(el('em', '', ' · ' + sub));
       h.appendChild(t);
       var x = press(el('button', 'ib x', '×'), closePop);
-      x.setAttribute('aria-label', 'закрыть');
+      x.setAttribute('aria-label', 'close');
       h.appendChild(x);
       return h;
     }
@@ -934,18 +934,18 @@
       });
       var dotCls = !last ? '' : (okAll ? 'ok' : (worst && Date.now() - worst.t < 60000 ? 'bad' : 'warn'));
       var text;
-      if (!last) text = 'сеть: запросов ещё не было';
-      else if (okAll) text = last.kind === 'agent' ? 'агент ответил' : 'сеть в порядке';
+      if (!last) text = 'network: no requests yet';
+      else if (okAll) text = last.kind === 'agent' ? 'agent answered' : 'network ok';
       else {
         var bad = logLast('agent') && !logLast('agent').ok && logLast('agent').t > (logLast('answers') || {}).t ? logLast('agent')
           : (logLast('gateway') && !logLast('gateway').ok && logLast('gateway').t > (logLast('answers') || {}).t ? logLast('gateway') : logLast('answers'));
-        text = (bad && bad.text ? bad.text : 'ошибка сети');
-        if (bad && bad.ms) text += ' · ' + bad.ms + ' мс';
+        text = (bad && bad.text ? bad.text : 'network error');
+        if (bad && bad.ms) text += ' · ' + bad.ms + ' ms';
       }
       var row = el('div', 'row');
       row.appendChild(el('span', 'dot ' + dotCls));
       row.appendChild(el('span', 'txt', text));
-      row.appendChild(el('span', 'more', 'журнал'));
+      row.appendChild(el('span', 'more', 'log'));
       return press(row, function () { state.route = 'net'; render(); });
     }
 
@@ -984,13 +984,13 @@
       var opts = (q.answers || []).map(function (a) { return String(a.text || '').trim(); }).filter(Boolean);
       if (opts.length) {
         lines.push('');
-        lines.push('Варианты:');
+        lines.push('Options:');
         opts.forEach(function (o, i) { lines.push((i + 1) + '. ' + o); });
         lines.push('');
-        lines.push('Ответь ровно одной строкой — текстом верного варианта, без нумерации и пояснений.');
+        lines.push('Answer with exactly one line — the text of the correct option, no numbering and no explanation.');
       } else {
         lines.push('');
-        lines.push('Ответь только коротким ответом на задание, без пояснений.');
+        lines.push('Answer only with the short answer to the task, no explanation.');
       }
       return lines.join('\n');
     }
@@ -1013,8 +1013,8 @@
           logAdd('agent', true, 'AI: ' + String(text).slice(0, 40), { ms: ms });
           state.ai = { state: 'ok', text: String(text), model: (extra && extra.model) || null };
         } else {
-          logAdd('agent', false, 'AI: ' + (text || 'не ответил'), { ms: ms });
-          state.ai = { state: 'error', text: String(text || 'не ответил') };
+          logAdd('agent', false, 'AI: ' + (text || 'no answer'), { ms: ms });
+          state.ai = { state: 'error', text: String(text || 'no answer') };
         }
         render();
       };
@@ -1026,11 +1026,11 @@
         /* a streaming gateway can answer with the plain OpenAI shape instead of SSE: take its content too */
         var plain = res && res.choices && res.choices[0] && res.choices[0].message ? String(res.choices[0].message.content || '') : '';
         var text = (buf || plain || '').trim();
-        if (!text) { finish(false, 'модель промолчала'); return; }
+        if (!text) { finish(false, 'the model said nothing'); return; }
         finish(true, text, { model: res && res.model });
       }, function (e) {
-        var msg = (e && e.message) || 'сеть';
-        if (/40[13]/.test(msg)) finish(false, 'ключ не принят');
+        var msg = (e && e.message) || 'network';
+        if (/40[13]/.test(msg)) finish(false, 'key not accepted');
         else finish(false, msg.slice(0, 80));
         state.tier = /40[13]/.test(msg) ? 'base' : state.tier;
       });
@@ -1043,25 +1043,25 @@
     function viewAnswers() {
       var q = state.question;
       if (!q) {
-        body.appendChild(N(el('div', 'empty', 'на этой странице нет вопроса')));
+        body.appendChild(N(el('div', 'empty', 'no question on this page')));
         body.appendChild(N(statusLine()));
         return;
       }
       if (!q.supported) {
-        body.appendChild(N(el('div', 'empty', '«' + (q.unsupported || q.type) + '» — этот тип заданий база ответов не разбирает')));
+        body.appendChild(N(el('div', 'empty', '«' + (q.unsupported || q.type) + '” — the answer database cannot parse this question type')));
         if (aiAllowed()) appendAi(q);
         body.appendChild(N(statusLine()));
         return;
       }
       if (state.loading) {
         body.appendChild(N(el('div', 'spin')));
-        body.appendChild(N(el('div', 'empty', 'спрашиваем базу…')));
+        body.appendChild(N(el('div', 'empty', 'asking the database…')));
         return;
       }
       if (state.error) {
         body.appendChild(N(el('div', 'empty', state.error)));
         var missingId = state.meta && state.meta.missing && state.meta.missing.indexOf('moodleId') >= 0;
-        var again = press(el('button', 'btn', missingId ? 'взять ID со страницы /my/' : 'повторить'), function () {
+        var again = press(el('button', 'btn', missingId ? 'take the id from /my/' : 'retry'), function () {
           if (missingId) {
             learnFromCabinet().then(function (r) {
               if (r.ok) { toast('ID: ' + r.id); }
@@ -1081,7 +1081,7 @@
       }
       var rows = state.rows || [];
       if (!rows.length) {
-        body.appendChild(N(el('div', 'empty', 'ответов пока нет')));
+        body.appendChild(N(el('div', 'empty', 'no answers yet')));
         if (aiAllowed()) appendAi(q);
       } else {
         rows.slice(0, 6).forEach(function (r, i) {
@@ -1091,14 +1091,14 @@
           a.appendChild(el('span', 'lbl', r.label));
           if (r.share != null) a.appendChild(el('span', 'pct', r.share + '%'));
           else if (r.count) a.appendChild(el('span', 'pct', r.count + '×'));
-          if (r.agent) a.appendChild(el('span', 'tag', 'агент'));
+          if (r.agent) a.appendChild(el('span', 'tag', 'agent'));
           if (r.correctness > 0) a.classList.add('lit');
           a.addEventListener('click', function () {
             flash(a);
             win.setTimeout(function () {
               var res = applyAnswer(q, r);
-              if (res.ok) { toast('выбрано: ' + r.label); setBadge(0); win.setTimeout(closePop, 420); }
-              else toast('не нашёл такой вариант в форме');
+              if (res.ok) { toast('selected: ' + r.label); setBadge(0); win.setTimeout(closePop, 420); }
+              else toast('no such option in the form');
             }, 70);
           });
           body.appendChild(N(a, i));
@@ -1116,7 +1116,7 @@
         var ask = el('button', 'ans press ai');
         ask.setAttribute('type', 'button');
         ask.appendChild(el('span', 'mark', '✦'));
-        ask.appendChild(el('span', 'lbl', 'спросить AI'));
+        ask.appendChild(el('span', 'lbl', 'ask AI'));
         ask.appendChild(el('span', 'tag', 'AI'));
         ask.addEventListener('click', function () { flash(ask); runAi(q, 'asked'); });
         body.appendChild(N(ask, 1));
@@ -1125,7 +1125,7 @@
       if (ai.state === 'running') {
         var run = el('div', 'ans ai busy');
         run.appendChild(el('span', 'mark', '✦'));
-        run.appendChild(el('span', 'lbl', ai.text ? ai.text : 'AI думает…'));
+        run.appendChild(el('span', 'lbl', ai.text ? ai.text : 'AI is thinking…'));
         run.appendChild(el('span', 'tag', 'AI'));
         body.appendChild(N(run, 1));
         return;
@@ -1134,7 +1134,7 @@
         var err = el('button', 'ans press ai');
         err.setAttribute('type', 'button');
         err.appendChild(el('span', 'mark', '✦'));
-        err.appendChild(el('span', 'lbl', 'AI: ' + (ai.text || 'не ответил')));
+        err.appendChild(el('span', 'lbl', 'AI: ' + (ai.text || 'no answer')));
         err.appendChild(el('span', 'tag', 'AI'));
         err.addEventListener('click', function () { flash(err); runAi(q, 'again'); });
         body.appendChild(N(err, 1));
@@ -1152,8 +1152,8 @@
         flash(a);
         win.setTimeout(function () {
           var res = applyAnswer(q, row);
-          if (res.ok) { toast(res.how === 'text' ? 'вписано' : 'выбрано: ' + ai.text.slice(0, 40)); setBadge(0); win.setTimeout(closePop, 420); }
-          else toast('AI ответил тем, чего нет в форме');
+          if (res.ok) { toast(res.how === 'text' ? 'filled in' : 'selected: ' + ai.text.slice(0, 40)); setBadge(0); win.setTimeout(closePop, 420); }
+          else toast('the AI answered with something not in the form');
         }, 70);
       });
       body.appendChild(N(a, 1));
@@ -1165,13 +1165,13 @@
       var row = el('div', 'row');
       row.appendChild(el('span', 'dot ' + (st.state === 'ok' ? 'ok' : st.state === 'error' ? 'bad' : st.state === 'retry' || st.state === 'running' ? 'warn' : '')));
       var txt;
-      if (st.state === 'idle') txt = 'агент: спросить';
-      else if (st.state === 'running') txt = 'агент думает…';
-      else if (st.state === 'ok') txt = 'агент: ' + (st.answer || '—') + (st.model ? ' · ' + st.model : '');
-      else if (st.state === 'retry') txt = 'агент занят, повтор через ' + st.retryIn + ' с';
-      else txt = 'агент: ' + (st.text || 'ошибка');
+      if (st.state === 'idle') txt = 'agent: ask';
+      else if (st.state === 'running') txt = 'agent is thinking…';
+      else if (st.state === 'ok') txt = 'agent: ' + (st.answer || '—') + (st.model ? ' · ' + st.model : '');
+      else if (st.state === 'retry') txt = 'agent is busy, retrying in ' + st.retryIn + ' s';
+      else txt = 'agent: ' + (st.text || 'error');
       row.appendChild(el('span', 'txt', txt));
-      row.appendChild(el('span', 'more', st.state === 'ok' ? 'ещё' : st.state === 'running' ? '…' : 'запуск'));
+      row.appendChild(el('span', 'more', st.state === 'ok' ? 'again' : st.state === 'running' ? '…' : 'run'));
       return press(row, function () { runAgent(false); });
     }
 
@@ -1179,7 +1179,7 @@
       var q = state.question;
       if (!q) return;
       if (!win.MSEBridge || !win.MSEBridge.url()) {
-        state.agent = { state: 'error', text: 'шлюз не указан' };
+        state.agent = { state: 'error', text: 'AI gateway is not set' };
         render();
         return;
       }
@@ -1195,25 +1195,25 @@
       }).then(function (res) {
         var ms = Date.now() - t0;
         if (res.ok && res.answer) {
-          logAdd('agent', true, 'агент: ' + String(res.answer).slice(0, 40), { ms: ms });
+          logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
           state.agent = { state: 'ok', answer: res.answer, model: res.model };
           var row = { label: res.answer, correctness: 0, count: 0, agent: true };
           state.rows = [row].concat(state.rows || []);
           render();
           var applied = applyAnswer(q, row);
-          if (applied.ok) toast('агент выбрал: ' + String(res.answer).slice(0, 40));
+          if (applied.ok) toast('agent picked: ' + String(res.answer).slice(0, 40));
           return;
         }
         if (res.code === 'rate_limited') {
-          logAdd('agent', false, 'агент занят (лимит), повтор', { ms: ms });
+          logAdd('agent', false, 'agent is busy (limit hit), retrying', { ms: ms });
           startRetry(automatic);
           return;
         }
-        var text = res.code === 'network' || res.code === 'timeout' ? 'запрос не ушёл · проверьте сеть'
-          : res.code === 'no_gateway' ? 'шлюз не указан'
-          : res.code === 'unauthorized' || res.code === 'invalid_key' ? 'ключ не принят'
-          : res.code === 'device_pending' ? 'ждёт подтверждения по ID'
-          : 'агент не смог: ' + (res.message || 'ошибка');
+        var text = res.code === 'network' || res.code === 'timeout' ? 'request did not go out · check the network'
+          : res.code === 'no_gateway' ? 'AI gateway is not set'
+          : res.code === 'unauthorized' || res.code === 'invalid_key' ? 'key not accepted'
+          : res.code === 'device_pending' ? 'waiting for approval by id'
+          : 'agent failed: ' + (res.message || 'error');
         logAdd('agent', false, text, { ms: ms });
         state.agent = { state: 'error', text: text };
         render();
@@ -1300,7 +1300,7 @@
       row.addEventListener('click', function () {
         flash(row);
         win.MSEBridge.copy(value).then(function (ok) {
-          hint.textContent = ok ? 'скопировано' : 'не вышло';
+          hint.textContent = ok ? 'copied' : 'failed';
           win.setTimeout(function () { hint.textContent = ''; }, 1600);
         });
       });
@@ -1310,23 +1310,23 @@
     function viewAccount() {
       var id = identity();
       var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
-      body.appendChild(N(el('div', 'sec', 'АККАУНТ МУДЛ')));
+      body.appendChild(N(el('div', 'sec', 'MOODLE ACCOUNT')));
       body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
-      body.appendChild(N(valueRow('логин', id.login, !!id.login), 1));
-      body.appendChild(N(valueRow('ФИО', id.name, !!id.name, true), 1));
-      body.appendChild(N(el('div', 'sec', 'УСТРОЙСТВО'), 1));
-      body.appendChild(N(valueRow('ключ', win.MSEBridge ? win.MSEBridge.key() : null, !!(win.MSEBridge && win.MSEBridge.key())), 1));
+      body.appendChild(N(valueRow('login', id.login, !!id.login), 1));
+      body.appendChild(N(valueRow('name', id.name, !!id.name, true), 1));
+      body.appendChild(N(el('div', 'sec', 'DEVICE'), 1));
+      body.appendChild(N(valueRow('key', win.MSEBridge ? win.MSEBridge.key() : null, !!(win.MSEBridge && win.MSEBridge.key())), 1));
       var st = state.gw.check;
       var line = el('div', 'row');
       var good = st && st.state === 'active';
       line.appendChild(el('span', 'dot ' + (good ? 'ok' : st ? 'warn' : '')));
-      line.appendChild(el('span', 'txt', good ? 'ключ принят' : st ? (st.message || 'ключ не проверен') : 'ключ не проверен'));
-      line.appendChild(el('span', 'more', 'шлюз'));
+      line.appendChild(el('span', 'txt', good ? 'key accepted' : st ? (st.message || 'key not checked') : 'key not checked'));
+      line.appendChild(el('span', 'more', 'AI gateway'));
       body.appendChild(N(press(line, function () { state.route = 'gateway'; render(); }), 1));
       var net = el('div', 'row');
       net.appendChild(el('span', 'dot'));
-      net.appendChild(el('span', 'txt', 'журнал сети'));
-      net.appendChild(el('span', 'more', 'открыть'));
+      net.appendChild(el('span', 'txt', 'network log'));
+      net.appendChild(el('span', 'more', 'open'));
       body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
     }
 
@@ -1334,9 +1334,9 @@
     function viewGateway() {
       var gw = state.gw;
       var br = win.MSEBridge;
-      if (!br) { body.appendChild(N(el('div', 'empty', 'слой шлюза не загрузился'))); return; }
+      if (!br) { body.appendChild(N(el('div', 'empty', 'the AI gateway layer did not load'))); return; }
 
-      body.appendChild(N(el('div', 'sec', 'ШЛЮЗ'), 0));
+      body.appendChild(N(el('div', 'sec', 'AI GATEWAY'), 0));
       var input = el('input', 'inp');
       input.type = 'url';
       input.inputMode = 'url';
@@ -1347,7 +1347,7 @@
       body.appendChild(N(input, 1));
       var frow = el('div', 'frow');
       body.appendChild(N(frow, 1));
-      var check = press(el('button', 'btn solid', gw.busy ? 'проверяем…' : 'проверить'), function () {
+      var check = press(el('button', 'btn solid', gw.busy ? 'checking…' : 'check'), function () {
         var url = String(input.value || '').trim();
         gw.busy = 'check';
         gw.probe = null;
@@ -1355,55 +1355,55 @@
         render();
         br.probe(url).then(function (r) {
           gw.probe = r;
-          if (!r.ok) { gw.busy = null; logAdd('gateway', false, 'шлюз: ' + r.message); render(); return; }
+          if (!r.ok) { gw.busy = null; logAdd('gateway', false, 'AI gateway: ' + r.message); render(); return; }
           br.setUrl(url);
           /* the address answers: now ask it what it accepts and whether this key is welcome */
           return Promise.all([br.models(), br.check()]).then(function (out) {
             gw.models = out[0];
             gw.check = out[1];
             gw.busy = null;
-            logAdd('gateway', true, 'шлюз на связи · ' + (out[0].models.length || 0) + ' моделей', { ms: r.ms });
+            logAdd('gateway', true, 'AI gateway is up · ' + (out[0].models.length || 0) + ' models', { ms: r.ms });
             render();
           });
         }, function (e) {
           gw.busy = null;
-          gw.probe = { ok: false, message: (e && e.message) || 'ошибка' };
+          gw.probe = { ok: false, message: (e && e.message) || 'error' };
           render();
         });
       });
       frow.appendChild(check);
-      if (gw.busy === 'check') check.textContent = 'проверяем…';
+      if (gw.busy === 'check') check.textContent = 'checking…';
 
       if (gw.probe) {
         var p = el('div', 'row');
         p.appendChild(el('span', 'dot ' + (gw.probe.ok ? 'ok' : 'bad')));
-        p.appendChild(el('span', 'txt', gw.probe.ok ? 'шлюз отвечает · ' + gw.probe.ms + ' мс' : gw.probe.message));
+        p.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered · ' + gw.probe.ms + ' ms' : gw.probe.message));
         body.appendChild(N(p, 1));
       }
       if (gw.check) {
         var c = el('div', 'row');
         c.appendChild(el('span', 'dot ' + (gw.check.state === 'active' ? 'ok' : 'warn')));
-        c.appendChild(el('span', 'txt', gw.check.state === 'active' ? 'ключ принят' : gw.check.message || 'ключ не принят'));
+        c.appendChild(el('span', 'txt', gw.check.state === 'active' ? 'key accepted' : gw.check.message || 'key not accepted'));
         body.appendChild(N(c, 1));
         if (gw.check.state === 'unregistered') {
-          body.appendChild(N(press(el('button', 'btn', 'привязать к моему ID'), function () {
+          body.appendChild(N(press(el('button', 'btn', 'bind to my id'), function () {
             gw.busy = 'reg';
             render();
             br.register(identity()).then(function () { return br.check(); }).then(function (res) {
               gw.check = res;
               gw.busy = null;
-              logAdd('gateway', res.state === 'active', 'привязка: ' + res.state);
+              logAdd('gateway', res.state === 'active', 'binding: ' + res.state);
               render();
             }, function (e) {
               gw.busy = null;
-              logAdd('gateway', false, 'привязка: ' + e.message);
+              logAdd('gateway', false, 'binding: ' + e.message);
               render();
             });
           }), 1));
         }
       }
       if (gw.models && gw.models.models.length) {
-        body.appendChild(N(el('div', 'sec', 'МОДЕЛИ · ВЫБИРАЕТ СЕРВЕР'), 1));
+        body.appendChild(N(el('div', 'sec', 'MODELS · CHOSEN BY THE SERVER'), 1));
         var list = el('div', 'models');
         gw.models.models.forEach(function (m) { list.appendChild(el('span', 'chip', m)); });
         body.appendChild(N(list, 1));
@@ -1415,20 +1415,20 @@
 
     /* ---------------- the network log ---------------- */
     function viewNet() {
-      body.appendChild(N(el('div', 'sec', 'ЖУРНАЛ СЕТИ'), 0));
-      if (!log.length) { body.appendChild(N(el('div', 'empty', 'пока пусто'))); return; }
+      body.appendChild(N(el('div', 'sec', 'NETWORK LOG'), 0));
+      if (!log.length) { body.appendChild(N(el('div', 'empty', 'empty so far'))); return; }
       var box = el('div', 'log');
       log.slice(-40).reverse().forEach(function (l, i) {
         var ln = el('div', 'ln ' + (l.ok ? 'ok' : 'warn'));
         ln.appendChild(el('span', 'g'));
         ln.appendChild(el('span', 't', ago(l.t)));
-        ln.appendChild(el('span', 'm', l.text + (l.ms != null ? ' · ' + l.ms + ' мс' : '')));
+        ln.appendChild(el('span', 'm', l.text + (l.ms != null ? ' · ' + l.ms + ' ms' : '')));
         box.appendChild(ln);
       });
       body.appendChild(N(box, 1));
-      body.appendChild(N(press(el('button', 'btn', 'очистить'), function () {
+      body.appendChild(N(press(el('button', 'btn', 'clear'), function () {
         log = [];
-        logAdd('answers', true, 'журнал очищен');
+        logAdd('answers', true, 'log cleared');
         render();
       }), 1));
     }
@@ -1445,10 +1445,10 @@
       var leading = 'info';
       if (state.route === 'answers' && state.question) {
         var idx = Array.prototype.indexOf.call(doc.querySelectorAll('.que'), state.question.node) + 1;
-        sub = 'вопрос ' + (idx || 1);
-      } else if (state.route === 'account') { sub = 'аккаунт'; }
-      else if (state.route === 'gateway') { sub = 'шлюз'; leading = 'back'; }
-      else if (state.route === 'net') { sub = 'сеть'; leading = 'back'; }
+        sub = 'question ' + (idx || 1);
+      } else if (state.route === 'account') { sub = 'account'; }
+      else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
+      else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
       pop.appendChild(head(title, sub, leading));
       body = el('div', 'pb');
       pop.appendChild(body);

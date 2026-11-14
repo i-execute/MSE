@@ -149,8 +149,8 @@ def main() -> int:
         asyncio.run(bot.home(555))
         panel = app.sent[-1][1]
         check("the panel names the tunnel address", "mse-gateway.example.ts.net" in panel, panel[:200])
-        check("the panel shows the quota and the count of devices", "200" in panel and "устройств" in panel, panel[:200])
-        check("the waiting application is on the panel", "12345" in panel and "ждут решения" in panel, panel[:300])
+        check("the panel shows the quota and the count of devices", "200" in panel and "devices" in panel, panel[:200])
+        check("the waiting application is on the panel", "12345" in panel and "waiting for a decision" in panel, panel[:300])
 
         # 2. a stranger cannot use the bot
         stranger = FakeEvt(data="dev:list", from_id=999)
@@ -196,7 +196,26 @@ def main() -> int:
 
         # 9. the log screen keeps what the router did
         asyncio.run(bot.on_message(FakeEvt(text="/log")))
-        check("the log screen shows the router's own records", "журнал" in app.sent[-1][1], app.sent[-1][1][:160])
+        check("the log screen shows the router's own records", "log" in app.sent[-1][1], app.sent[-1][1][:160])
+        # ---- a newcomer knocks: the owner is told once, and the queue is drained
+        import urllib.request as _u
+        newkey = "mse_" + "b7" * 24
+        _req = _u.Request(base + "/mse/v1/register",
+                          data=json.dumps({"key": newkey, "moodleId": "77777", "name": "iPhone"}).encode(),
+                          headers={"content-type": "application/json"})
+        try:
+            _u.urlopen(_req, timeout=8).read()
+        except Exception as exc:  # noqa: BLE001 — the queue check below reports what happened
+            check("a newcomer can register", False, str(exc))
+        queue = asyncio.run(asyncio.to_thread(bot.gw.applications, True))
+        check("a new application lands in the queue",
+              any(str(a.get("moodleId")) == "77777" for a in queue.get("applications") or []), str(queue)[:200])
+        again = asyncio.run(asyncio.to_thread(bot.gw.applications, True))
+        check("the queue is drained, so nobody is pinged twice", not (again.get("applications") or []), str(again)[:200])
+        asyncio.run(bot.announce({"moodleId": "77777", "name": "iPhone"}))
+        check("the owner gets a notice with allow and decline",
+              "new request" in app.sent[-1][1] and "77777" in app.sent[-1][1], app.sent[-1][1][:200])
+
     finally:
         router.terminate()
         try:

@@ -63,7 +63,7 @@ test('R2 an unknown key gets 401 and not one byte of the backend', async () => {
 });
 
 test('R3 a registered but unallowed device is pending: 403 on the model, and the backend is still untouched', async () => {
-  const reg = await post('/mse/v1/register', { key: key(2), moodleId: '12346', name: 'Тест' });
+  const reg = await post('/mse/v1/register', { key: key(2), moodleId: '12346', name: 'Test' });
   assert.equal(reg.status, 202);
   assert.equal((await reg.json()).device.status, 'pending');
   upstreamHits = 0;
@@ -99,11 +99,11 @@ test('R4 the owner allows the Moodle id: same key becomes active, and the answer
 });
 
 test('R5 a plain (non-streaming) call is passed through with its body intact', async () => {
-  const r = await post('/v1/chat/completions', { messages: [{ role: 'user', content: 'что такое MSE' }] }, { authorization: 'Bearer ' + key(2) });
+  const r = await post('/v1/chat/completions', { messages: [{ role: 'user', content: 'what is MSE' }] }, { authorization: 'Bearer ' + key(2) });
   assert.equal(r.status, 200);
   const j = await r.json();
   assert.equal(j.object, 'chat.completion');
-  assert.match(j.choices[0].message.content, /что такое MSE/);
+  assert.match(j.choices[0].message.content, /what is MSE/);
 });
 
 test('R6 the quota counts down and then stops the device with a retry-after', async () => {

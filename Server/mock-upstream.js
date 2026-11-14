@@ -15,14 +15,14 @@ function reply(body) {
   const last = msgs.filter((m) => m && m.role === 'user').pop();
   const text = last && typeof last.content === 'string' ? last.content : 'nothing';
   /* the agent shape: the mock plays the model that must answer with one of the options */
-  if (/JSON-объектом/.test(sys)) {
+  if (/ONE JSON object/.test(sys)) {
     const options = [...text.matchAll(/^\s*\d+\.\s*(.+)$/gm)].map((m) => m[1].trim());
     const answer = options[0] || '';
-    if (!answer) return JSON.stringify({ error: 'нет вариантов в задании' });
-    return JSON.stringify({ answer, confidence: 0.82, reason: 'mock: первый вариант' });
+    if (!answer) return JSON.stringify({ error: 'no options in the task' });
+    return JSON.stringify({ answer, confidence: 0.82, reason: 'mock: the first option' });
   }
-  /* the fallback answer of the extension: «the answer is exactly this option» — the first option of the block */
-  if (/\u041e\u0442\u0432\u0435\u0442\u044c \u0440\u043e\u0432\u043d\u043e \u043e\u0434\u043d\u043e\u0439/.test(text)) {
+  /* the fallback answer of the extension: "answer with exactly one line" — the first option of the block */
+  if (/Answer with exactly one line/i.test(text)) {
     const options = [...text.matchAll(/^\s*\d+\.\s*(.+)$/gm)].map((m) => m[1].trim());
     if (options[0]) return options[0];
   }

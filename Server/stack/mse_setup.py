@@ -1,16 +1,18 @@
-"""MSE setup — панель управления сервером в терминале.
+"""MSE setup — the server's control panel in the terminal.
 
-Это порт `Storage/obhod_setup.py` из i-execute/OBHOD: тот же движок (глифы, тема, cbreak-сессия, KeyReader,
-Menu, CheckMenu, FieldEditor, LiveBox, Spinner), та же манера экранов — рамки, пилюли, шаги, живой прогресс.
-Поменялось только содержимое: вместо Xray-core и FreeTurn — роутер MSE, AI-бэкенд, tailscale-туннель и бот.
+A port of `Storage/obhod_setup.py` from i-execute/OBHOD: the same engine (glyphs, theme, cbreak session, KeyReader,
+Menu, CheckMenu, FieldEditor, LiveBox, Spinner) and the same manner of screens — frames, pills, steps, live
+progress. Only the content changed: instead of Xray-core and FreeTurn there is the MSE router, the AI backend,
+the tailscale tunnel and the bot.
 
-    sudo mse                    интерактивная панель (меню как в OBHOD)
-    sudo mse --status           то же, но без вопросов: печатает состояние и выходит (для CI и скриптов)
+    sudo mse              the interactive panel (the OBHOD menu)
+    sudo mse update       update the code and dependencies in place
+    sudo mse --status     the same without questions: print the state and exit (for scripts and CI)
     sudo mse --version
 
-Что делает: ставит и лечит стек, показывает здоровье (роутер, бэкенд, туннель, бот), правит /etc/mse/mse.env,
-поднимает tailscale и funnel, перезапускает сервисы и читает журнал. Ключ модели тут не спрашивается и не
-хранится: он живёт в AI-бэкенде.
+What it does: installs and repairs the stack, shows the health (router, backend, tunnel, bot), edits
+/etc/mse/mse.env, brings tailscale and the funnel up, restarts the services and reads the journal. The model key
+is never asked for and never stored here: it lives in the AI backend.
 """
 from __future__ import annotations
 
@@ -114,31 +116,32 @@ class g:
 
 
 class theme:
+    """Light, unsaturated blue: the accent is a soft sky blue, surfaces are a deep navy blue (never black)."""
     reset = "\033[0m"
     bold = "1"
     dim = "2"
-    frame = "38;5;68"
-    frame_active = "38;5;111"
-    frame_dim = "38;5;239"
-    title = "1;38;5;81"
-    subtitle = "38;5;153"
-    accent = "38;5;45"
-    good = "38;5;48"
-    warn = "38;5;214"
-    bad = "38;5;203"
-    muted = "38;5;244"
-    subtle = "38;5;240"
-    text = "38;5;253"
-    bright = "1;38;5;255"
-    chip = "48;5;236;38;5;252"
-    keycap = "1;48;5;238;38;5;159"
-    badge_ok = "1;48;5;22;38;5;120"
-    badge_warn = "1;48;5;58;38;5;221"
+    frame = "38;5;110"          # soft blue frame
+    frame_active = "38;5;153"   # lighter blue when the screen has focus
+    frame_dim = "38;5;60"       # dim blue for idle rules
+    title = "1;38;5;153"        # pale blue title
+    subtitle = "38;5;117"
+    accent = "38;5;117"         # light blue accent
+    good = "38;5;116"           # calm cyan-green, only for "ok"
+    warn = "38;5;180"           # muted amber
+    bad = "38;5;167"            # muted coral
+    muted = "38;5;103"
+    subtle = "38;5;60"
+    text = "38;5;189"
+    bright = "1;38;5;195"
+    chip = "48;5;17;38;5;189"
+    keycap = "1;48;5;24;38;5;195"
+    badge_ok = "1;48;5;23;38;5;152"
+    badge_warn = "1;48;5;58;38;5;223"
     badge_bad = "1;48;5;52;38;5;217"
-    badge_info = "1;48;5;24;38;5;159"
-    row_focus = "48;5;235"
-    key = "38;5;117"
-    cursor = "1;38;5;45"
+    badge_info = "1;48;5;24;38;5;195"
+    row_focus = "48;5;17"
+    key = "38;5;153"
+    cursor = "1;38;5;153"
 
 
 def color_enabled() -> bool:
@@ -1348,7 +1351,7 @@ def detect_pythons() -> list[str]:
 
 
 
-# ---------------------------------------------------------------------- состояние стека
+# ---------------------------------------------------------------------- the stack, as it is on this machine
 def env_read(path: Path | None = None) -> dict[str, str]:
     data: dict[str, str] = {}
     target = path or Path(os.environ.get("MSE_ENV_FILE", DEFAULT_ENV))
@@ -1405,7 +1408,7 @@ def systemd_state(unit: str) -> str:
 
 
 class Stack:
-    """Всё, что панель знает о машине: где что лежит и что из этого живо."""
+    """Everything the panel knows about the machine: where things are and what of it is alive."""
 
     def __init__(self, env: dict[str, str]) -> None:
         self.env = env
@@ -1423,9 +1426,9 @@ class Stack:
     def probe_router(self) -> tuple[str, str]:
         try:
             health = http_json(f"http://127.0.0.1:{self.port}/health")
-        except Exception as exc:  # noqa: BLE001 — любая беда значит «не отвечает»
+        except Exception as exc:  # noqa: BLE001 — anything at all means "not answering"
             return "down", f"127.0.0.1:{self.port} · {type(exc).__name__}"
-        return "up", "v%s · модель %s · устройств %s · в allow-листе %s" % (
+        return "up", "v%s · model %s · devices %s · in the allow list %s" % (
             health.get("version", "?"), health.get("model", "—"),
             health.get("devices", 0), health.get("allow", 0),
         )
@@ -1436,27 +1439,27 @@ class Stack:
         except Exception as exc:  # noqa: BLE001
             return "down", "%s:%s · %s" % (self.upstream_host, self.upstream_port, type(exc).__name__)
         ids = [str(m.get("id")) for m in body.get("data") or [] if m.get("id")]
-        return "up", "%s:%s · моделей %d" % (self.upstream_host, self.upstream_port, len(ids))
+        return "up", "%s:%s · models %d" % (self.upstream_host, self.upstream_port, len(ids))
 
     def probe_tunnel(self) -> tuple[str, str]:
         if not Path(self.tunnel).exists() and not shutil.which(self.tunnel):
-            return "off", "mse-tunnel.sh не установлен"
+            return "off", "mse-tunnel.sh is not installed"
         try:
             out = subprocess.run([self.tunnel, "status", "--json"], capture_output=True, text=True, timeout=20)
             info = json.loads(out.stdout or "{}")
         except (OSError, subprocess.SubprocessError, ValueError) as exc:
             return "down", "mse-tunnel.sh: %s" % type(exc).__name__
         if not info.get("installed"):
-            return "off", "tailscale не установлен"
+            return "off", "tailscale is not installed"
         if not info.get("running"):
-            return "warn", "tailscale не поднят"
-        url = info.get("url") or "нет адреса"
+            return "warn", "tailscale is not up"
+        url = info.get("url") or "no address yet"
         return "up", "%s · %s" % (info.get("mode") or "—", url)
 
     def probe_bot(self) -> tuple[str, str]:
         token = self.env.get("MSE_BOT_TOKEN", "")
         if not token:
-            return "off", "MSE_BOT_TOKEN пуст"
+            return "off", "MSE_BOT_TOKEN is empty"
         state = systemd_state("mse-bot")
         return ("up" if state == "active" else "warn"), "mse-bot.service · " + state
 
@@ -1470,7 +1473,7 @@ class Stack:
 
 
 class Setup:
-    """Экраны панели. Порядок и вид — как в `sudo obhod`, содержимое — про MSE."""
+    """The screens. The order and the look are those of `sudo obhod`; the content is about MSE."""
 
     def __init__(self, argv: list[str] | None = None, env: dict[str, str] | None = None) -> None:
         self.argv = list(argv or [])
@@ -1490,14 +1493,14 @@ class Setup:
         self.env_file = str(self.stack.env_file)
         self.python = (detect_pythons() or ["python3"])[0]
         self.python_choices = detect_pythons()
-        self.credentials = {"BOT_TOKEN": "", "OWNER_ID": "", "TAILSCALE_KEY": ""}
+        self.credentials = {"BOT_TOKEN": "", "OWNER_ID": "", "API_ID": "", "API_HASH": "", "TAILSCALE_KEY": ""}
         self.settings = {"MODEL": self.env.get("MSE_MODEL", "gemini-3-flash"), "QUOTA": self.env.get("MSE_DAILY_QUOTA", "200"),
                          "UPSTREAM_PORT": self.env.get("MSE_UPSTREAM_PORT", "8799")}
         self.notes: list[str] = []
         self.started = time.time()
         self.limit = width()
 
-    # ------------------------------------------------------------------ служебное
+    # ------------------------------------------------------------------ small helpers
     def host_label(self) -> str:
         user = "root" if os.geteuid() == 0 else (os.environ.get("USER") or "user")
         try:
@@ -1558,23 +1561,23 @@ class Setup:
         bar = paint(g.bar_on * filled, theme.accent) + paint(g.bar_off * (cells - filled), theme.subtle)
         return "  " + bar + " " + paint("%3d%%" % int(100 * done / total), theme.text) + " " + paint(label, theme.muted)
 
-    # ------------------------------------------------------------------ шаг 1: меню
+    # ------------------------------------------------------------------ step 1: the menu
     def ask_action(self) -> bool:
         installed = self.stack.installed()
         menu = Menu(
             paint("1", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Control Center", theme.title),
             [
-                RadioOption("health", "Health & Status", "Роутер, AI-бэкенд, tailscale и бот: что живо, что нет, где лежит", "read-only"),
-                RadioOption("install", "Install / Self-Heal", "Поставить или починить стек: код, настройки, venv, systemd, tailscale", "self-heal" if installed else "recommended"),
-                RadioOption("update", "Update & Repair", "Обновить код и зависимости, не трогая устройства, allow-лист и токены", "fast"),
-                RadioOption("service", "Service Control", "Перезапуск, старт, стоп и последние строки журнала", ""),
-                RadioOption("tunnel", "Tunnel (tailscale)", "tailscale up, funnel, serve, выключить: адрес и режим", ""),
-                RadioOption("settings", "Model, Quota & Keys", "Модель, квота, токен бота, owner id, ключ tailscale, порты", "config"),
-                RadioOption("custom", "Custom / Advanced Setup", "Пути, python, dry-run: то же, но с вопросами на каждом шаге", ""),
-                RadioOption("uninstall", "Uninstall MSE", "Снять сервисы и /opt/mse, состояние и токены — по выбору", "safe"),
-                RadioOption("wipe", "Full Wipe (Delete Everything)", "Удалить всё: код, настройки, состояние, журнал, tunnel", "danger"),
+                RadioOption("health", "Health & Status", "Router, AI backend, tailscale and bot: what is alive, what is not, where it lives", "read-only"),
+                RadioOption("install", "Install / Self-Heal", "Install or repair the stack: code, settings, venv, systemd, tailscale", "self-heal" if installed else "recommended"),
+                RadioOption("update", "Update & Repair", "Update the code and dependencies without touching devices, the allow list or the tokens", "fast"),
+                RadioOption("service", "Service Control", "Restart, start, stop and the last lines of the journal", ""),
+                RadioOption("tunnel", "Tunnel (tailscale)", "tailscale up, funnel, serve, turn off: the address and the mode", ""),
+                RadioOption("settings", "Model, Quota & Keys", "Model, quota, bot token, owner id, tailscale key, ports", "config"),
+                RadioOption("custom", "Custom / Advanced Setup", "Paths, python, dry run: the same, but asking at every step", ""),
+                RadioOption("uninstall", "Uninstall MSE", "Remove the services and /opt/mse; state and tokens optional", "safe"),
+                RadioOption("wipe", "Full Wipe (Delete Everything)", "Delete everything: code, settings, state, log, tunnel", "danger"),
             ],
-            subtitle="Стрелки — выбор, Space — отметить, Enter — выполнить.",
+            subtitle="Arrows to move, Space to select, Enter to run.",
             step_note=paint("main menu", theme.muted),
         )
         choice = menu.ask(0)
@@ -1589,19 +1592,19 @@ class Setup:
         self.quick = True
         return True
 
-    # ------------------------------------------------------------------ статус
+    # ------------------------------------------------------------------ status
     def show_health(self) -> None:
         self.limit = width()
         rows = []
         for name, kind, note in self.stack.probe_all():
             rows.append(self.pill_for(kind) + " " + paint(pad(name, 9), theme.key) + paint(note, theme.text))
         rows.append("")
-        rows.append(fact("модель", self.env.get("MSE_MODEL", "—")) + "   " + fact("квота", self.env.get("MSE_DAILY_QUOTA", "—") + "/сутки"))
-        rows.append(fact("адрес", self.env.get("MSE_PUBLIC_URL") or "ещё нет (3 или Tunnel)"))
-        rows.append(fact("наружу", "только tailscale: funnel → 127.0.0.1:" + self.stack.port))
-        panel("здоровье стека", rows, self.limit, theme.frame, pill("read-only", theme.badge_info))
+        rows.append(fact("model", self.env.get("MSE_MODEL", "—")) + "   " + fact("quota", self.env.get("MSE_DAILY_QUOTA", "—") + "/day"))
+        rows.append(fact("address", self.env.get("MSE_PUBLIC_URL") or "not yet (3 Tunnel)"))
+        rows.append(fact("exposed via", "tailscale only: funnel → 127.0.0.1:" + self.stack.port))
+        panel("stack health", rows, self.limit, theme.frame, pill("read-only", theme.badge_info))
 
-    # ------------------------------------------------------------------ установка / обновление
+    # ------------------------------------------------------------------ install / update
     def installer_argv(self) -> list[str]:
         script = Path(self.prefix) / "stack" / "install.sh"
         if not script.is_file():
@@ -1619,11 +1622,11 @@ class Setup:
         self.limit = width()
         checks = []
         ok_root = os.geteuid() == 0 or self.dev
-        checks.append(("root", ok_root, "root (или dev-режим)" if ok_root else "нужен root: sudo mse"))
+        checks.append(("root", ok_root, "root (or dev mode)" if ok_root else "root is needed: sudo mse"))
         ok_node = shutil.which("node") is not None
-        checks.append(("node 18+", ok_node, shutil.which("node") or "нет node"))
+        checks.append(("node 18+", ok_node, shutil.which("node") or "node is missing"))
         ok_py = shutil.which("python3") is not None
-        checks.append(("python3", ok_py, shutil.which("python3") or "нет python3"))
+        checks.append(("python3", ok_py, shutil.which("python3") or "python3 is missing"))
         ok_disk = os.path.isdir(os.path.dirname(self.prefix) or "/")
         checks.append(("target", ok_disk, self.prefix))
         rows = [self.pill_for("up" if ok else "down") + " " + paint(pad(name, 10), theme.key) + paint(note, theme.text if ok else theme.warn)
@@ -1642,12 +1645,12 @@ class Setup:
         argv = self.installer_argv()
         if self.dry_run:
             section(3, "Preview Command", [fact("would run", " ".join(shlex.quote(part) for part in argv)),
-                                           paint("dry run: на диске ничего не меняется", theme.muted)], theme.accent, "dry run")
+                                           paint("dry run: nothing on disk is changed", theme.muted)], theme.accent, "dry run")
             return 0
         rows = []
         total = 4
-        names = ["код в " + self.prefix, "настройки и права", "venv и зависимости", "systemd и туннель"]
-        with Spinner("устанавливаю") as spin:
+        names = ["code into " + self.prefix, "settings and permissions", "venv and dependencies", "systemd and the tunnel"]
+        with Spinner("installing") as spin:
             proc = subprocess.run(argv, capture_output=True, text=True)
             ok = proc.returncode == 0
             spin.close(OK if ok else BAD, "install.sh")
@@ -1657,11 +1660,11 @@ class Setup:
             rows.append("")
             for line in ((proc.stderr or proc.stdout or "").splitlines())[-6:]:
                 rows.append(paint(clip(line, self.limit - 6), theme.warn))
-        panel("установка", rows, self.limit, theme.good if ok else theme.bad,
+        panel("installation", rows, self.limit, theme.good if ok else theme.bad,
               self.step_bar(4, 4, "install" if ok else "stopped"))
         return proc.returncode
 
-    # ------------------------------------------------------------------ сервисы
+    # ------------------------------------------------------------------ services
     def ask_service(self) -> bool:
         sub = Menu(
             paint("2", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Service Control", theme.title),
@@ -1669,10 +1672,10 @@ class Setup:
                 RadioOption("restart", "Restart mse-router", "systemctl restart mse-router.service"),
                 RadioOption("start", "Start mse-router", "systemctl start mse-router.service"),
                 RadioOption("stop", "Stop mse-router", "systemctl stop mse-router.service"),
-                RadioOption("restart-bot", "Restart mse-bot", "systemctl restart mse-bot.service (нужен токен бота)"),
-                RadioOption("logs", "Show recent logs", "journalctl -u mse-router -n 40 и mse-bot"),
+                RadioOption("restart-bot", "Restart mse-bot", "systemctl restart mse-bot.service (needs a bot token)"),
+                RadioOption("logs", "Show recent logs", "journalctl -u mse-router -n 40 and mse-bot"),
             ],
-            subtitle="Что сделать с сервисом.",
+            subtitle="What to do with the service.",
             step_note=paint("service", theme.muted),
         )
         idx = sub.ask(0)
@@ -1693,7 +1696,7 @@ class Setup:
                     lines = [l for l in (out.stdout or "").splitlines() if l.strip()][-8:]
                 except (OSError, subprocess.SubprocessError) as exc:
                     lines = [str(exc)]
-                rows.extend(paint(clip(line, self.limit - 6), theme.muted) for line in (lines or ["пусто"]))
+                rows.extend(paint(clip(line, self.limit - 6), theme.muted) for line in (lines or ["empty"]))
                 rows.append("")
         else:
             unit = "mse-bot" if cmd.endswith("-bot") else "mse-router"
@@ -1707,26 +1710,26 @@ class Setup:
             rows.append(self.pill_for("up" if ok else "down") + " " + paint("%s %s" % (unit, verb), theme.text) + "  " + paint(state, theme.muted))
         panel("service", rows, self.limit, theme.frame)
 
-    # ------------------------------------------------------------------ туннель
+    # ------------------------------------------------------------------ tunnel
     def tunnel_screen(self) -> None:
         self.limit = width()
         kind, note = self.stack.probe_tunnel()
         rows = [self.pill_for(kind) + " " + paint(note, theme.text), ""]
-        rows.append(fact("адрес", self.env.get("MSE_PUBLIC_URL") or "—"))
-        rows.append(fact("порт", self.stack.port))
-        panel("туннель", rows, self.limit, theme.frame, pill("tailscale", theme.badge_info))
+        rows.append(fact("address", self.env.get("MSE_PUBLIC_URL") or "—"))
+        rows.append(fact("port", self.stack.port))
+        panel("tunnel", rows, self.limit, theme.frame, pill("tailscale", theme.badge_info))
 
     def ask_tunnel(self) -> bool:
         sub = Menu(
             paint("3", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Tunnel (tailscale)", theme.title),
             [
-                RadioOption("up", "tailscale up", "Поднять узел в tailnet ключом из настроек"),
-                RadioOption("funnel", "tailscale funnel", "Публичный https-адрес <host>.<tailnet>.ts.net → локальный порт"),
-                RadioOption("serve", "tailscale serve", "Тот же https, но только внутри tailnet"),
-                RadioOption("off", "Turn off", "Выключить funnel/serve, узел оставить в tailnet"),
-                RadioOption("status", "Status", "Показать режим, адрес и ip"),
+                RadioOption("up", "tailscale up", "Bring the node into the tailnet with the key from the settings"),
+                RadioOption("funnel", "tailscale funnel", "A public https address <host>.<tailnet>.ts.net → the local port"),
+                RadioOption("serve", "tailscale serve", "The same https, but inside the tailnet only"),
+                RadioOption("off", "Turn off", "Turn funnel/serve off, keep the node in the tailnet"),
+                RadioOption("status", "Status", "Show the mode, the address and the ip"),
             ],
-            subtitle="Что сделать с туннелем.",
+            subtitle="What to do with the tunnel.",
             step_note=paint("tunnel", theme.muted),
         )
         idx = sub.ask(0)
@@ -1751,25 +1754,27 @@ class Setup:
         if ok and text.startswith("https://"):
             env_write(self.stack.env_file, {"MSE_PUBLIC_URL": text.strip().splitlines()[0]})
             rows.append("")
-            rows.append(paint("адрес записан в " + str(self.stack.env_file), theme.muted))
+            rows.append(paint("address saved into " + str(self.stack.env_file), theme.muted))
             subprocess.run(["systemctl", "restart", "mse-router"], capture_output=True, text=True, timeout=60)
-        panel("туннель · " + cmd, rows, self.limit, theme.good if ok else theme.bad)
+        panel("tunnel · " + cmd, rows, self.limit, theme.good if ok else theme.bad)
         return False
 
-    # ------------------------------------------------------------------ настройки
+    # ------------------------------------------------------------------ settings
     def ask_settings(self) -> bool:
         fields = [
-            Field("MODEL", "модель", False, self.settings["MODEL"], "Имя модели на локальном бэкенде (OpenAI-совместимо)"),
-            Field("QUOTA", "квота", False, self.settings["QUOTA"], "Запросов в сутки на устройство"),
-            Field("UPSTREAM_PORT", "порт бэкенда", False, self.settings["UPSTREAM_PORT"], "127.0.0.1:<порт> — там живёт AI-бэкенд"),
-            Field("BOT_TOKEN", "токен бота", True, self.contrib_or("BOT_TOKEN"), "От @BotFather; пусто — бот выключен"),
-            Field("OWNER_ID", "owner id", False, self.contrib_or("OWNER_ID"), "Ваш numeric Telegram id (кому бот отвечает)"),
-            Field("TAILSCALE_KEY", "ключ tailscale", True, self.contrib_or("TAILSCALE_KEY"), "tskey-auth-… (или пусто и вход по ссылке)"),
+            Field("MODEL", "model", False, self.settings["MODEL"], "The model name on the local backend (OpenAI-compatible)"),
+            Field("QUOTA", "quota", False, self.settings["QUOTA"], "Requests per day per device"),
+            Field("UPSTREAM_PORT", "backend port", False, self.settings["UPSTREAM_PORT"], "127.0.0.1:<port> — where the AI backend lives"),
+            Field("BOT_TOKEN", "bot token", True, self.contrib_or("BOT_TOKEN"), "From @BotFather; empty means the bot is off"),
+            Field("OWNER_ID", "owner id", False, self.contrib_or("OWNER_ID"), "Your numeric Telegram id (the person the bot answers)"),
+            Field("API_ID", "api id", False, self.contrib_or("API_ID"), "my.telegram.org → App api_id (optional, for the MTProto transport)"),
+            Field("API_HASH", "api hash", True, self.contrib_or("API_HASH"), "my.telegram.org → App api_hash (optional, masked)"),
+            Field("TAILSCALE_KEY", "tailscale key", True, self.contrib_or("TAILSCALE_KEY"), "tskey-auth-… (or empty and log in by link)"),
         ]
         editor = FieldEditor(
             paint("4", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Model, Quota & Keys", theme.title),
             fields,
-            subtitle="Стрелка вверх/вниз — строка, Space — править, Enter — сохранить всё. Секреты маскируются и не попадают в историю команд.",
+            subtitle="Up/down — the row, Space — edit, Enter — save everything. Secrets are masked and never land in the shell history.",
             step_note=paint("step 1", theme.muted),
         )
         if not editor.ask():
@@ -1779,9 +1784,11 @@ class Setup:
         self.settings["UPSTREAM_PORT"] = fields[2].value.strip()
         self.credentials["BOT_TOKEN"] = fields[3].value.strip()
         self.credentials["OWNER_ID"] = fields[4].value.strip()
-        self.credentials["TAILSCALE_KEY"] = fields[5].value.strip()
+        self.credentials["API_ID"] = fields[5].value.strip()
+        self.credentials["API_HASH"] = fields[6].value.strip()
+        self.credentials["TAILSCALE_KEY"] = fields[7].value.strip()
         if self.dry_run:
-            self.notes.append("dry run: настройки не записаны")
+            self.notes.append("dry run: the settings were not written")
             return True
         updates = {
             "MSE_MODEL": self.settings["MODEL"],
@@ -1789,30 +1796,32 @@ class Setup:
             "MSE_UPSTREAM_PORT": self.settings["UPSTREAM_PORT"],
             "MSE_BOT_TOKEN": self.credentials["BOT_TOKEN"],
             "MSE_OWNER_ID": self.credentials["OWNER_ID"],
+            "MSE_API_ID": self.credentials["API_ID"],
+            "MSE_API_HASH": self.credentials["API_HASH"],
             "MSE_TAILSCALE_KEY": self.credentials["TAILSCALE_KEY"],
         }
         try:
             env_write(self.stack.env_file, updates)
         except OSError as exc:
-            self.notes.append("не записал %s: %s" % (self.stack.env_file, exc))
+            self.notes.append("could not write %s: %s" % (self.stack.env_file, exc))
             return False
         self.env.update(updates)
         ok, text = self.push_settings()
         self.limit = width()
         rows = [self.pill_for("up" if ok else "warn") + " " + paint(text, theme.text if ok else theme.warn),
-                fact("файл", str(self.stack.env_file)),
-                fact("модель", self.settings["MODEL"]), fact("квота", self.settings["QUOTA"] + "/сутки")]
-        panel("настройки записаны", rows, self.limit, theme.good if ok else theme.warn)
+                fact("file", str(self.stack.env_file)),
+                fact("model", self.settings["MODEL"]), fact("quota", self.settings["QUOTA"] + "/day")]
+        panel("settings saved", rows, self.limit, theme.good if ok else theme.warn)
         return True
 
     def contrib_or(self, name: str) -> str:
         return self.credentials.get(name, "") or self.env.get("MSE_" + name, "")
 
     def push_settings(self) -> tuple[bool, str]:
-        """Часть настроек живёт в файле, часть — в живом роутере: квоту отдаём ему сразу."""
+        """Some settings live in the file, some in the running router: the quota goes to it right away."""
         token = self.env.get("MSE_ADMIN_TOKEN", "")
         if not token:
-            return True, "файл записан; роутер подхватит после перезапуска"
+            return True, "file written; the router picks it up after a restart"
         import urllib.request
 
         body = json.dumps({"quota": int(self.settings["QUOTA"] or 0)}).encode()
@@ -1822,20 +1831,20 @@ class Setup:
             with urllib.request.urlopen(req, timeout=8):
                 pass
         except Exception as exc:  # noqa: BLE001
-            return False, "роутер не принял квоту (%s), применится после перезапуска" % type(exc).__name__
+            return False, "the router did not accept the quota (%s), it applies after a restart" % type(exc).__name__
         subprocess.run(["systemctl", "restart", "mse-bot"], capture_output=True, text=True, timeout=60)
-        return True, "квота применена, бот перезапущен"
+        return True, "quota applied, the bot restarted"
 
-    # ------------------------------------------------------------------ снос
+    # ------------------------------------------------------------------ removal
     def ask_uninstall(self) -> bool:
         sub = Menu(
             paint("2", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Uninstall MSE", theme.title),
             [
-                RadioOption("keep", "Remove services & code (keep state & keys)", "Снять unit-ы и /opt/mse; /etc/mse и /var/lib/mse остаются", "safe"),
-                RadioOption("purge", "Remove everything: code, config, state", "Плюс /etc/mse (токены) и /var/lib/mse (устройства, журнал)"),
-                RadioOption("cancel", "Cancel", "Ничего не менять"),
+                RadioOption("keep", "Remove services & code (keep state & keys)", "Remove the units and /opt/mse; /etc/mse and /var/lib/mse stay", "safe"),
+                RadioOption("purge", "Remove everything: code, config, state", "Plus /etc/mse (tokens) and /var/lib/mse (devices, log)"),
+                RadioOption("cancel", "Cancel", "Change nothing"),
             ],
-            subtitle="Насколько глубоко снимать.",
+            subtitle="How deep the removal goes.",
             step_note=paint("uninstall", theme.muted),
         )
         idx = sub.ask(0)
@@ -1847,10 +1856,10 @@ class Setup:
     def confirm_wipe(self) -> bool:
         self.limit = width()
         targets = [
-            mark(BAD) + " " + paint("сервисы: mse-router.service, mse-bot.service", theme.text),
-            mark(BAD) + " " + paint("код: %s, /usr/local/bin/mse, /usr/local/bin/mse-tunnel.sh" % self.prefix, theme.text),
-            mark(BAD) + " " + paint("настройки и состояние: %s, %s" % (self.env_file, self.state_dir), theme.text),
-            mark(BAD) + " " + paint("туннель: tailscale funnel/serve выключается (узел остаётся в tailnet)", theme.text),
+            mark(BAD) + " " + paint("services: mse-router.service, mse-bot.service", theme.text),
+            mark(BAD) + " " + paint("code: %s, /usr/local/bin/mse, /usr/local/bin/mse-tunnel.sh" % self.prefix, theme.text),
+            mark(BAD) + " " + paint("settings and state: %s, %s" % (self.env_file, self.state_dir), theme.text),
+            mark(BAD) + " " + paint("tunnel: tailscale funnel/serve is turned off (the node stays in the tailnet)", theme.text),
         ]
         panel("full wipe targets", targets, self.limit, theme.bad, pill("DESTRUCTIVE", theme.badge_bad))
         if not has_tty():
@@ -1858,10 +1867,10 @@ class Setup:
         sub = Menu(
             paint("!", theme.bad, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Confirm Full Wipe", theme.title),
             [
-                RadioOption("cancel", "Cancel — keep everything", "Выйти, ничего не удаляя", "safe default"),
-                RadioOption("wipe", "Yes — delete MSE completely", "Остановить сервисы и удалить всё из списка выше", "destructive"),
+                RadioOption("cancel", "Cancel — keep everything", "Exit without deleting anything", "safe default"),
+                RadioOption("wipe", "Yes — delete MSE completely", "Stop the services and delete everything listed above", "destructive"),
             ],
-            subtitle="Вниз + Space + Enter, чтобы подтвердить.",
+            subtitle="Down + Space + Enter to confirm.",
             step_note=paint("danger", theme.bad),
         )
         idx = sub.ask(0)
@@ -1889,10 +1898,10 @@ class Setup:
             except OSError:
                 pass
         subprocess.run(["systemctl", "daemon-reload"], capture_output=True, text=True, timeout=60)
-        panel("удалено", rows or [paint("нечего было удалять", theme.muted)], self.limit, theme.warn)
+        panel("removed", rows or [paint("there was nothing to remove", theme.muted)], self.limit, theme.warn)
         return 0
 
-    # ------------------------------------------------------------------ запуск
+    # ------------------------------------------------------------------ run
     def run(self) -> int:
         if "--version" in self.argv:
             write(paint("MSE setup 2.0 · " + TITLE, theme.accent))
@@ -1929,15 +1938,15 @@ class Setup:
         # install / update / custom
         if not self.quick:
             fields = [
-                Field("PREFIX", "app prefix", False, self.prefix, "Куда положить код (по умолчанию /opt/mse)"),
-                Field("ENV_FILE", "config file", False, self.env_file, "Файл настроек, права 0600"),
-                Field("STATE_DIR", "state dir", False, self.state_dir, "Устройства, allow-лист, журнал"),
-                Field("PYTHON", "python bin", False, self.python, "Интерпретатор для venv бота", choices=self.python_choices),
+                Field("PREFIX", "app prefix", False, self.prefix, "Where the code goes (default /opt/mse)"),
+                Field("ENV_FILE", "config file", False, self.env_file, "The settings file, mode 0600"),
+                Field("STATE_DIR", "state dir", False, self.state_dir, "Devices, allow list, log"),
+                Field("PYTHON", "python bin", False, self.python, "The interpreter for the bot venv", choices=self.python_choices),
             ]
             editor = FieldEditor(
                 paint("2", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Target Paths & Runtime", theme.title),
                 fields,
-                subtitle="Enter — принять, Space — изменить строку.",
+                subtitle="Enter — accept, Space — edit the row.",
                 step_note=paint("step 1", theme.muted),
             )
             if not editor.ask():
@@ -1946,8 +1955,8 @@ class Setup:
             self.python = fields[3].value
             opts = CheckMenu(
                 paint("3", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Setup Options", theme.title),
-                [CheckOption("dry_run", "Preview only (dry run)", "Показать план, ничего не меняя", self.dry_run, "safe")],
-                subtitle="Space — включить/выключить, Enter — дальше.",
+                [CheckOption("dry_run", "Preview only (dry run)", "Show the plan without changing anything", self.dry_run, "safe")],
+                subtitle="Space — toggle, Enter — continue.",
                 step_note=paint("step 2", theme.muted),
             )
             picked = opts.ask()
@@ -1956,20 +1965,20 @@ class Setup:
             self.dry_run = bool(picked.get("dry_run"))
         if not self.run_checks():
             self.limit = width()
-            panel("stopped", [mark(BAD) + " " + paint("не хватает: " + "; ".join(self.notes[-2:]), theme.bad)], self.limit, theme.bad)
+            panel("stopped", [mark(BAD) + " " + paint("missing: " + "; ".join(self.notes[-2:]), theme.bad)], self.limit, theme.bad)
             return 2
         code = self.run_installer()
         if code == 0 and not self.dry_run:
             self.limit = width()
             kind, note = self.stack.probe_router()
             rows = [
-                paint(g.check + " MSE установлен", theme.good, theme.bold),
-                self.pill_for(kind) + " " + paint("роутер: " + note, theme.text),
+                paint(g.check + " MSE is installed", theme.good, theme.bold),
+                self.pill_for(kind) + " " + paint("router: " + note, theme.text),
                 "",
-                paint("адрес и режим: 3 Tunnel · модель и ключи: 6 Model, Quota & Keys", theme.muted),
-                paint("живой журнал: journalctl -u mse-router -f", theme.muted),
+                paint("address and mode: 3 Tunnel · model and keys: 6 Model, Quota & Keys", theme.muted),
+                paint("live journal: journalctl -u mse-router -f", theme.muted),
             ]
-            panel("готово за %.1fs" % (time.time() - self.started), rows, self.limit, theme.good)
+            panel("done in %.1fs" % (time.time() - self.started), rows, self.limit, theme.good)
         return code
 
 
@@ -2002,7 +2011,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         restore_terminal()
         write("")
-        panel("cancelled", [paint("прервано, состояние терминала восстановлено", theme.warn)], width(), theme.warn)
+        panel("cancelled", [paint("interrupted, the terminal state is restored", theme.warn)], width(), theme.warn)
         return 130
     except Exception as exc:  # noqa: BLE001
         restore_terminal()

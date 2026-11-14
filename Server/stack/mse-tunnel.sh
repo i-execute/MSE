@@ -52,30 +52,30 @@ ts() {
 }
 
 cmd_install() {
-  if have "$TS_BIN"; then say "tailscale: уже установлен ($(ts version 2>/dev/null | head -1))"; return 0; fi
-  say "tailscale: ставлю…"
+  if have "$TS_BIN"; then say "tailscale: already installed ($(ts version 2>/dev/null | head -1))"; return 0; fi
+  say "tailscale: installing…"
   if have curl; then
     curl -fsSL https://tailscale.com/install.sh | sh
   else
-    die "нет curl: поставьте tailscale вручную (https://tailscale.com/download)"
+    die "no curl: install tailscale by hand (https://tailscale.com/download)"
   fi
-  have "$TS_BIN" || die "установка не дала бинарник tailscale"
-  say "tailscale: установлен"
+  have "$TS_BIN" || die "the install produced no tailscale binary"
+  say "tailscale: installed"
 }
 
 cmd_up() {
   local exit_node=0
   for a in "$@"; do [ "$a" = "--exit-node" ] && exit_node=1; done
-  have "$TS_BIN" || die "tailscale не установлен: mse-tunnel.sh install"
+  have "$TS_BIN" || die "tailscale is not installed: mse-tunnel.sh install"
   local key tags hostname args
   key="$(env_get MSE_TAILSCALE_KEY)"
   tags="$(env_get MSE_TAILSCALE_TAGS)"
   hostname="$(env_get MSE_TAILSCALE_HOSTNAME "mse-gateway")"
   if ts status >/dev/null 2>&1 && ts status --json 2>/dev/null | grep -q '"BackendState":"Running"'; then
-    say "tailscale: уже поднят"; return 0
+    say "tailscale: already up"; return 0
   fi
   args=(up --hostname="$hostname")
-  [ -n "$key" ] && args+=("--auth-key=$key") || note "нет MSE_TAILSCALE_KEY: будет ссылка на вход в браузере"
+  [ -n "$key" ] && args+=("--auth-key=$key") || note "no MSE_TAILSCALE_KEY: a browser login link is printed instead"
   [ -n "$tags" ] && args+=("--advertise-tags=$tags")
   [ "$exit_node" = "1" ] && args+=("--advertise-exit-node")
   # accept-dns=false: the node must not start resolving through the tailnet just because it joined one
@@ -135,11 +135,11 @@ PY
 
 cmd_funnel() {
   local port="${1:-$GATEWAY_PORT}"
-  have "$TS_BIN" || die "tailscale не установлен"
-  ts funnel --bg --yes "$port" >/dev/null 2>&1 || ts funnel --bg "$port" || die "funnel не включился: проверьте, что funnel разрешён в ACL tailnet"
+  have "$TS_BIN" || die "tailscale is not installed"
+  ts funnel --bg --yes "$port" >/dev/null 2>&1 || ts funnel --bg "$port" || die "funnel did not turn on: check that Funnel is allowed in the tailnet ACL"
   local host url
   host="$(dns_name)"
-  [ -n "$host" ] || die "tailscale не назвал адрес узла (tailscale status --json)"
+  [ -n "$host" ] || die "tailscale did not report the node address (tailscale status --json)"
   url="https://$host"
   write_state funnel "$port" "$url"
   say "$url"
@@ -147,23 +147,23 @@ cmd_funnel() {
 
 cmd_serve() {
   local port="${1:-$GATEWAY_PORT}"
-  have "$TS_BIN" || die "tailscale не установлен"
-  ts serve --bg --https=443 "http://127.0.0.1:$port" >/dev/null 2>&1 || ts serve --bg "http://127.0.0.1:$port" || die "serve не включился"
+  have "$TS_BIN" || die "tailscale is not installed"
+  ts serve --bg --https=443 "http://127.0.0.1:$port" >/dev/null 2>&1 || ts serve --bg "http://127.0.0.1:$port" || die "serve did not turn on"
   local host url
   host="$(dns_name)"
-  [ -n "$host" ] || die "tailscale не назвал адрес узла"
+  [ -n "$host" ] || die "tailscale did not report the node address"
   url="https://$host"
   write_state serve "$port" "$url"
   say "$url"
 }
 
 cmd_off() {
-  have "$TS_BIN" || { say "tailscale не установлен"; return 0; }
+  have "$TS_BIN" || { say "tailscale is not installed"; return 0; }
   local port="${1:-$GATEWAY_PORT}"
   ts funnel --bg "$port" off >/dev/null 2>&1 || ts funnel off >/dev/null 2>&1 || true
   ts serve --bg "$port" off >/dev/null 2>&1 || ts serve off >/dev/null 2>&1 || true
   write_state off "$port" ""
-  say "funnel выключен"
+  say "funnel is off"
 }
 
 cmd_url() {
@@ -237,11 +237,11 @@ print(json.dumps({"backend":"tailscale","installed":installed=="1","running":run
 PY
     return 0
   fi
-  say "tailscale: $([ "$installed" = 1 ] && echo установлен || echo нет) · $([ "$running" = 1 ] && echo поднят || echo не поднят)"
-  say "режим:     ${backend:-нет}"
-  say "адрес:     ${url:-нет}"
-  say "ip:        ${ip:-нет}"
-  [ -n "$stage" ] && say "ключ узла: ${stage}"
+  say "tailscale: $([ "$installed" = 1 ] && echo installed || echo no) · $([ "$running" = 1 ] && echo up || echo down)"
+  say "mode:      ${backend:-none}"
+  say "address:   ${url:-none}"
+  say "ip:        ${ip:-none}"
+  [ -n "$stage" ] && say "node key:  ${stage}"
   return 0
 }
 
@@ -249,13 +249,13 @@ cmd_wait() {
   local timeout=90
   while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2;; *) shift;; esac; done
   local url; url="$(cmd_url)"
-  [ -n "$url" ] || die "адреса ещё нет: сначала funnel/serve"
+  [ -n "$url" ] || die "no address yet: run funnel/serve first"
   local step=2 waited=0
   while [ "$waited" -lt "$timeout" ]; do
     if have curl && curl -fsS --max-time 5 "$url/health" >/dev/null 2>&1; then say "$url"; return 0; fi
     sleep "$step"; waited=$((waited+step))
   done
-  die "адрес $url не ответил за ${timeout}s"
+  die "$url did not answer within ${timeout}s"
 }
 
 main() {
@@ -270,7 +270,7 @@ main() {
     status|state) cmd_status "$@" ;;
     wait) cmd_wait "$@" ;;
     dns) dns_name ;;
-    *) die "неизвестная команда: $cmd (install|up|funnel|serve|off|url|status|wait|dns)" ;;
+    *) die "unknown command: $cmd (install|up|funnel|serve|off|url|status|wait|dns)" ;;
   esac
 }
 main "$@"

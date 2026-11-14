@@ -65,10 +65,10 @@
       var url = String(raw || '').trim().replace(/\/+$/, '');
       if (!url) { lsDel(CONFIG.urlKey); lsDel(CONFIG.urlMirrorKey); return null; }
       if (!/^https?:\/\/[^\s\/]+\.[^\s\/]+/.test(url) && !/^http:\/\/127\.0\.0\.1(:\d+)?$/.test(url) && !/^http:\/\/localhost(:\d+)?$/.test(url)) {
-        throw new Error('это не похоже на адрес: нужен http:// или https:// с доменом');
+        throw new Error('this does not look like an address: an http:// or https:// with a domain is needed');
       }
       if (!/^https:/.test(url) && !/^http:\/\/(127\.0\.0\.1|localhost)/.test(url)) {
-        throw new Error('без https только localhost: в туннеле всегда https');
+        throw new Error('without https only localhost works: the tunnel is always https');
       }
       lsSet(CONFIG.urlKey, url);
       lsSet(CONFIG.urlMirrorKey, url);
@@ -78,7 +78,7 @@
     /* ---------------- health: is that address a gateway of ours ---------------- */
     probe: function (raw) {
       var url = String(raw || this.url() || '').trim().replace(/\/+$/, '');
-      if (!url) return Promise.reject(new Error('адрес не задан'));
+      if (!url) return Promise.reject(new Error('address is not set'));
       var started = Date.now();
       var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
       var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
@@ -100,13 +100,13 @@
             model: j.model || null,
             quota: j.quota || null,
             upstream: j.upstream || null,
-            message: !res.ok ? 'адрес ответил ' + res.status
-              :!mine ? 'по этому адресу кто-то есть, но это не шлюз MSE'
-              : 'шлюз на связи'
+            message: !res.ok ? 'the address answered ' + res.status
+              :!mine ? 'something answers at this address, but it is not an MSE gateway'
+              : 'AI gateway is up'
           };
         }, function (e) {
           clearTimeout(timer);
-          return { ok: false, reachable: false, mine: false, ms: Date.now() - started, message: 'адрес не отвечает: ' + (e && e.name === 'AbortError' ? 'таймаут' : (e && e.message) || 'сеть') };
+          return { ok: false, reachable: false, mine: false, ms: Date.now() - started, message: 'the address does not answer: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network') };
         });
     },
 
@@ -137,16 +137,16 @@
     register: function (identity) {
       var self = this;
       var url = self.url();
-      if (!url) return Promise.reject(new Error('сначала адрес шлюза'));
+      if (!url) return Promise.reject(new Error('the gateway address comes first'));
       var key = self.key();
       identity = identity || {};
       var body = { key: key, moodleId: String(identity.id || ''), name: String(identity.name || ''), site: String(identity.site || '') };
-      if (!body.moodleId) return Promise.reject(new Error('не видно ID пользователя: откройте страницу, где виден профиль'));
+      if (!body.moodleId) return Promise.reject(new Error('the user id is not visible: open a page where the profile shows'));
       return fetch(url + '/mse/v1/register', {
         method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key }, body: JSON.stringify(body)
       }).then(function (r) {
         return r.json().then(function (j) {
-          if (!r.ok) throw new Error((j && j.error && j.error.message) || ('шлюз ответил ' + r.status));
+          if (!r.ok) throw new Error((j && j.error && j.error.message) || ('the gateway answered ' + r.status));
           return self.saveMeta(j, body);
         });
       });
@@ -174,7 +174,7 @@
     check: function () {
       var self = this;
       var url = self.url();
-      if (!url) return Promise.resolve({ state: 'no-url', message: 'адрес шлюза не задан' });
+      if (!url) return Promise.resolve({ state: 'no-url', message: 'gateway address is not set' });
       var key = self.key();
       return fetch(url + '/mse/v1/me', { method: 'GET', headers: { authorization: 'Bearer ' + key, accept: 'application/json' } })
         .then(function (r) {
@@ -182,14 +182,14 @@
             var d = (j && j.device) || {};
             var st = (j && j.ok === false) ? (d.status || 'error') : (d.status || (r.ok ? 'active' : 'error'));
             var meta = self.saveMeta({ device: d, ok: r.ok }, { key: key, moodleId: d.moodleId, name: d.name });
-            if (r.status === 401 || st === 'unknown') return { state: 'unregistered', message: 'ключ не привязан', device: d, meta: meta };
+            if (r.status === 401 || st === 'unknown') return { state: 'unregistered', message: 'key is not bound', device: d, meta: meta };
             if (!r.ok || st !== 'active') {
-              return { state: st === 'revoked' ? 'revoked' : 'pending', message: st === 'revoked' ? 'ключ отозван' : 'ждёт подтверждения', device: d, meta: meta };
+              return { state: st === 'revoked' ? 'revoked' : 'pending', message: st === 'revoked' ? 'key revoked' : 'waiting for approval', device: d, meta: meta };
             }
-            return { state: 'active', message: 'ключ принят', device: d, meta: meta };
+            return { state: 'active', message: 'key accepted', device: d, meta: meta };
           });
         }, function (e) {
-          return { state: 'unreachable', message: 'шлюз не отвечает: ' + (e && e.message ? e.message : 'сеть') };
+          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };
         });
     },
 
@@ -197,15 +197,15 @@
     models: function () {
       var self = this;
       var url = self.url();
-      if (!url) return Promise.resolve({ ok: false, models: [], message: 'адрес не задан' });
+      if (!url) return Promise.resolve({ ok: false, models: [], message: 'address is not set' });
       var started = Date.now();
       return fetch(url + '/v1/models', { method: 'GET', headers: { authorization: 'Bearer ' + self.key(), accept: 'application/json' } })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j, ms: Date.now() - started }; }); })
         .then(function (res) {
           var list = (res.json && Array.isArray(res.json.data) ? res.json.data : []).map(function (m) { return String(m.id || m); }).filter(Boolean);
-          return { ok: res.ok && list.length > 0, models: list, ms: res.ms, status: res.status, message: res.ok ? 'доступно моделей: ' + list.length : 'шлюз ответил ' + res.status };
+          return { ok: res.ok && list.length > 0, models: list, ms: res.ms, status: res.status, message: res.ok ? 'models available: ' + list.length : 'the gateway answered ' + res.status };
         }, function (e) {
-          return { ok: false, models: [], ms: Date.now() - started, message: 'шлюз не ответил: ' + ((e && e.message) || 'сеть') };
+          return { ok: false, models: [], ms: Date.now() - started, message: 'the gateway did not answer: ' + ((e && e.message) || 'network') };
         });
     },
 
@@ -213,7 +213,7 @@
     agent: function (payload) {
       var self = this;
       var url = self.url();
-      if (!url) return Promise.resolve({ ok: false, code: 'no_gateway', message: 'шлюз не настроен' });
+      if (!url) return Promise.resolve({ ok: false, code: 'no_gateway', message: 'gateway is not configured' });
       var started = Date.now();
       var body = {
         host: String(payload.host || ''),
@@ -238,28 +238,28 @@
         var j = res.j || {};
         var ms = Date.now() - started;
         if (res.status === 429 || j.code === 'rate_limited') {
-          return { ok: false, code: 'rate_limited', ms: ms, retryAfter: j.retry_after || res.retryAfter || 5, message: 'агент занят, лимит' };
+          return { ok: false, code: 'rate_limited', ms: ms, retryAfter: j.retry_after || res.retryAfter || 5, message: 'agent is busy, at the limit' };
         }
-        if (!j.ok) return { ok: false, code: j.code || 'agent_error', ms: ms, message: j.message || ('шлюз ответил ' + res.status) };
+        if (!j.ok) return { ok: false, code: j.code || 'agent_error', ms: ms, message: j.message || ('the gateway answered ' + res.status) };
         return { ok: true, code: 'ok', ms: ms, answer: j.answer || null, confidence: j.confidence == null ? null : j.confidence, model: j.model || null, reasoning: j.reasoning ? String(j.reasoning).slice(0, 400) : null };
       }, function (e) {
         clearTimeout(timer);
-        return { ok: false, code: (e && e.name === 'AbortError') ? 'timeout' : 'network', ms: Date.now() - started, message: (e && e.name === 'AbortError') ? 'агент не ответил за 45 с' : 'запрос не ушёл: ' + ((e && e.message) || 'сеть') };
+        return { ok: false, code: (e && e.name === 'AbortError') ? 'timeout' : 'network', ms: Date.now() - started, message: (e && e.name === 'AbortError') ? 'the agent did not answer in 45 s' : 'the request did not go out: ' + ((e && e.message) || 'network') };
       });
     },
 
-    /* ---------------- one chat call, for the «дополнительно» view: proves the whole chain ---------------- */
+    /* ---------------- one chat call, for the “advanced” view: proves the whole chain ---------------- */
     chat: function (text, onChunk) {
       var self = this;
       var url = self.url();
-      if (!url) return Promise.reject(new Error('адрес шлюза не задан'));
+      if (!url) return Promise.reject(new Error('gateway address is not set'));
       var body = { model: 'mse', stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
       return fetch(url + '/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
         body: JSON.stringify(body)
       }).then(function (r) {
-        if (!r.ok) return r.json().then(function (j) { throw new Error((j && j.error && j.error.message) || ('шлюз ответил ' + r.status)); });
+        if (!r.ok) return r.json().then(function (j) { throw new Error((j && j.error && j.error.message) || ('the gateway answered ' + r.status)); });
         if (!onChunk) return r.json();
         /* SSE: one line at a time, the delta of each chunk goes to the caller */
         var reader = r.body.getReader();

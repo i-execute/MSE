@@ -1,4 +1,4 @@
-# зависимости и кэши
+# dependencies and caches
 node_modules/
 .venv/
 venv/
@@ -6,7 +6,7 @@ __pycache__/
 *.pyc
 dist/
 
-# состояние шлюза: устройства, allow-лист, журнал, админ-токен
+# gateway state: devices, allow list, log, admin token
 data/
 state.json
 admin-token*
@@ -15,17 +15,17 @@ test-key*
 .env
 .env.*
 
-# рабочие каталоги сборки
+# build working directories
 evidence/
 .original/
 Storage/artifacts-cache/
 
-# релизные архивы — собираются на тег, а не живут в истории
+# release archives — built on a tag, never kept in history
 release/*.tar.gz
 *.tgz
 tests/fixtures/tls/*.pem
 
-# тестовый мусор
+# test leftovers
 __pycache__/
 *.pyc
 evidence/
