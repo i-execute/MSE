@@ -30,6 +30,8 @@ TUNNEL_BACKEND_FILE="$STATE_DIR/tunnel.json"
 TS_BIN="${MSE_TAILSCALE_BIN:-tailscale}"
 TS_SOCK="${MSE_TAILSCALE_SOCKET:-}"
 LOG_TAG="mse-tunnel"
+TMP_REASON="$(mktemp 2>/dev/null || echo /tmp/mse-tunnel-reason.$$)"
+trap 'rm -f "$TMP_REASON"' EXIT
 
 say() { printf '%s\n' "$*"; }
 note() { printf '%s\n' "$*" >&2; }
@@ -246,16 +248,56 @@ PY
 }
 
 cmd_wait() {
-  local timeout=90
-  while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2;; *) shift;; esac; done
+  # Wait until the public address really answers from the outside. Right after `funnel` the tailnet certificate
+  # may not be issued yet: the handshake then fails with "unexpected eof while reading", which is normal for a
+  # few seconds. That case is retried; anything else is reported with its reason.
+  local timeout=60 quiet=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --timeout) timeout="$2"; shift 2 ;;
+      --quiet) quiet=1; shift ;;
+      *) shift ;;
+    esac
+  done
   local url; url="$(cmd_url)"
   [ -n "$url" ] || die "no address yet: run funnel/serve first"
-  local step=2 waited=0
+  [ "$quiet" = "1" ] || note "waiting for $url/health (up to ${timeout}s)"
+  local waited=0 step=3 body reason=""
   while [ "$waited" -lt "$timeout" ]; do
-    if have curl && curl -fsS --max-time 5 "$url/health" >/dev/null 2>&1; then say "$url"; return 0; fi
-    sleep "$step"; waited=$((waited+step))
+    if have curl; then
+      # -k: the certificate of a fresh node can still be in flight; the check is "it answers", not "it is trusted"
+      if body="$(curl -fsSk --max-time 8 "$url/health" 2>"$TMP_REASON")"; then
+        case "$body" in
+          *'"name"'*|*'"ok"'*|*'gateway'*)
+            say "$url"
+            return 0
+            ;;
+          *) reason="the address answers, but not like the gateway: ${body:0:80}" ;;
+        esac
+      else
+        reason="$(tail -1 "$TMP_REASON" 2>/dev/null | cut -c1-160)"
+      fi
+    else
+      die "curl is required to check the address"
+    fi
+    sleep "$step"
+    waited=$((waited+step))
+    if [ "$quiet" != "1" ] && [ "$waited" -lt "$timeout" ]; then
+      printf '  … %ss: %s\n' "$waited" "${reason:-no answer yet}" >&2
+    fi
   done
-  die "$url did not answer within ${timeout}s"
+  note "the address $url did not answer within ${timeout}s"
+  [ -n "$reason" ] && note "  last reason: $reason"
+  case "$reason" in
+    *"unexpected eof"*|*"handshake"*|*"certificate"*|*"SSL"*)
+      note "  the tailnet certificate is not ready yet: allow Funnel for this node in the ACL, then"
+      note "  run again:  mse-tunnel.sh wait --timeout 180"
+      ;;
+    *"refused"*|*"resolve"*|*"timed out"*)
+      note "  the address does not reach this node: check that tailscale is up and the funnel is on"
+      ;;
+  esac
+  return 1
 }
 
 main() {

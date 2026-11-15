@@ -37,6 +37,8 @@ OWNER_USERNAME = os.environ.get("MSE_OWNER_USERNAME", "").lstrip("@").lower()
 TUNNEL_SCRIPT = os.environ.get("MSE_TUNNEL_SCRIPT", "/usr/local/bin/mse-tunnel.sh")
 GATEWAY_PORT = int(os.environ.get("MSE_PORT", "8788") or 8788)
 ENV_FILE = os.environ.get("MSE_ENV_FILE", "/etc/mse/mse.env")
+DATA_DIR = os.environ.get("MSE_DATA_DIR", os.environ.get("MSE_STATE_DIR", "/var/lib/mse"))
+SESSION_NAME = str(Path(DATA_DIR) / "mse-bot")   # goygram appends .vault: the session stays in the data directory
 INSTALL_SCRIPT = os.environ.get("MSE_INSTALL_SCRIPT", "/opt/mse/stack/install.sh")
 API_ID = int(os.environ.get("MSE_API_ID", "0") or 0)
 API_HASH = os.environ.get("MSE_API_HASH", "")
@@ -704,6 +706,7 @@ class Bot:
             app_version="2.0",
             device_model="server",
             system_version="linux",
+            session_name=SESSION_NAME,
         )
         app.on_msg(fn=self.on_message)
         app.on_cb(fn=self.on_callback)

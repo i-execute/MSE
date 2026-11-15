@@ -32,8 +32,16 @@ const path = require('path');
 const { URL } = require('url');
 
 const here = __dirname;
-const DATA_DIR = process.env.MSE_DATA_DIR || path.join(here, 'data');
+/* One data directory, and it is not the code directory: an update wipes /opt/mse, so state, the admin token and the
+   goygram vault all live under MSE_DATA_DIR (/var/lib/mse on a real install). The default keeps a bare
+   `node mse-router.js` from a checkout working, but the install always passes the real path. */
+const DATA_DIR = path.resolve(process.env.MSE_DATA_DIR || process.env.MSE_STATE_DIR || path.join(here, 'data'));
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
+const VAULT_FILE = path.join(DATA_DIR, 'default.vault');
+/* goygram keeps its session vault in the working directory unless it is told otherwise: point it at the data
+   directory before anything can read it, so a vault is never written into the code tree */
+process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
+process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
 const PORT = Number(process.env.MSE_PORT || 8788);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
 const VERSION = '2.2.0';
@@ -53,7 +61,21 @@ const CFG = {
 };
 
 /* ------------------------------------------------------------------ state */
-let state = { devices: {}, allow: [], log: [], applications: [] };
+function ensureDataDir() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+    fs.chmodSync(DATA_DIR, 0o700);
+    return true;
+  } catch (e) {
+    console.error('data directory cannot be created:', DATA_DIR, '-', e.message);
+    return false;
+  }
+}
+ensureDataDir();
+
+/* settings that the owner changes from the panel are part of the state too: without them a restart silently
+   put the quota back to the value from the environment */
+let state = { devices: {}, allow: [], log: [], applications: [], settings: {} };
 function loadState() {
   try {
     const raw = fs.readFileSync(STATE_FILE, 'utf8');
@@ -63,8 +85,11 @@ function loadState() {
         devices: parsed.devices || {},
         allow: Array.isArray(parsed.allow) ? parsed.allow : [],
         log: Array.isArray(parsed.log) ? parsed.log : [],
-        applications: Array.isArray(parsed.applications) ? parsed.applications : []
+        applications: Array.isArray(parsed.applications) ? parsed.applications : [],
+        settings: parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : {}
       };
+      const q = Number(state.settings.dailyQuota);
+      if (Number.isFinite(q) && q >= 0) CFG.dailyQuota = Math.floor(q);
     }
   } catch (e) { /* first run: the defaults above are the whole state */ }
 }
@@ -74,7 +99,7 @@ function saveState() {
   saveTimer = setTimeout(() => {
     saveTimer = null;
     try {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+      ensureDataDir();
       const tmp = STATE_FILE + '.tmp';
       fs.writeFileSync(tmp, JSON.stringify(state, null, 1));
       fs.renameSync(tmp, STATE_FILE);
@@ -297,6 +322,7 @@ async function handleAdmin(req, res, url) {
     const n = Number(body.quota);
     if (!Number.isFinite(n) || n < 0) return oaiError(req, res, 400, 'quota must be a number >= 0', 'bad_quota');
     CFG.dailyQuota = Math.floor(n);
+    state.settings = Object.assign({}, state.settings, { dailyQuota: CFG.dailyQuota });
     saveState();
     note('quota ' + CFG.dailyQuota);
     return send(req, res, 200, { ok: true, quota: CFG.dailyQuota });
@@ -379,6 +405,7 @@ if (require.main === module) {
     console.log('  AI backend:', CFG.upstreamUrl, '(loopback only; the model key stays there)');
     console.log('  model     :', CFG.model, '· quota', CFG.dailyQuota, '/day');
     console.log('  admin     :', process.env.MSE_ADMIN_TOKEN ? 'MSE_ADMIN_TOKEN' : path.join(DATA_DIR, 'admin-token.txt'));
+  console.log('  state     :', STATE_FILE);
   });
 }
 module.exports = { server, CFG, state: () => state, deviceIdOf, registerDevice, deviceByKey, ADMIN_TOKEN, handler };

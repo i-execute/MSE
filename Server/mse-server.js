@@ -25,7 +25,7 @@ const { URL } = require('url');
 
 /* ------------------------------------------------------------------ config */
 const here = __dirname;
-const DATA_DIR = process.env.MSE_DATA_DIR || path.join(here, 'data');
+const DATA_DIR = path.resolve(process.env.MSE_DATA_DIR || process.env.MSE_STATE_DIR || path.join(here, 'data'));
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const PORT = Number(process.env.MSE_PORT || 8788);
 const HOST = process.env.MSE_HOST || '127.0.0.1';

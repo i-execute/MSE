@@ -391,6 +391,9 @@ Wants=network-online.target
 Type=simple
 EnvironmentFile=$ENV_FILE
 Environment=HOME=$STATE_DIR
+Environment=MSE_DATA_DIR=$STATE_DIR
+Environment=MSE_STATE_DIR=$STATE_DIR
+Environment=GOYGRAM_VAULT=$STATE_DIR/default.vault
 WorkingDirectory=$PREFIX
 ExecStart=$NODE_BIN $PREFIX/mse-router.js
 Restart=always
@@ -416,9 +419,15 @@ Wants=network-online.target mse-router.service
 Type=simple
 EnvironmentFile=$ENV_FILE
 Environment=HOME=$STATE_DIR
+Environment=MSE_DATA_DIR=$STATE_DIR
+Environment=MSE_STATE_DIR=$STATE_DIR
+Environment=GOYGRAM_VAULT=$STATE_DIR/default.vault
 Environment=MSE_ENV_FILE=$ENV_FILE
 Environment=MSE_TUNNEL_SCRIPT=/usr/local/bin/mse-tunnel.sh
-WorkingDirectory=$PREFIX
+# goygram writes <session>.vault into the working directory: it must be the data directory, never the code tree
+# (an update replaces /opt/mse, and the vault holds the mt session). The package is found through PYTHONPATH.
+Environment=PYTHONPATH=$PREFIX
+WorkingDirectory=$STATE_DIR
 ExecStart=$PREFIX/venv/bin/python -m bot.main
 Restart=always
 RestartSec=5
@@ -432,6 +441,20 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 UNIT
+}
+
+prepare_data_dir() {
+  # one place for state.json, admin-token.txt, the tunnel state and the goygram vault: mode 700, made before the
+  # units start, so nothing ever logs "state not saved: ENOENT mkdir"
+  [ "$DRY" = "1" ] && { say "  [dry] data directory $STATE_DIR (mode 700)"; return 0; }
+  mkdir -p "$STATE_DIR"
+  chmod 700 "$STATE_DIR" 2>/dev/null || true
+  # an older layout kept the vault inside the code: move it once, keep it
+  if [ -f "$PREFIX/default.vault" ] && [ ! -f "$STATE_DIR/default.vault" ]; then
+    mv "$PREFIX/default.vault" "$STATE_DIR/default.vault" && chmod 600 "$STATE_DIR/default.vault" 2>/dev/null || true
+    say "  data:      the vault moved to $STATE_DIR/default.vault"
+  fi
+  say "  data:      $STATE_DIR (mode 700)"
 }
 
 start_services() {
@@ -529,6 +552,18 @@ setup_tunnel() {
     https://*)
       env_set MSE_PUBLIC_URL "$url"
       say "  tunnel:    $url"
+      # the certificate of a fresh node is not ready the second funnel comes on: wait for the outside to answer,
+      # and only then let the router read the address (its /health must carry it, and the owner checks it from a phone)
+      say "  tunnel:    waiting for https from the outside (up to 60s)"
+      if have mse-tunnel.sh MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh wait --timeout 60 --quiet; then
+        url="$(MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh url 2>/dev/null | tail -1 || true)"
+        env_set MSE_PUBLIC_URL "$url"
+        say "  tunnel:    https answers from the outside"
+      else
+        note "the address does not answer from the outside yet"
+        note "  this is usually the tailnet certificate: allow Funnel for this node, then  mse-tunnel.sh wait --timeout 180"
+        note "  the panel repeats it in one step: sudo mse -> Tunnel -> Status"
+      fi
       PUBLIC_URL_SET=1
       ;;
     *)
@@ -609,6 +644,7 @@ first_run_dialogue
 write_env
 merge_env_from_environment
 setup_bot_env
+prepare_data_dir
 write_units
 start_services
 
