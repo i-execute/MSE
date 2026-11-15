@@ -29,3 +29,4 @@ tests/fixtures/tls/*.pem
 __pycache__/
 *.pyc
 evidence/
+package-lock.json

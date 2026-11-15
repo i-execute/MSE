@@ -1,5 +1,5 @@
 {
-  "version": "2.0.0",
+  "version": "2.1.0",
   "brand": "MSE",
   "base": "2.22.0",
   "bundles": {
@@ -266,7 +266,7 @@
   "userscript": {
     "file": "Storage/artifacts/mse.user.js",
     "bytes": 1620353,
-    "sha256": "dc7810f0713a1a57898796a49e89e374d47fc89ce7f02bcd8f02d05c98c048a9"
+    "sha256": "094a81777aa0f924537aa41b041f238033e0cda7b85ecc02b4296c19446440be"
   },
   "sanitizer": {
     "comments": 65,

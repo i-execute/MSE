@@ -94,7 +94,8 @@ RULES = [
     _r('tunnel-url', r'https?://[a-z0-9-]+\.trycloudflare\.com'),
     _r('tunnel-url', r'https?://[a-z0-9-]+\.(?:ngrok\.io|ngrok-free\.app|loca\.lt|localhost\.run|serveo\.net)'),
     _r('tailnet-host', r'https?://[a-z0-9-]+\.ts\.net', 'the address of a concrete tailnet'),
-    _r('telegram-link', r'https?://t\.me/[A-Za-z0-9_]{4,}'),
+    # a personal telegram profile or channel link; the well-known bot-official ones carry nothing private
+    _r('telegram-link', r'https?://t\.me/(?!BotFather\b|addemoji\b|share\b|joinchat\b)[A-Za-z0-9_]{4,}'),
     # --- contacts
     _r('email', r'\b[A-Za-z0-9._%+-]+@(?!example\.(?:com|org|edu|net)\b)[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'),
     # --- foreign file paths
@@ -124,6 +125,8 @@ LIVE_HOST_OK = (
     'microsoftedge.microsoft.com', 'apps.apple.com', 'play.google.com', 'violentmonkey.github.io',
     'www.tampermonkey.net', 'tampermonkey.net', 'github.com', 'raw.githubusercontent.com',
     'pkgs.tailscale.com', 'tailscale.com', 'deb.nodesource.com', 'archive.ubuntu.com', 'security.ubuntu.com',
+    # telegram itself: the bot's own links (BotFather, the emoji pack) are not somebody's private host
+    't.me', 'telegram.org', 'core.telegram.org',
 )
 RULE_HOST = _r('live-moodle-host', r'\bhttps?://([a-z0-9][a-z0-9.-]*\.[a-z]{2,})', 'a host outside the allowed placeholders')
 
