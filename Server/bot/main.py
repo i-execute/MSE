@@ -31,6 +31,9 @@ BOT_TOKEN = os.environ.get("MSE_BOT_TOKEN", "")
 OWNER_ID = int(os.environ.get("MSE_OWNER_ID", "0") or 0)
 OWNER_USERNAME = os.environ.get("MSE_OWNER_USERNAME", "").lstrip("@").lower()
 TUNNEL_SCRIPT = os.environ.get("MSE_TUNNEL_SCRIPT", "/usr/local/bin/mse-tunnel.sh")
+API_ID = int(os.environ.get("MSE_API_ID", "0") or 0)
+API_HASH = os.environ.get("MSE_API_HASH", "")
+PING_EVERY = float(os.environ.get("MSE_PING_EVERY", "15") or 15)
 GATEWAY_PORT = int(os.environ.get("MSE_PORT", "8788") or 8788)
 
 
@@ -87,8 +90,8 @@ class Bot:
         error = snap.get("error")
         blocks_ok = ui.home(snap)
         if error and not snap.get("health"):
-            blocks_ok = ui.screen("MSE · шлюз", subtitle="шлюз не отвечает", blocks=[f"<p>{ui.esc(error)}</p>"],
-                                  buttons=[ui.row(ui.button("ещё раз", "home"))])
+            blocks_ok = ui.screen("MSE · gateway", subtitle="the gateway does not answer", blocks=[f"<p>{ui.esc(error)}</p>"],
+                                  buttons=[ui.row(ui.button("again", "home"))])
         await self.render(chat_id, msg_id, blocks_ok)
 
     # ------------------------------------------------------------------ handlers
@@ -119,12 +122,12 @@ class Bot:
             await self.render(chat_id, 0, ui.devices(snap))
         elif word == "allow":
             if not rest:
-                await self.app.send_msg(chat_id, "формат: /allow <moodleId>")
+                await self.app.send_msg(chat_id, "format: /allow <moodleId>")
                 return
             await self.allow(chat_id, 0, rest)
         elif word in ("revoke", "disallow"):
             if not rest:
-                await self.app.send_msg(chat_id, "формат: /revoke <moodleId|deviceId>")
+                await self.app.send_msg(chat_id, "format: /revoke <moodleId|deviceId>")
                 return
             await self.revoke(chat_id, 0, rest)
         elif word == "quota":
@@ -158,30 +161,30 @@ class Bot:
         health = snap.get("health") or {}
         devices = snap.get("devices") or []
         lines = [
-            "адрес: " + str(health.get("publicUrl") or "—"),
-            "модель: " + str(health.get("model") or "—") + " · квота " + str(health.get("quota") or "—"),
-            "устройств: " + str(len(devices)) + " · работают " + str(len([d for d in devices if d.get("status") == "active"]))
-            + " · ждут " + str(len([d for d in devices if d.get("status") == "pending"])),
+            "address: " + str(health.get("publicUrl") or "—"),
+            "model: " + str(health.get("model") or "—") + " · quota " + str(health.get("quota") or "—"),
+            "devices: " + str(len(devices)) + " · active " + str(len([d for d in devices if d.get("status") == "active"]))
+            + " · pending " + str(len([d for d in devices if d.get("status") == "pending"])),
         ]
         if snap.get("error"):
-            lines.append("ошибка: " + str(snap["error"]))
+            lines.append("error: " + str(snap["error"]))
         await self.app.send_msg(chat_id, ui.pre("\n".join(lines)).replace("<pre>", "").replace("</pre>", ""))
 
     async def allow(self, chat_id: int, msg_id: int, moodle_id: str) -> None:
         moodle_id = str(moodle_id or "").strip()
         if not moodle_id.isdigit():
-            await self.app.send_msg(chat_id, "moodleId — это число, например 12345")
+            await self.app.send_msg(chat_id, "moodleId is a number, for example 12345")
             return
         try:
             await asyncio.to_thread(self.gw.allow, moodle_id)
         except GatewayError as exc:
             snap = await self.snap()
             await self.render(chat_id, msg_id, ui.devices(snap, only="pending"))
-            await self.app.send_msg(chat_id, "не вышло: " + exc.message)
+            await self.app.send_msg(chat_id, "failed: " + exc.message)
             return
         snap = await self.snap()
         await self.render(chat_id, msg_id, ui.devices(snap, only="pending"))
-        await self.app.send_msg(chat_id, "ID " + moodle_id + " пущен")
+        await self.app.send_msg(chat_id, "id " + moodle_id + " is allowed")
 
     async def revoke(self, chat_id: int, msg_id: int, needle: str) -> None:
         try:
@@ -191,14 +194,14 @@ class Bot:
                 return
             await asyncio.to_thread(self.gw.revoke, str(dev.get("deviceId")))
         except GatewayError as exc:
-            await self.app.send_msg(chat_id, "не вышло: " + exc.message)
+            await self.app.send_msg(chat_id, "failed: " + exc.message)
             return
         snap = await self.snap()
         await self.render(chat_id, msg_id, ui.devices(snap))
 
     async def disallow(self, chat_id: int, moodle_id: str) -> None:
         await asyncio.to_thread(self.gw.disallow, str(moodle_id))
-        await self.app.send_msg(chat_id, "ID " + str(moodle_id) + " убран из списка")
+        await self.app.send_msg(chat_id, "id " + str(moodle_id) + " removed from the list")
 
     async def set_quota(self, chat_id: int, msg_id: int, value: str) -> None:
         try:
@@ -206,11 +209,11 @@ class Bot:
             if quota < 0:
                 raise ValueError("negative")
         except ValueError:
-            await self.app.send_msg(chat_id, "квота — целое число, например 200")
+            await self.app.send_msg(chat_id, "quota is a whole number, for example 200")
             return
         await asyncio.to_thread(self.gw.set_quota, quota)
         snap = await self.snap()
-        await self.render(chat_id, msg_id, ui.quota_screen(snap, notice="теперь " + str(quota)))
+        await self.render(chat_id, msg_id, ui.quota_screen(snap, notice="now " + str(quota)))
 
     async def set_model(self, chat_id: int, msg_id: int, value: str) -> None:
         """The model belongs to the backend; the router only reports what it offers, so the bot remembers the
@@ -230,10 +233,10 @@ class Bot:
             with open(env_path, "w", encoding="utf-8") as fh:
                 fh.write("\n".join(lines) + "\n")
         except OSError as exc:
-            await self.app.send_msg(chat_id, "не вышло записать " + env_path + ": " + str(exc))
+            await self.app.send_msg(chat_id, "could not write " + env_path + ": " + str(exc))
             return
         snap = await self.snap()
-        await self.render(chat_id, msg_id, ui.model_screen(snap, notice="выбрано " + model + " · перезапустите бэкенд"))
+        await self.render(chat_id, msg_id, ui.model_screen(snap, notice="chosen " + model + " · restart the backend"))
 
     async def tunnel(self, chat_id: int, msg_id: int, action: str) -> None:
         if action == "show":
@@ -249,7 +252,7 @@ class Bot:
 
     async def on_callback(self, evt: object) -> None:
         if not is_owner(evt):
-            await self.toast(evt, "не для вас")
+            await self.toast(evt, "not for you")
             return
         data = str(getattr(evt, "data", "") or "")
         chat_id = int(getattr(evt, "chat_id", 0) or 0)
@@ -258,7 +261,7 @@ class Bot:
         head = parts[0] if parts else ""
         try:
             if data == "home" or head == "home":
-                await self.toast(evt, "обновлено")
+                await self.toast(evt, "refreshed")
                 await self.home(chat_id, msg_id)
             elif data == "dev:list":
                 await self.toast(evt, "")
@@ -268,27 +271,41 @@ class Bot:
                 await self.render(chat_id, msg_id, ui.devices(await self.snap(), only="pending"))
             elif data == "dev:allowask":
                 self.pending_input[chat_id] = "allow"
-                await self.toast(evt, "пришлите ID")
-                await self.app.send_msg(chat_id, "пришлите Moodle ID одним сообщением")
+                await self.toast(evt, "send the id")
+                await self.app.send_msg(chat_id, "send the Moodle id in one message")
             elif head == "dev" and len(parts) >= 3 and parts[1] == "approve":
-                await asyncio.to_thread(self.gw.approve, parts[2])
-                await self.toast(evt, "пущен")
+                # the button may carry a device id or a Moodle id: both mean "let this person in"
+                needle = ":".join(parts[2:])
+                try:
+                    dev = await asyncio.to_thread(self.gw.device_of, needle)
+                    await asyncio.to_thread(self.gw.approve, str(dev.get("deviceId")) if dev else needle)
+                except GatewayError:
+                    await asyncio.to_thread(self.gw.allow, needle)
+                await self.toast(evt, "allowed")
                 await self.render(chat_id, msg_id, ui.devices(await self.snap()))
             elif head == "dev" and len(parts) >= 3 and parts[1] == "revoke":
-                await asyncio.to_thread(self.gw.revoke, parts[2])
-                await self.toast(evt, "отозван", alert=False)
+                needle = ":".join(parts[2:])
+                try:
+                    dev = await asyncio.to_thread(self.gw.device_of, needle)
+                    if dev:
+                        await asyncio.to_thread(self.gw.revoke, str(dev.get("deviceId")))
+                    else:
+                        await asyncio.to_thread(self.gw.disallow, needle)
+                except GatewayError:
+                    await asyncio.to_thread(self.gw.disallow, needle)
+                await self.toast(evt, "revoked", alert=False)
                 await self.render(chat_id, msg_id, ui.devices(await self.snap()))
             elif data == "model:show":
                 await self.toast(evt, "")
                 await self.render(chat_id, msg_id, ui.model_screen(await self.snap()))
             elif head == "model" and len(parts) >= 3 and parts[1] == "set":
-                await self.toast(evt, "запомнил")
+                await self.toast(evt, "remembered")
                 await self.set_model(chat_id, msg_id, ":".join(parts[2:]))
             elif data == "quota:show":
                 await self.toast(evt, "")
                 await self.render(chat_id, msg_id, ui.quota_screen(await self.snap()))
             elif head == "quota" and len(parts) >= 3 and parts[1] == "set":
-                await self.toast(evt, "квота " + parts[2])
+                await self.toast(evt, "quota " + parts[2])
                 await self.set_quota(chat_id, msg_id, parts[2])
             elif data == "log:show":
                 await self.toast(evt, "")
@@ -297,19 +314,28 @@ class Bot:
                 await self.toast(evt, "")
                 await self.tunnel(chat_id, msg_id, "show")
             elif head == "tunnel":
-                await self.toast(evt, "делаю…")
+                await self.toast(evt, "working…")
                 await self.tunnel(chat_id, msg_id, parts[1] if len(parts) > 1 else "show")
             else:
-                await self.toast(evt, "не знаю такой кнопки")
+                await self.toast(evt, "unknown button")
         except GatewayError as exc:
-            await self.toast(evt, "ошибка: " + exc.message, alert=True)
+            await self.toast(evt, "error: " + exc.message, alert=True)
         except Exception as exc:  # a broken screen must not take the bot down
             log.exception("callback failed: %s", exc)
-            await self.toast(evt, "ошибка: " + str(exc)[:120], alert=True)
+            await self.toast(evt, "error: " + str(exc)[:120], alert=True)
 
     # ------------------------------------------------------------------ run
     def build(self) -> GoyGram:
-        app = GoyGram(bot_token=BOT_TOKEN, app_name="MSE", app_version="2.0", device_model="server", system_version="linux")
+        # api_id/api_hash are optional and only used for the MTProto transport; the bot itself needs the token alone
+        app = GoyGram(
+            bot_token=BOT_TOKEN,
+            api_id=API_ID or None,
+            api_hash=API_HASH or None,
+            app_name="MSE",
+            app_version="2.0",
+            device_model="server",
+            system_version="linux",
+        )
         app.on_msg(fn=self.on_message)
         app.on_cb(fn=self.on_callback)
         self.app = app
@@ -318,7 +344,50 @@ class Bot:
     async def run(self) -> None:
         app = self.build()
         await self.notify_start()
-        await app.run()
+        watcher = asyncio.create_task(self.watch_applications())
+        try:
+            await app.run()
+        finally:
+            watcher.cancel()
+
+    # ------------------------------------------------------------------ new applications
+    async def watch_applications(self) -> None:
+        """Polls the router for people who knocked and nobody answered yet, and pings the owner about each one.
+
+        The queue is drained on read, so one person is announced once — a bot that repeats the same name every
+        15 seconds is worse than no bot at all. Every round also refreshes the count of people still waiting.
+        """
+        if not OWNER_ID:
+            log.info("no MSE_OWNER_ID: the application watch is off")
+            return
+        while True:
+            try:
+                res = await asyncio.to_thread(self.gw.applications, True)
+                for item in res.get("applications") or []:
+                    await self.announce(item)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — the watcher must survive a restarting router
+                log.debug("application watch: %s", exc)
+            await asyncio.sleep(max(3.0, PING_EVERY))
+
+    async def announce(self, item: dict[str, Any]) -> None:
+        moodle_id = str(item.get("moodleId") or "?")
+        name = str(item.get("name") or "").strip() or "a new device"
+        html = ui.screen(
+            "MSE · new request",
+            subtitle="someone is waiting for you",
+            blocks=[
+                "<p><b>" + ui.esc(name) + "</b> · Moodle id " + ui.code(moodle_id) + "</p>",
+                "<p>give them the answer database, or let them in to the AI row as well.</p>",
+            ],
+            buttons=[ui.row(ui.button("allow", "dev:approve:" + moodle_id),
+                            ui.button("decline", "dev:revoke:" + moodle_id))],
+        )
+        try:
+            await self.render(OWNER_ID, 0, html)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("announce failed: %s", exc)
 
     async def notify_start(self) -> None:
         if not OWNER_ID:

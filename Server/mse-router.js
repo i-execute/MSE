@@ -53,7 +53,7 @@ const CFG = {
 };
 
 /* ------------------------------------------------------------------ state */
-let state = { devices: {}, allow: [], log: [] };
+let state = { devices: {}, allow: [], log: [], applications: [] };
 function loadState() {
   try {
     const raw = fs.readFileSync(STATE_FILE, 'utf8');
@@ -62,7 +62,8 @@ function loadState() {
       state = {
         devices: parsed.devices || {},
         allow: Array.isArray(parsed.allow) ? parsed.allow : [],
-        log: Array.isArray(parsed.log) ? parsed.log : []
+        log: Array.isArray(parsed.log) ? parsed.log : [],
+        applications: Array.isArray(parsed.applications) ? parsed.applications : []
       };
     }
   } catch (e) { /* first run: the defaults above are the whole state */ }
@@ -184,6 +185,12 @@ function registerDevice(body) {
   state.devices[deviceId] = rec;
   saveState();
   note('register ' + deviceId + ' moodle ' + moodleId + ' → ' + rec.status, rec);
+  // a new application is worth a message: the bot picks these up with long polling and pings the owner
+  if (!existing && !allowed) {
+    state.applications.push({ deviceId, moodleId, name, site, at: now() });
+    if (state.applications.length > 40) state.applications.splice(0, state.applications.length - 40);
+    saveState();
+  }
   return { device: rec };
 }
 
@@ -228,6 +235,13 @@ function proxyStream(req, res, bodyText, rec) {
 /* ------------------------------------------------------------------ admin */
 async function handleAdmin(req, res, url) {
   if (!isAdmin(req)) return oaiError(req, res, 401, 'admin token required', 'admin_denied');
+  // the queue of new applications, drained by the bot: /admin/applications?take=1 hands them over and clears them
+  if (url.pathname === '/admin/applications' && req.method === 'GET') {
+    const take = url.searchParams.get('take') === '1';
+    const items = Array.isArray(state.applications) ? state.applications.slice() : [];
+    if (take && items.length) { state.applications = []; saveState(); }
+    return send(req, res, 200, { ok: true, applications: items, pending: Object.values(state.devices).filter((d) => d.status === 'pending').length });
+  }
   if (url.pathname === '/admin/state' && req.method === 'GET') {
     return send(req, res, 200, {
       version: VERSION,

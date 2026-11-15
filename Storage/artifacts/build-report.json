@@ -59,7 +59,7 @@
     }
   },
   "branding": {
-    "strings": 73,
+    "strings": 72,
     "locales": 2,
     "files": [
       {
@@ -188,7 +188,7 @@
       },
       {
         "where": "src/runtime.js",
-        "replaced": 20
+        "replaced": 19
       },
       {
         "where": "js/commons.js",
@@ -215,8 +215,8 @@
   },
   "pageScripts": {
     "mse-ui": {
-      "bytes": 66244,
-      "sha256": "eee663d632a63f4089385948fd169dbb1f512119332bb3ae4eb3978e79b3eb2a",
+      "bytes": 66323,
+      "sha256": "8e75363a6955b63b31a2a8b2bc099b4011945df4f1dff642f93c88ea7429e956",
       "sanitizer": {
         "comments": 84,
         "strings": 2,
@@ -239,8 +239,8 @@
       }
     },
     "mse-bridge": {
-      "bytes": 13486,
-      "sha256": "d7a29ad782753396401be2c816ae3077bb344a0ce73856bb3cefa549bf75eb25",
+      "bytes": 13695,
+      "sha256": "663a022a5a375461e5e54e1e8ced8ad6841e0b62a66fe01009ab8166dabc31dd",
       "sanitizer": {
         "comments": 14,
         "strings": 1,
@@ -251,8 +251,8 @@
       }
     },
     "debug": {
-      "bytes": 42360,
-      "sha256": "7fe6a23f8e383dae397ae5d1fdbc23c110e4fbf3bfeee4580ea9540fbcab5bce",
+      "bytes": 42358,
+      "sha256": "2ba0e0647b6ca4ffcf11a6f780549ee1839eb6788882768a192ba3906593cdfb",
       "sanitizer": {
         "comments": 32,
         "strings": 0,
@@ -265,8 +265,8 @@
   },
   "userscript": {
     "file": "Storage/artifacts/mse.user.js",
-    "bytes": 1624281,
-    "sha256": "2bf0a50fb2893fc0b54a1e61f674b7e5274ece4ff7edd146d1f4e96ebee31e8b"
+    "bytes": 1620353,
+    "sha256": "dc7810f0713a1a57898796a49e89e374d47fc89ce7f02bcd8f02d05c98c048a9"
   },
   "sanitizer": {
     "comments": 65,

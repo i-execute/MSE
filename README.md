@@ -15,7 +15,7 @@ MSE — две части, которые работают вместе:
 
 | часть | что делает | где лежит |
 |---|---|---|
-| **Расширение** | маленькая пилюля `MSE` на странице попытки Moodle: варианты ответов из общей базы, тап — и ответ в форме | `Extensions/` |
+| **Расширение** | маленькая пилюля `MSE` на странице попытки Moodle: варианты ответов из общей базы, тап — и ответ в форме. Интерфейс расширения — на английском, в светлых голубых тонах | `Extensions/` |
 | **Шлюз** | принимает запросы снаружи, решает кому можно (ключ устройства + allow-лист по Moodle ID), считает квоту и проксирует на локальный AI-бэкенд | `Server/` |
 
 Ключ модели живёт только в AI-бэкенде на вашей машине. В расширении и в шлюзе его нет.
@@ -46,16 +46,38 @@ systemd              mse-router.service, mse-bot.service
 sudo mse             панель управления (меню, экраны, живые проверки)
 ```
 
+Установщик не требует ни одного флага и сам решает всё, что можно решить:
+ставит недостающие пакеты (node, python3, git, curl, tailscale), сам вызывает `sudo`, если его не было,
+а как только в настройках есть ключ tailscale — сразу поднимает узел и включает funnel.
+
+Полностью без вопросов, одним заходом (как в обходе: вставил значения — и установка пошла):
+
+```bash
+MSE_BOT_TOKEN=123456:ABC-DEF \
+MSE_OWNER_ID=12345 \
+MSE_API_ID=1234567 MSE_API_HASH=0123456789abcdef0123456789abcdef \
+MSE_TAILSCALE_KEY=tskey-auth-… \
+  curl -fsSL https://raw.githubusercontent.com/i-execute/MSE/main/Storage/get.sh | bash
+```
+
+`MSE_API_ID` и `MSE_API_HASH` (my.telegram.org → App) — необязательные: боту достаточно токена, они нужны
+только для MTProto-транспорта. Всё это можно ввести и потом, в панели.
+
 Дальше:
 
 ```bash
 sudo mse                          # панель: Health, Install/Self-Heal, Services, Tunnel, Model & Keys, Uninstall
+sudo mse update                   # обновить код и зависимости, не трогая устройства и allow-лист
 sudo mse --status                 # то же без вопросов: таблица здоровья (для скриптов)
 curl -s localhost:8788/health     # что шлюз о себе думает
 ```
 
 Панель — порт установщика [OBHOD](https://github.com/i-execute/OBHOD): стрелки двигают выбор, Space отмечает,
-Enter выполняет; флагов нет, всё делается в меню.
+Enter выполняет; флагов нет, всё делается в меню. Тема — светлый ненасыщенный голубой по синему фону,
+сами экраны и все сообщения — на английском.
+
+Бот сам сообщает о новых заявках: человек постучался → в Telegram приходит карточка «кто, какой Moodle ID»
+с кнопками `allow` / `decline`. Заявка выдаётся один раз, повторов нет.
 
 ## Архитектура
 
@@ -107,20 +129,20 @@ python3 scripts/audit.py --strict      # «ноль отпечатков», эт
 node --test tests/gateway.test.js tests/router.test.js
 python3 tests/bot_selftest.py
 SS_BROWSER=webkit node --test --test-concurrency=1 tests/mse.test.js
-bash Extensions/build/build.sh         # → Storage/artifacts/mse.user.js
+bash Extensions/tools/build.sh         # → Storage/artifacts/mse.user.js
 ```
 
 Сборка userscript-а требует вендорскую папку исходной сборки (её нет в репозитории):
 
 ```bash
-MSE_VENDOR_DIR=/path/to/syncshare-<ver> bash Extensions/build/build.sh
+MSE_VENDOR_DIR=/path/to/syncshare-<ver> bash Extensions/tools/build.sh
 ```
 
 ## Структура
 
 ```
-Server/          роутер, бот, TUI, туннель, установка, гайд агента
-Extensions/      iOS · Android · Desktop (инструкции) + src/ (наш слой) + build/ (сборка)
+Server/          роутер, бот, панель (mse_setup.py), туннель, установка, гайд агента
+Extensions/      iOS · Android · Desktop (инструкции) + src/ (наш слой) + tools/ (сборка)
 Storage/         get.sh, релизные артефакты, суммы оригиналов
 scripts/         audit.py (ноль отпечатков)
 tests/           роутер, шлюз, расширение (WebKit), бот

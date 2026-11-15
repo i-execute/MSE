@@ -277,7 +277,7 @@
         var ids = {};
         for (var i = 0; i < links.length && i < 40; i++) {
           var m = /[?&]id=(\d+)/.exec(links[i].getAttribute('href') || '');
-          if (m && !ids[m[1]]) { ids[m[1]] = 1; found.push({ where: 'ссылка ' + clip(shortUrl(links[i].getAttribute('href')), 60), key: 'id', value: m[1], kind: 'id', src: 'dom' }); }
+          if (m && !ids[m[1]]) { ids[m[1]] = 1; found.push({ where: 'link ' + clip(shortUrl(links[i].getAttribute('href')), 60), key: 'id', value: m[1], kind: 'id', src: 'dom' }); }
         }
       } catch (e) {}
       /* the name usually sits in the avatar alt or in the user menu */
@@ -285,13 +285,13 @@
         var pics = doc.querySelectorAll('img.userpicture, img[src*="/user/icon"], img[src*="/user/pix"]');
         for (var j = 0; j < pics.length && j < 6; j++) {
           var alt = String(pics[j].getAttribute('alt') || '').trim();
-          if (alt && !/^picture of/i.test(alt)) found.push({ where: 'аватар alt', key: 'alt', value: alt, kind: 'name', src: 'dom' });
-          else if (alt) found.push({ where: 'аватар alt', key: 'alt', value: alt.replace(/^picture of\s*/i, ''), kind: 'name', src: 'dom' });
+          if (alt && !/^picture of/i.test(alt)) found.push({ where: 'avatar alt', key: 'alt', value: alt, kind: 'name', src: 'dom' });
+          else if (alt) found.push({ where: 'avatar alt', key: 'alt', value: alt.replace(/^picture of\s*/i, ''), kind: 'name', src: 'dom' });
         }
         var ut = doc.querySelector('.usertext, [data-region="user-menu"] .usertext, #nav-user-menu');
         if (ut) {
           var txt = String(ut.textContent || '').replace(/\s+/g, ' ').trim();
-          if (txt && txt.length < 120) found.push({ where: 'меню пользователя', key: 'text', value: txt, kind: 'name', src: 'dom' });
+          if (txt && txt.length < 120) found.push({ where: 'user menu', key: 'text', value: txt, kind: 'name', src: 'dom' });
         }
       } catch (e) {}
       /* inline scripts on this page, when M.cfg was not published to the page object */
@@ -301,7 +301,7 @@
           var t = scripts[k].textContent || '';
           if (t.length > 200000) continue;
           var mm = /"userid"\s*:\s*"?(\d+)/.exec(t) || /'userid'\s*:\s*'?(\d+)/.exec(t);
-          if (mm) found.push({ where: 'встроенный скрипт', key: 'userid', value: mm[1], kind: 'id', src: 'page' });
+          if (mm) found.push({ where: 'inline script', key: 'userid', value: mm[1], kind: 'id', src: 'page' });
         }
       } catch (e) {}
       return found;
@@ -375,7 +375,7 @@
       state.key = {
         value: value,
         masked: maskKey(value),
-        source: fromGm ? 'хранилище скрипта (GM)' : (fromLs ? 'localStorage сайта' : '—'),
+        source: fromGm ? 'script storage (GM)' : (fromLs ? 'site localStorage' : '—'),
         inGm: !!fromGm,
         inLs: !!fromLs,
         savedAt: meta.savedAt || null,
@@ -409,7 +409,7 @@
     }
 
     function checkKey(value) {
-      if (!value) return Promise.resolve({ ok: false, reason: 'пусто' });
+      if (!value) return Promise.resolve({ ok: false, reason: 'empty' });
       var shaped = /^SS-DBG-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(value);
       return sha256Hex(value).then(function (h) {
         return { ok: h === EXPECTED_SHA, shape: shaped, sha: h.slice(0, 16) + '…', expected: EXPECTED_SHA.slice(0, 16) + '…' };
@@ -553,41 +553,41 @@
       var idc = state.identity || analyseIdentity();
       var out = [];
       out.push('SyncShare debug v2');
-      out.push('страница: ' + String(win.location.href));
-      out.push('время: ' + new Date().toISOString());
-      out.push('браузер: ' + (win.navigator && win.navigator.userAgent));
+      out.push('page: ' + String(win.location.href));
+      out.push('time: ' + new Date().toISOString());
+      out.push('browser: ' + (win.navigator && win.navigator.userAgent));
       out.push('');
-      out.push('== КТО ПОЛЬЗОВАТЕЛЬ ==');
-      if (!idc.merged.length) out.push('  ничего не найдено: ни ids, ни имён (ни в странице, ни в ответах)');
+      out.push('== WHO THE USER IS ==');
+      if (!idc.merged.length) out.push('  nothing found: no ids, no names (neither on the page nor in the responses)');
       idc.merged.slice(0, 40).forEach(function (f) {
-        out.push('  [' + (f.kind === 'id' ? 'id  ' : 'имя ') + '] ' + f.value + '   ← ' + f.where + (f.src ? ' (' + f.src + ')' : ''));
+        out.push('  [' + (f.kind === 'id' ? 'id  ' : 'name ') + '] ' + f.value + '   ← ' + f.where + (f.src ? ' (' + f.src + ')' : ''));
       });
       if (idc.candidates.length) {
         out.push('');
-        out.push('  самые частые id в ответах сервера:');
+        out.push('  the most frequent ids in the server responses:');
         idc.candidates.slice(0, 8).forEach(function (c) { out.push('    ' + c.value + '  × ' + c.count + '  (' + c.where.join('; ') + ')'); });
       }
       out.push('');
-      out.push('== КЛЮЧ ==');
+      out.push('== KEY ==');
       var K = state.key || loadKey();
-      if (!K.value) out.push('  не введён');
+      if (!K.value) out.push('  not set');
       else {
-        out.push('  введён: ' + K.masked);
-        out.push('  где хранится: ' + K.source + (K.inGm ? ' + GM' : '') + (K.inLs ? ' + localStorage' : ''));
-        out.push('  сохранён: ' + (K.savedAt ? new Date(K.savedAt).toISOString() : '—'));
-        out.push('  страниц с этим ключом: ' + (K.pages || 1));
+        out.push('  set: ' + K.masked);
+        out.push('  stored in: ' + K.source + (K.inGm ? ' + GM' : '') + (K.inLs ? ' + localStorage' : ''));
+        out.push('  saved: ' + (K.savedAt ? new Date(K.savedAt).toISOString() : '—'));
+        out.push('  pages with this key: ' + (K.pages || 1));
       }
       out.push('');
-      out.push('== ТРАФИК (' + state.net.length + ' записей) ==');
+      out.push('== TRAFFIC (' + state.net.length + ' records) ==');
       state.net.slice(-120).forEach(function (e) {
         out.push('  ' + hhmmss(e.t) + '  ' + (e.method || 'GET') + '  ' + (e.status == null ? '—' : e.status) + '  '
           + (e.size != null ? bytes(e.size) : '') + '  ' + String(e.url).slice(0, 220));
       });
       out.push('');
-      out.push('== СТРАНИЦЫ В ЭТОМ БРАУЗЕРЕ ==');
+      out.push('== PAGES IN THIS BROWSER ==');
       (state.visits || []).slice(-20).forEach(function (v) { out.push('  ' + hhmmss(v.t) + '  ' + String(v.url).slice(0, 200)); });
       out.push('');
-      out.push('== КУКИ, ВИДИМЫЕ СКРИПТУ (' + readCookies().length + ') ==');
+      out.push('== COOKIES VISIBLE TO THE SCRIPT (' + readCookies().length + ') ==');
       readCookies().forEach(function (c) { out.push('  ' + c.name + ' = ' + c.value); });
       return out.join('\n');
     }
@@ -598,7 +598,7 @@
       var h1 = el('h1', null, 'SyncShare · debug');
       var hs = el('div', 'host', String(win.location.host));
       var close = el('button', 'icon', '×');
-      close.setAttribute('aria-label', 'Закрыть');
+      close.setAttribute('aria-label', 'Close');
       close.addEventListener('click', hide);
       head.appendChild(h1); head.appendChild(hs); head.appendChild(close);
       panel.appendChild(head);
@@ -606,7 +606,7 @@
 
     function renderTabs() {
       var tabs = el('div', 'tabs');
-      [['overview', 'Обзор'], ['traffic', 'Трафик'], ['me', 'Кто я'], ['key', 'Ключ']].forEach(function (t) {
+      [['overview', 'Overview'], ['traffic', 'Traffic'], ['me', 'Who am I'], ['key', 'Key']].forEach(function (t) {
         var b = el('button', tab === t[0] ? 'on' : '', t[1]);
         b.addEventListener('click', function () { tab = t[0]; render(); });
         tabs.appendChild(b);
@@ -617,15 +617,15 @@
     function renderBar() {
       var bar = el('div', 'bar');
       var stats = el('div', 'stats');
-      stats.textContent = 'запросов: ' + state.net.length + ' · куки: ' + readCookies().length
-        + (state.storeTotal != null ? ' · в банке: ' + state.storeTotal : '')
-        + ' · ключ: ' + (state.key && state.key.value ? 'есть' : 'нет');
+      stats.textContent = 'requests: ' + state.net.length + ' · cookies: ' + readCookies().length
+        + (state.storeTotal != null ? ' · in the bank: ' + state.storeTotal : '')
+        + ' · key: ' + (state.key && state.key.value ? 'set' : 'none');
       bar.appendChild(stats);
       var bJson = el('button', 'primary', 'JSON');
       bJson.addEventListener('click', function (e) { copy(jsonText(), e.target); });
-      var bRep = el('button', '', 'Отчёт');
+      var bRep = el('button', '', 'Report');
       bRep.addEventListener('click', function (e) { copy(reportText(), e.target); });
-      var bScan = el('button', '', 'Сканировать');
+      var bScan = el('button', '', 'Scan');
       bScan.addEventListener('click', function () { analyseIdentity(); loadKey(); render(); });
       bar.appendChild(bJson); bar.appendChild(bRep); bar.appendChild(bScan);
       panel.appendChild(bar);
@@ -634,50 +634,50 @@
     function cardOverview() {
       var idc = state.identity || analyseIdentity();
       var c = el('div', 'card');
-      c.appendChild(el('h2', null, 'Кто пользователь'));
+      c.appendChild(el('h2', null, 'Who the user is'));
       var best = idc.candidates[0];
       var named = idc.merged.filter(function (f) { return f.kind === 'name'; })[0];
       var simple = idc.merged.filter(function (f) { return f.kind === 'id'; })[0];
       if (!idc.merged.length) {
-        c.appendChild(el('div', 'hit', 'пока ничего — открой страницу, где ты уже вошёл, и нажми «Сканировать»'));
+        c.appendChild(el('div', 'hit', 'nothing yet — open a page where you are signed in and press “Scan”'));
       } else {
-        if (named) { var r1 = el('div', 'row'); r1.appendChild(el('span', 'k', 'имя')); r1.appendChild(el('span', 'v', clip(named.value, 60))); c.appendChild(r1); }
+        if (named) { var r1 = el('div', 'row'); r1.appendChild(el('span', 'k', 'name')); r1.appendChild(el('span', 'v', clip(named.value, 60))); c.appendChild(r1); }
         if (simple) { var r2 = el('div', 'row'); r2.appendChild(el('span', 'k', 'id')); r2.appendChild(el('span', 'v', simple.value)); c.appendChild(r2); }
-        if (best) { var r3 = el('div', 'row'); r3.appendChild(el('span', 'k', 'чаще всего')); r3.appendChild(el('span', 'v', best.value + '  × ' + best.count)); c.appendChild(r3); }
+        if (best) { var r3 = el('div', 'row'); r3.appendChild(el('span', 'k', 'most often')); r3.appendChild(el('span', 'v', best.value + '  × ' + best.count)); c.appendChild(r3); }
       }
-      c.appendChild(el('div', 'note', 'Источники: страница (M.cfg, ссылки на профиль, аватар) и ответы сервера, снятые сниффером. Полный список — на вкладке «Кто я».'));
+      c.appendChild(el('div', 'note', 'Sources: the page (M.cfg, profile links, avatar) and the server responses captured by the sniffer. The full list is on the “Who am I” tab.'));
       return c;
     }
 
     function cardKeyShort() {
       var K = state.key || loadKey();
       var c = el('div', 'card');
-      c.appendChild(el('h2', null, 'Ключ'));
+      c.appendChild(el('h2', null, 'Key'));
       var r = el('div', 'row');
-      r.appendChild(el('span', 'k', 'состояние'));
-      r.appendChild(el('span', 'v ' + (K.value ? 'ok' : 'warn'), K.value ? 'введён: ' + K.masked : 'не введён'));
+      r.appendChild(el('span', 'k', 'state'));
+      r.appendChild(el('span', 'v ' + (K.value ? 'ok' : 'warn'), K.value ? 'set: ' + K.masked : 'not set'));
       c.appendChild(r);
       var r2 = el('div', 'row');
-      r2.appendChild(el('span', 'k', 'страниц с ключом'));
+      r2.appendChild(el('span', 'k', 'pages with the key'));
       r2.appendChild(el('span', 'v', String(K.pages || (K.value ? 1 : 0))));
       c.appendChild(r2);
-      c.appendChild(el('div', 'note', 'Введи ключ один раз на вкладке «Ключ» и перезагрузи страницу: он должен остаться. Это проверка того, что расширение его помнит.'));
+      c.appendChild(el('div', 'note', 'Enter the key once on the “Key” tab and reload the page: it must stay. This checks that the extension remembers it.'));
       return c;
     }
 
     function cardTrafficShort() {
       var c = el('div', 'card');
-      c.appendChild(el('h2', null, 'Трафик'));
+      c.appendChild(el('h2', null, 'Traffic'));
       var withJson = state.net.filter(function (e) { return e.json; }).length;
       var r = el('div', 'row');
-      r.appendChild(el('span', 'k', 'запросов записано'));
+      r.appendChild(el('span', 'k', 'requests recorded'));
       r.appendChild(el('span', 'v', String(state.net.length)));
       c.appendChild(r);
       var r2 = el('div', 'row');
-      r2.appendChild(el('span', 'k', 'с JSON-ответом'));
+      r2.appendChild(el('span', 'k', 'with a JSON response'));
       r2.appendChild(el('span', 'v', String(withJson)));
       c.appendChild(r2);
-      c.appendChild(el('div', 'note', 'Запросы, сделанные до установки скрипта, видны по таймингам (без кодов ответа) — это нормально.'));
+      c.appendChild(el('div', 'note', 'Requests made before the script was installed show up by timing only (no status codes) — that is expected.'));
       return c;
     }
 
@@ -689,8 +689,8 @@
       /* which requests look like the ones that name the user */
       var interesting = state.net.filter(function (e) { return /\/(api|user|profile|login|auth|session|my)\b|userid|\/my\/|dashboard/i.test(String(e.url)); });
       var c = el('div', 'card');
-      c.appendChild(el('h2', null, 'Похоже на «кто я» (' + interesting.length + ')'));
-      if (!interesting.length) c.appendChild(el('div', 'empty', 'ничего похожего'));
+      c.appendChild(el('h2', null, 'Looks like “who am I” (' + interesting.length + ')'));
+      if (!interesting.length) c.appendChild(el('div', 'empty', 'nothing similar'));
       interesting.slice(-12).reverse().forEach(function (e) { c.appendChild(entryRow(e)); });
       body.appendChild(c);
       panel.appendChild(body);
@@ -724,13 +724,13 @@
     function renderTraffic() {
       var body = el('div', 'body');
       var c = el('div', 'card');
-      c.appendChild(el('h2', null, 'Запросы'));
-      if (!state.net.length) c.appendChild(el('div', 'empty', 'пусто — перезагрузи страницу с открытой панелью'));
+      c.appendChild(el('h2', null, 'Requests'));
+      if (!state.net.length) c.appendChild(el('div', 'empty', 'empty — reload the page with the panel open'));
       state.net.slice(-80).reverse().forEach(function (e) { c.appendChild(entryRow(e)); });
       body.appendChild(c);
 
       var d = el('div', 'card');
-      d.appendChild(el('h2', null, 'Страницы в этом браузере'));
+      d.appendChild(el('h2', null, 'Pages in this browser'));
       (state.visits || []).slice(-14).reverse().forEach(function (v) {
         var r = el('div', 'row');
         r.appendChild(el('span', 'k', hhmmss(v.t)));
@@ -745,11 +745,11 @@
       var body = el('div', 'body');
       var idc = state.identity || analyseIdentity();
       var c = el('div', 'card');
-      c.appendChild(el('h2', null, 'Найдено на странице (' + idc.page.length + ')'));
-      if (!idc.page.length) c.appendChild(el('div', 'empty', 'ничего'));
+      c.appendChild(el('h2', null, 'Found on the page (' + idc.page.length + ')'));
+      if (!idc.page.length) c.appendChild(el('div', 'empty', 'nothing'));
       idc.page.forEach(function (f) {
         var r = el('div', 'row');
-        r.appendChild(el('span', 'k', f.kind === 'id' ? 'id' : 'имя'));
+        r.appendChild(el('span', 'k', f.kind === 'id' ? 'id' : 'name'));
         var v = el('span', 'v', clip(f.value, 70));
         r.appendChild(v);
         c.appendChild(r);
@@ -759,11 +759,11 @@
       body.appendChild(c);
 
       var d = el('div', 'card');
-      d.appendChild(el('h2', null, 'Найдено в ответах сервера (' + idc.traffic.length + ')'));
-      if (!idc.traffic.length) d.appendChild(el('div', 'empty', 'ничего — включено ли «записывать тела ответов»?'));
+      d.appendChild(el('h2', null, 'Found in the server responses (' + idc.traffic.length + ')'));
+      if (!idc.traffic.length) d.appendChild(el('div', 'empty', 'nothing — is “record response bodies” on?'));
       idc.traffic.slice(0, 40).forEach(function (f) {
         var r = el('div', 'row');
-        r.appendChild(el('span', 'k', f.kind === 'id' ? 'id' : 'имя'));
+        r.appendChild(el('span', 'k', f.kind === 'id' ? 'id' : 'name'));
         r.appendChild(el('span', 'v', clip(f.value, 70)));
         d.appendChild(r);
         d.appendChild(el('div', 'mini', '← ' + f.where));
@@ -771,15 +771,15 @@
       body.appendChild(d);
 
       var e2 = el('div', 'card');
-      e2.appendChild(el('h2', null, 'Кандидаты (id)'));
-      if (!idc.candidates.length) e2.appendChild(el('div', 'empty', 'нет'));
+      e2.appendChild(el('h2', null, 'Candidates (id)'));
+      if (!idc.candidates.length) e2.appendChild(el('div', 'empty', 'none'));
       idc.candidates.slice(0, 10).forEach(function (cd) {
         var r = el('div', 'row');
         r.appendChild(el('span', 'k', cd.value));
         r.appendChild(el('span', 'v', '× ' + cd.count + '  ' + clip(cd.where.join('; '), 40)));
         e2.appendChild(r);
       });
-      e2.appendChild(el('div', 'note', 'Самый частый id в ответах сервера — обычно и есть «номер студента» в этой системе.'));
+      e2.appendChild(el('div', 'note', 'The most frequent id in the server responses is usually the “student number” in this system.'));
       body.appendChild(e2);
       panel.appendChild(body);
     }
@@ -789,8 +789,8 @@
       var body = el('div', 'body');
 
       var c = el('div', 'card');
-      c.appendChild(el('h2', null, 'Секретный ключ'));
-      c.appendChild(el('div', 'note', 'Введи ключ один раз. Он сохранится в хранилище скрипта и в localStorage сайта, переживёт перезагрузку и переходы. Проверка идёт по SHA-256: сам ключ в скрипте не хранится — так же это будет устроено на сервере.'));
+      c.appendChild(el('h2', null, 'Secret key'));
+      c.appendChild(el('div', 'note', 'Enter the key once. It is kept in the script storage and in the site localStorage, survives reloads and navigation. The check uses SHA-256: the key itself is never stored in the script — the server will work the same way.'));
 
       var input = doc.createElement('input');
       input.type = 'text';
@@ -809,28 +809,28 @@
       buttons.style.borderBottom = '0';
       var verdict = el('div', 'note', '');
 
-      var bSave = el('button', 'primary', 'Сохранить');
+      var bSave = el('button', 'primary', 'Save');
       bSave.addEventListener('click', function () {
         var v = String(input.value || '').trim();
-        if (!v) { verdict.className = 'note bad'; verdict.textContent = 'пусто'; return; }
+        if (!v) { verdict.className = 'note bad'; verdict.textContent = 'empty'; return; }
         saveKey(v);
         checkKey(v).then(function (r) {
           verdict.className = 'note ' + (r.ok ? 'ok' : 'warn');
           verdict.textContent = r.ok
-            ? 'сохранено · ключ совпал с ожидаемым (' + r.sha + ')'
-            : 'сохранено · но это не тот ключ, что ждёт эта сборка (' + r.sha + ' против ' + r.expected + ')';
+            ? 'saved · the key matches the expected one (' + r.sha + ')'
+            : 'saved · but this is not the key this build expects (' + r.sha + ' vs ' + r.expected + ')';
           render();
         });
       });
-      var bCheck = el('button', '', 'Проверить');
+      var bCheck = el('button', '', 'Check');
       bCheck.addEventListener('click', function () {
         checkKey(String(input.value || '').trim()).then(function (r) {
           verdict.className = 'note ' + (r.ok ? 'ok' : 'bad');
-          verdict.textContent = r.ok ? 'верный ключ (' + r.sha + ')' : (r.shape ? 'формат верный, но ключ другой' : 'формат не тот') + ' (' + r.sha + ')';
+          verdict.textContent = r.ok ? 'correct key (' + r.sha + ')' : (r.shape ? 'right format, wrong key' : 'wrong format') + ' (' + r.sha + ')';
         });
       });
-      var bForget = el('button', 'ghost', 'Забыть');
-      bForget.addEventListener('click', function () { forgetKey(); input.value = ''; verdict.className = 'note'; verdict.textContent = 'ключ удалён'; render(); });
+      var bForget = el('button', 'ghost', 'Forget');
+      bForget.addEventListener('click', function () { forgetKey(); input.value = ''; verdict.className = 'note'; verdict.textContent = 'key removed'; render(); });
 
       buttons.appendChild(bSave); buttons.appendChild(bCheck); buttons.appendChild(bForget);
       c.appendChild(buttons);
@@ -838,32 +838,32 @@
       body.appendChild(c);
 
       var s = el('div', 'card');
-      s.appendChild(el('h2', null, 'Что сейчас в памяти'));
-      [['введён', K.value ? K.masked : '—'],
-       ['где хранится', K.value ? K.source : '—'],
-       ['сохранён', K.savedAt ? new Date(K.savedAt).toLocaleString() : '—'],
-       ['страниц с этим ключом', String(K.pages || (K.value ? 1 : 0))]
+      s.appendChild(el('h2', null, 'What is in memory now'));
+      [['set', K.value ? K.masked : '—'],
+       ['stored in', K.value ? K.source : '—'],
+       ['saved', K.savedAt ? new Date(K.savedAt).toLocaleString() : '—'],
+       ['pages with this key', String(K.pages || (K.value ? 1 : 0))]
       ].forEach(function (p) {
         var r = el('div', 'row');
         r.appendChild(el('span', 'k', p[0]));
         r.appendChild(el('span', 'v', p[1]));
         s.appendChild(r);
       });
-      s.appendChild(el('div', 'note', '«Страниц с этим ключом» растёт с каждой загрузкой страницы: если число больше 1 — расширение действительно помнит ключ между страницами.'));
+      s.appendChild(el('div', 'note', '“Pages with this key” grows with every page load: a number above 1 means the extension really remembers the key across pages.'));
       body.appendChild(s);
 
       /* the same view as v1: what the site tells a script about the session */
       var ck = el('div', 'card');
       var cc = readCookies();
-      ck.appendChild(el('h2', null, 'Куки, видимые скрипту (' + cc.length + ')'));
-      if (!cc.length) ck.appendChild(el('div', 'empty', 'нет'));
+      ck.appendChild(el('h2', null, 'Cookies visible to the script (' + cc.length + ')'));
+      if (!cc.length) ck.appendChild(el('div', 'empty', 'none'));
       cc.forEach(function (x) {
         var r = el('div', 'row');
         r.appendChild(el('span', 'k', x.name));
         r.appendChild(el('span', 'v', x.value));
         ck.appendChild(r);
       });
-      ck.appendChild(el('div', 'note', 'HttpOnly-куки Safari скриптам не отдаёт — их значений не увидит ни этот скрипт, ни любой другой.'));
+      ck.appendChild(el('div', 'note', 'Safari does not hand HttpOnly cookies to scripts — neither this script nor any other can read their values.'));
       body.appendChild(ck);
       panel.appendChild(body);
     }
@@ -921,7 +921,7 @@
     }
     fabBtn.addEventListener('click', function () { open(); });
 
-    try { if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('SyncShare debug: открыть', function () { open(); }); } catch (e) {}
+    try { if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('SyncShare debug: open', function () { open(); }); } catch (e) {}
 
     doc.addEventListener('keydown', function (ev) {
       var t = ev.target && ev.target.tagName;

@@ -351,14 +351,14 @@ function extractJson(text) {
 }
 function buildAgentPrompt(body) {
   var options = Array.isArray(body.options) ? body.options.map(function (o, i) { return (i + 1) + '. ' + o; }).join('\n') : '';
-  var system = 'Ты решаешь тест Moodle. Ответь ТОЛЬКО одним JSON-объектом без пояснений: ' +
-    '{"answer": "<ровно один из предложенных вариантов, символ в символ>", "confidence": <0..1>, "reason": "<до 120 символов>"}. ' +
-    'Если верного варианта нет или данных не хватает — верни {"error": "<короткая причина по-русски>"}. ' +
-    'Не добавляй ничего вне JSON.';
-  var user = 'Вопрос: ' + String(body.question || '').slice(0, 3000) + '\n';
-  if (options) user += 'Варианты (выбери ровно один):\n' + options + '\n';
-  if (body.multiple) user += 'Допускается несколько верных: перечисли их через "|" в answer.\n';
-  if (body.image) user += 'К вопросу приложена картинка, но текстом она не передана.\n';
+  var system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
+    '{"answer": "<exactly one of the given options, character for character>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
+    'If there is no correct option or the data is missing, return {"error": "<short reason>"}. ' +
+    'Add nothing outside the JSON.';
+  var user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
+  if (options) user += 'Options (pick exactly one):\n' + options + '\n';
+  if (body.multiple) user += 'Several may be correct: list them separated by "|" in answer.\n';
+  if (body.image) user += 'The question has an image attached, but it was not passed as text.\n';
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
 
@@ -370,7 +370,7 @@ async function handleAgent(req, res) {
   res.setHeader('x-quota-left', String(left));
   if (left <= 0) {
     res.setHeader('retry-after', '60');
-    return send(req, res, 429, { ok: false, code: 'rate_limited', retry_after: 60, message: 'дневная квота кончилась' });
+    return send(req, res, 429, { ok: false, code: 'rate_limited', retry_after: 60, message: 'the daily quota is used up' });
   }
   const text = await readBody(req, 256 * 1024);
   const body = parseJson(text);
@@ -388,7 +388,7 @@ async function handleAgent(req, res) {
     upstream = await upstreamRequest('POST', '/chat/completions', JSON.stringify(payload));
   } catch (e) {
     res.setHeader('retry-after', '5');
-    return send(req, res, 502, { ok: false, code: 'upstream_down', retry_after: 5, message: 'модель недоступна: ' + e.message });
+    return send(req, res, 502, { ok: false, code: 'upstream_down', retry_after: 5, message: 'the model is unavailable: ' + e.message });
   }
   const chunks = [];
   upstream.on('data', (c) => chunks.push(c));
@@ -398,29 +398,29 @@ async function handleAgent(req, res) {
 
   if (upstream.statusCode === 429) {
     res.setHeader('retry-after', '5');
-    return send(req, res, 429, { ok: false, code: 'rate_limited', retry_after: 5, message: 'модель ограничила частоту' });
+    return send(req, res, 429, { ok: false, code: 'rate_limited', retry_after: 5, message: 'the model rate-limited the call' });
   }
   const parsed = parseJson(raw);
   if (!parsed || !parsed.choices) {
-    return send(req, res, 502, { ok: false, code: 'upstream_bad', retry_after: 5, message: 'модель ответила не по формату' });
+    return send(req, res, 502, { ok: false, code: 'upstream_bad', retry_after: 5, message: 'the model answered in an unexpected format' });
   }
   const prose = String((parsed.choices[0].message || {}).content || '');
   const answerObj = extractJson(prose);
   const options = Array.isArray(body.options) ? body.options : [];
   if (!answerObj) {
-    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'агент не разобрал задание', raw: prose.slice(0, 200) });
+    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent could not parse the task', raw: prose.slice(0, 200) });
   }
   if (answerObj.error) {
     return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: String(answerObj.error).slice(0, 160) });
   }
   const answer = String(answerObj.answer || '').trim();
   if (!answer) {
-    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'агент не выбрал вариант' });
+    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
   }
   /* the answer must be one of the options, character for character (after trimming): otherwise it is an error */
   const picked = options.filter((o) => String(o).trim().toLowerCase() === answer.toLowerCase())[0];
   if (options.length && !picked) {
-    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'агент назвал вариант, которого нет в задании', answer });
+    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
   }
   return send(req, res, 200, {
     ok: true, code: 'ok', ms, answer: picked || answer,
@@ -504,9 +504,9 @@ const handler = async (req, res) => {
         const html = '<!doctype html><meta charset="utf-8"><title>MSE gateway</title>' +
           '<body style="background:#050505;color:#fafafa;font:14px/1.6 system-ui;padding:32px;max-width:640px;margin:auto">' +
           '<h1 style="font-weight:700;letter-spacing:.14em;text-shadow:0 0 18px rgba(255,255,255,.55)">MSE GATEWAY</h1>' +
-          '<p>жив, версия ' + VERSION + '</p><pre style="background:#0e0e0e;border:1px solid #2b2b2b;border-radius:10px;padding:14px;overflow:auto">' +
+          '<p>alive, version ' + VERSION + '</p><pre style="background:#0e0e0e;border:1px solid #2b2b2b;border-radius:10px;padding:14px;overflow:auto">' +
           JSON.stringify(body, null, 2) + '</pre>' +
-          '<p style="color:#8b8b8b">endpoint для расширения: <code>' + (req.headers['x-forwarded-proto'] || 'https') + '://' + (req.headers.host || '') + '</code></p></body>';
+          '<p style="color:#8b8b8b">endpoint for the extension: <code>' + (req.headers['x-forwarded-proto'] || 'https') + '://' + (req.headers.host || '') + '</code></p></body>';
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
         return res.end(html);
       }

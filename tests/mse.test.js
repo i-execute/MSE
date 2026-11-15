@@ -236,7 +236,7 @@ test('M6 the account sheet: one ⓘ, the id, the login, the name — each copies
         document.addEventListener('DOMContentLoaded', () => {
           const d = document.createElement('div');
           d.className = 'usertext';
-          d.textContent = 'Тестовый Пользователь';
+          d.textContent = 'Test User';
           document.body.appendChild(d);
         });
       });
@@ -255,16 +255,16 @@ test('M6 the account sheet: one ⓘ, the id, the login, the name — each copies
     assert.equal(acct.route, 'account', 'the ⓘ opens the account sheet');
     assert.match(acct.pop.text, /12345/, 'the id is there');
     assert.match(acct.pop.text, /testuser/, 'the login is there');
-    assert.match(acct.pop.text, /Тестовый Пользователь/, 'the name is there');
-    assert.match(acct.pop.text, /ключ/, 'the device key is there');
-    assert.doesNotMatch(acct.pop.text, /хранится на этом устройстве|sha256/, 'no explanatory prose in a production build');
+    assert.match(acct.pop.text, /Test User/, 'the name is there');
+    assert.match(acct.pop.text, /key/, 'the device key is there');
+    assert.doesNotMatch(acct.pop.text, /stored on this device|sha256/, 'no explanatory prose in a production build');
 
     /* the copy: a tap puts the value on the clipboard and the value takes the light */
     const row = byText(acct.pop.controls, /12345/);
     await page.mouse.click(row.x, row.y);
     await page.waitForTimeout(500);
     const copied = await page.evaluate(() => window.__mse.state());
-    assert.match(copied.pop.text, /скопировано/, 'the value says it was copied');
+    assert.match(copied.pop.text, /copied/, 'the value says it was copied');
     await page.screenshot({ path: path.join(EVID, '3-account.png') });
     report.m6 = { identity: acct.identity, text: acct.pop.text.slice(0, 300) };
     assert.deepEqual(t.errors, []);
@@ -276,9 +276,9 @@ test('M7 the uninvited windows of the original are gone: no welcome card, no "ba
   const { t, page } = await open({
     pageUrl: VIEW,
     keepScripts: true,
-    page: () => '<!doctype html><html><head><title>Тест</title></head><body class="cmid-789">' +
-      '<div class="usertext">Тестовый Пользователь</div>' +
-      '<a href="/user/profile.php?id=12345">Профиль</a>' +
+    page: () => '<!doctype html><html><head><title>Test</title></head><body class="cmid-789">' +
+      '<div class="usertext">Test User</div>' +
+      '<a href="/user/profile.php?id=12345">Profile</a>' +
       '<script>window.M={cfg:{userid:12345,username:"testuser",siteId:"981484524"}};</script>' +
       '</body></html>',
     url: VIEW,
@@ -331,7 +331,7 @@ test('M9 the network journal: a failing request is reported in one line and kept
   });
   try {
     const st = await openPanel(page);
-    assert.match(st.pop.text, /база ответов: 500/, 'the failure is on the panel, in one line');
+    assert.match(st.pop.text, /answer database: 500/, 'the failure is on the panel, in one line');
     const journal = await page.evaluate(() => window.__mse.log());
     assert.ok(journal.length > 0, 'the journal has the line');
     assert.equal(journal[journal.length - 1].ok, false);
@@ -342,7 +342,7 @@ test('M9 the network journal: a failing request is reported in one line and kept
     await page.waitForTimeout(500);
     const net = await page.evaluate(() => window.__mse.state());
     assert.equal(net.route, 'net');
-    assert.match(net.pop.text, /ЖУРНАЛ СЕТИ/);
+    assert.match(net.pop.text, /NETWORK LOG/);
     assert.match(net.pop.text, /500/);
     await page.screenshot({ path: path.join(EVID, '4-net.png') });
     report.m9 = { journal: journal.slice(-3), text: net.pop.text.slice(0, 240) };
@@ -357,16 +357,16 @@ test('M10 a page without the attempt data: no request is sent, and the missing f
     url: URL_BARE,
     pageUrl: URL_BARE,
     keepScripts: true,
-    page: () => '<!doctype html><html><head><title>Тест</title></head><body class="path-mod-quiz">' +
+    page: () => '<!doctype html><html><head><title>Test</title></head><body class="path-mod-quiz">' +
       '<div id="question-1-1" class="que multichoice deferredfeedback notyetanswered">' +
-      '<div class="info"><h3 class="no">Вопрос <span class="qno">1</span></h3></div>' +
-      '<div class="content"><div class="formulation clearfix"><div class="qtext"><p>Столица Франции?</p></div>' +
+      '<div class="info"><h3 class="no">Question <span class="qno">1</span></h3></div>' +
+      '<div class="content"><div class="formulation clearfix"><div class="qtext"><p>Capital of France?</p></div>' +
       '<div class="answer"><div class="r0"><input type="radio" name="q1:1_answer" value="0" id="q1:1_answer0">' +
       '<div id="q1:1_answer0_label" data-region="answer-label"><span class="answernumber">a. </span>' +
-      '<div class="flex-fill"><p>Париж</p></div></div></div>' +
+      '<div class="flex-fill"><p>Paris</p></div></div></div>' +
       '<div class="r1"><input type="radio" name="q1:1_answer" value="1" id="q1:1_answer1">' +
       '<div id="q1:1_answer1_label" data-region="answer-label"><span class="answernumber">b. </span>' +
-      '<div class="flex-fill"><p>Лион</p></div></div></div></div></div></div></div>' +
+      '<div class="flex-fill"><p>Lyon</p></div></div></div></div></div></div></div>' +
       '<script>window.M={cfg:{userid:12345,wwwroot:"https://study.example.edu"}};</scr' + 'ipt>' +
       '</body></html>',
     api: (req) => {
@@ -378,8 +378,8 @@ test('M10 a page without the attempt data: no request is sent, and the missing f
     const meta = await page.evaluate(() => window.__mse.meta());
     assert.ok(meta.missing.length >= 2, 'the page gave neither the attempt nor the quiz: ' + JSON.stringify(meta.missing));
     const st = await openPanel(page);
-    assert.match(st.pop.text, /нет данных страницы/, 'the panel names what the page did not give');
-    assert.match(st.pop.text, /попытка/, 'in words the user reads');
+    assert.match(st.pop.text, /page data missing/, 'the panel names what the page did not give');
+    assert.match(st.pop.text, /attempt/, 'in words the user reads');
     const asked = t.apiLog.filter((r) => /quiz\/solution/.test(r.path));
     assert.equal(asked.length, 0, 'no request went out: their 400 never happens');
     report.m10 = { meta, text: st.pop.text.slice(0, 200) };
@@ -424,7 +424,7 @@ test('M11 the gateway and the agent: check, models, allow by ID, and the agent f
         document.addEventListener('DOMContentLoaded', () => {
           const d = document.createElement('div');
           d.className = 'usertext';
-          d.textContent = 'Тестовый Пользователь';
+          d.textContent = 'Test User';
           document.body.appendChild(d);
         });
       });
@@ -445,12 +445,12 @@ test('M11 the gateway and the agent: check, models, allow by ID, and the agent f
     await page.evaluate(() => window.__mse.settings(true));
     await page.waitForTimeout(400);
     const openGw = await page.evaluate(() => window.__mse.state());
-    const checkBtn = byText(openGw.pop.controls, /проверить/);
+    const checkBtn = byText(openGw.pop.controls, /check/);
     assert.ok(checkBtn, 'the one button that checks');
     await page.mouse.click(checkBtn.x, checkBtn.y);
     await page.waitForTimeout(2500);
     const checked = await page.evaluate(() => window.__mse.state());
-    assert.match(checked.pop.text, /шлюз отвечает/, 'the gateway answers');
+    assert.match(checked.pop.text, /AI gateway answered/, 'the gateway answers');
     assert.match(checked.pop.text, /mock-model/, 'the model that will help is named');
     assert.match(checked.pop.text, /gpt-4o-mini/, 'and the other one it offers');
     await page.screenshot({ path: path.join(EVID, '5-gateway.png') });
@@ -517,11 +517,11 @@ test('M11 the gateway and the agent: check, models, allow by ID, and the agent f
 test('M12 the id is found through /my/ when the attempt page hides it, and then remembered', { timeout: 180000 }, async () => {
   const ATTEMPT = 'https://school.moodledemo.net/mod/quiz/attempt.php?attempt=89&cmid=789';
   const CAB = 'https://school.moodledemo.net/my/';
-  const bareQuestion = (extra) => '<!doctype html><html><head><title>Тест</title></head>' +
+  const bareQuestion = (extra) => '<!doctype html><html><head><title>Test</title></head>' +
     '<body class="path-mod path-mod-quiz course-66 cmid-789">' +
     '<div id="question-127-1" class="que multichoice deferredfeedback notyetanswered">' +
-    '<div class="info"><h3 class="no">Вопрос <span class="qno">1</span></h3></div>' +
-    '<div class="content"><div class="formulation clearfix"><div class="qtext"><p>Что такое #elections2018?</p></div>' +
+    '<div class="info"><h3 class="no">Question <span class="qno">1</span></h3></div>' +
+    '<div class="content"><div class="formulation clearfix"><div class="qtext"><p>What is #elections2018?</p></div>' +
     '<div class="answer"><div class="r0"><input type="radio" name="q127:1_answer" value="0" id="q127:1_answer0">' +
     '<div id="q127:1_answer0_label" data-region="answer-label"><span class="answernumber">a. </span>' +
     '<div class="flex-fill"><p>A hashtag</p></div></div></div>' +
@@ -530,9 +530,9 @@ test('M12 the id is found through /my/ when the attempt page hides it, and then 
     '<div class="flex-fill"><p>A tweet</p></div></div></div></div></div></div></div>' +
     '<form id="responseform" action="/mod/quiz/processattempt.php?cmid=789" method="post">' +
     '<input type="hidden" name="attempt" value="89"></form>' + (extra || '') + '</body></html>';
-  const cabinet = '<!doctype html><html><head><title>Личный кабинет</title></head><body>' +
-    '<div class="usertext">Тестовый Пользователь</div>' +
-    '<a href="/user/profile.php?id=12345">Профиль</a>' +
+  const cabinet = '<!doctype html><html><head><title>Dashboard</title></head><body>' +
+    '<div class="usertext">Test User</div>' +
+    '<a href="/user/profile.php?id=12345">Profile</a>' +
     '<scr' + 'ipt>var cfg={"userid":12345,"courseid":66};</scr' + 'ipt></body></html>';
 
   /* (a) the theme with nothing on it, and a cabinet that knows: the panel fixes itself, without a single tap */
@@ -552,7 +552,7 @@ test('M12 the id is found through /my/ when the attempt page hides it, and then 
       const st = await openPanel(page);
       const after = await page.evaluate(() => window.__mse.state());
       assert.equal(after.meta.moodleId, '12345', 'the id was taken from /my/ by itself');
-      assert.match(String(after.meta.identity.source), /запомнено/);
+      assert.match(String(after.meta.identity.source), /remembered/);
       assert.ok(st.rows && st.rows.length > 0, 'and the answers came back, without the user doing anything');
       const asked = t.apiLog.filter((r) => /quiz\/solution/.test(r.path));
       assert.ok(asked.length > 0, 'the question went out with the real id');
@@ -575,13 +575,13 @@ test('M12 the id is found through /my/ when the attempt page hides it, and then 
       pageUrl: ATTEMPT,
       keepScripts: true,
       page: () => bareQuestion('<scr' + 'ipt>window.M={cfg:{wwwroot:"https://school.moodledemo.net"}};</scr' + 'ipt>'),
-      docs: { [CAB]: '<!doctype html><html><body><p>нет входа</p></body></html>' },
+      docs: { [CAB]: '<!doctype html><html><body><p>no sign-in</p></body></html>' },
     });
     try {
       const st = await openPanel(page);
-      assert.match(st.pop.text, /нет данных страницы/, 'the panel is honest about it');
-      assert.match(st.pop.text, /ID пользователя/, 'and names exactly what is missing');
-      const fix = byText(st.pop.controls, /ID со страницы|повторить/);
+      assert.match(st.pop.text, /page data missing/, 'the panel is honest about it');
+      assert.match(st.pop.text, /user id/, 'and names exactly what is missing');
+      const fix = byText(st.pop.controls, /take the id from|retry/);
       assert.ok(fix, 'an action is offered instead of a dead end');
       const asked = t.apiLog.filter((r) => /quiz\/solution/.test(r.path));
       assert.equal(asked.length, 0, 'not a single request: their 400 never happens');
@@ -638,7 +638,7 @@ test('M13 the two tiers: a base key never reaches the gateway, an allowed key ge
         document.addEventListener('DOMContentLoaded', () => {
           const d = document.createElement('div');
           d.className = 'usertext';
-          d.textContent = 'Тестовый Пользователь';
+          d.textContent = 'Test User';
           document.body.appendChild(d);
         });
       });
@@ -653,7 +653,7 @@ test('M13 the two tiers: a base key never reaches the gateway, an allowed key ge
 
     /* 1. base tier: the panel is opened, the service is asked, the gateway is not touched */
     const base = await openPanel(page);
-    assert.match(base.pop.text, /ответов пока нет/, 'their base answered with nothing');
+    assert.match(base.pop.text, /no answers yet/, 'their base answered with nothing');
     assert.doesNotMatch(base.pop.text, /AI/, 'no AI row for a key that was never let in');
     assert.equal(gwHits().length, 0,
       'not a single request towards the gateway: ' + JSON.stringify(gwHits().map((r) => r.path)));
@@ -666,7 +666,7 @@ test('M13 the two tiers: a base key never reaches the gateway, an allowed key ge
     await page.evaluate(() => window.__mse.route('answers'));
     await page.waitForTimeout(300);
     const stillBase = await openPanel(page);
-    assert.doesNotMatch(stillBase.pop.text, /спросить AI|AI думает/, 'a pending key is base: no AI row');
+    assert.doesNotMatch(stillBase.pop.text, /ask AI|AI is thinking/, 'a pending key is base: no AI row');
     assert.equal(t.apiLog.filter((r) => /chat\/completions|mse\/v1\/agent/.test(r.url)).length, 0,
       'a pending key never asks the model');
 
@@ -699,7 +699,7 @@ test('M13 the two tiers: a base key never reaches the gateway, an allowed key ge
     assert.ok(chatHits.length > 0, 'the AI call went through the gateway');
     const chatBody = chatHits[chatHits.length - 1];
     assert.match(String(chatBody.body), /elections2018/, 'the full text of the question went out');
-    assert.match(String(chatBody.body), /Варианты/, 'together with the list of answers');
+    assert.match(String(chatBody.body), /Options/, 'together with the list of answers');
     assert.match(String(chatBody.body), /A hashtag/, 'every option is there');
     assert.ok(chatBody.headers.authorization && /^Bearer mse_/.test(chatBody.headers.authorization), 'with the device key');
 

@@ -1421,7 +1421,7 @@ function createSyncShareRuntime(env) {
     var warnText = fd.querySelector('.warning-text');
     if (warnText) {
       var icon = warnText.querySelector('i');
-      warnText.textContent = ' При отклонении SyncShare будет отключён (включить снова можно из меню Stay) / If you decline, SyncShare is switched off (it can be re-enabled from the Stay menu)';
+      warnText.textContent = ' / If you decline, SyncShare is switched off (it can be re-enabled from the Stay menu)';
       if (icon) warnText.insertBefore(icon, warnText.firstChild);
     }
     if (CONFIG.noTelemetry) {
@@ -1438,7 +1438,7 @@ function createSyncShareRuntime(env) {
           var note = fd.createElement('div');
           note.setAttribute('data-ss-stay-note', 'telemetry');
           note.setAttribute('style', 'margin-top:.5rem;font-weight:600;');
-          note.textContent = 'В версии для Stay технические данные не собираются и не отправляются. / The Stay port never collects or sends technical data.';
+          note.textContent = 'The Stay port never collects or sends technical data.';
           desc.parentNode.insertBefore(note, desc.nextSibling);
         }
       }
@@ -1546,7 +1546,7 @@ function createSyncShareRuntime(env) {
       contexts.forEach(function (c) { c.alive = false; });
       try {
         win.alert(uiLanguage().toLowerCase().indexOf('ru') === 0
-          ? 'SyncShare отключён. Чтобы включить снова, выберите «SyncShare: включить» в меню Stay или удалите скрипт в приложении Stay.'
+          ? 'SyncShare is switched off. To turn it on again, choose “SyncShare: enable” in the Stay menu or remove the script in the Stay app.'
           : 'SyncShare is now disabled. Use "SyncShare: enable" in the Stay menu to turn it on again, or remove the script in the Stay app.');
       } catch (e) {}
     });
@@ -1606,10 +1606,10 @@ function createSyncShareRuntime(env) {
     try { if (sessionStorage.getItem('ss:welcomeShown')) return; } catch (e) { return; }
     var ru = uiLanguage().toLowerCase().indexOf('ru') === 0;
     var T = ru ? {
-      title: 'Добро пожаловать в SyncShare',
-      text: 'Подсказки к вопросам тестов Moodle от тех, кто их уже прошёл. Кнопка SyncShare появится у каждого вопроса.',
-      hint: 'Меню Stay → «SyncShare», чтобы открыть вход и настройки.',
-      button: 'Начать'
+      title: 'Welcome to SyncShare',
+      text: 'Hints for Moodle quiz questions from people who have already taken them. The SyncShare button appears next to every question.',
+      hint: 'Stay menu → “SyncShare” opens sign-in and settings.',
+      button: 'Start'
     } : {
       title: 'Welcome to SyncShare',
       text: 'Hints for Moodle quiz questions from people who have already taken them. A SyncShare button appears next to every question.',
@@ -1682,7 +1682,7 @@ function createSyncShareRuntime(env) {
         return kvGetJson(DISABLED_KEY);
       }).then(function (disabled) {
         if (disabled) {
-          registerMenu('SyncShare: enable / включить', function () { enableSelf(); });
+          registerMenu('SyncShare: enable', function () { enableSelf(); });
           return { skipped: 'disabled' };
         }
         return lifecycle().then(function () {

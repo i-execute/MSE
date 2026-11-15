@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Smoke-тест панели: гоняет `mse_setup.py` в pty, как это делает живой терминал.
+"""A smoke test of the panel: it drives `mse_setup.py` through a pty, exactly as a live terminal would.
 
-Проверяет три вещи, которые ломаются чаще всего:
-  1) баннер и главное меню рисуются, в меню есть все девять действий;
-  2) стрелки + Enter открывают экран действия (Model, Quota & Keys) — KeyReader живой;
-  3) без tty (`--status`) панель печатает состояние и не висит на вводе.
+It checks the three things that break most often:
+  1) the banner and the main menu are drawn, and all nine actions are in the menu;
+  2) the arrows + Enter open an action screen (Model, Quota & Keys) — the KeyReader is alive;
+  3) without a tty (`--status`) the panel prints the state and does not wait for input.
 
-Запуск: python3 tests/tui_smoke.py
+Run: python3 tests/tui_smoke.py
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def expect(name: str, ok: bool, detail: str = "") -> None:
 def run_pty(keys: list[bytes], cols: int = 100, rows: int = 40) -> str:
     env = dict(os.environ, TERM="xterm-256color", MSE_ENV_FILE="/tmp/mse-tui-smoke.env", MSE_FORCE_COLOR="1")
     pid, fd = pty.fork()
-    if pid == 0:  # pragma: no cover — дочерний процесс
+    if pid == 0:  # pragma: no cover — the child process
         os.execvpe(sys.executable, [sys.executable, str(SCRIPT)], env)
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
     out = b""
@@ -74,7 +74,7 @@ def main() -> int:
     Path("/tmp/mse-tui-smoke.env").unlink(missing_ok=True)
     menu = run_pty([])
     expect("banner: MSE · Control Center", "MSE · Control Center" in menu, menu[-400:])
-    expect("badge-строка: router/backend/tunnel/bot", all(x in menu for x in ("router:", "backend:", "tunnel:", "bot:")), "")
+    expect("badge line: router/backend/tunnel/bot", all(x in menu for x in ("router:", "backend:", "tunnel:", "bot:")), "")
     for label in ("Health & Status", "Install / Self-Heal", "Update & Repair", "Service Control",
                   "Tunnel (tailscale)", "Model, Quota & Keys", "Custom / Advanced Setup",
                   "Uninstall MSE", "Full Wipe"):
@@ -82,21 +82,21 @@ def main() -> int:
     expect("footer: keycaps", "move" in menu and "confirm" in menu)
 
     settings = run_pty([DOWN] * 5 + [b"\r"])
-    expect("arrow+enter открывает Model, Quota & Keys", "Model, Quota & Keys" in settings and "Имя модели" in settings, settings[-600:])
-    expect("в настройках есть поле токена и предупреждение о маске", "токен бота" in settings, "")
+    expect("arrow+enter opens Model, Quota & Keys", "Model, Quota & Keys" in settings and "model name" in settings, settings[-600:])
+    expect("settings screen lists the bot token field", "bot token" in settings, "")
 
     custom = run_pty([DOWN] * 6 + [b"\r"])
     expect("Custom → Target Paths & Runtime", "Target Paths & Runtime" in custom, custom[-600:])
 
     wipe = run_pty([DOWN] * 8 + [b"\r"])
-    expect("Full Wipe просит подтверждение", "Confirm Full Wipe" in wipe and "delete MSE completely" in wipe, wipe[-600:])
+    expect("Full Wipe asks for confirmation", "Confirm Full Wipe" in wipe and "delete MSE completely" in wipe, wipe[-600:])
 
     status = os.popen(sys.executable + " " + str(SCRIPT) + " --status 2>&1").read()
-    expect("--status без tty печатает здоровье", "здоровье стека" in status, status[-400:])
-    expect("--status знает четыре компонента", all(x in status for x in ("router", "backend", "tunnel", "bot")), "")
+    expect("--status without a tty prints the health", "stack health" in status, status[-400:])
+    expect("--status knows the four components", all(x in status for x in ("router", "backend", "tunnel", "bot")), "")
 
     bad = os.popen(sys.executable + " " + str(SCRIPT) + " --once 2>&1").read()
-    expect("флаги не поддерживаются (в духе reject_flags)", "unknown flag" in bad, bad[-300:])
+    expect("flags are rejected (reject_flags style)", "unknown flag" in bad, bad[-300:])
 
     print(("PASS " if not failures else "FAILED ") + "%d/%d checks" % (checked - len(failures), checked))
     return 0 if not failures else 1

@@ -1,25 +1,24 @@
-#!/usr/bin/env python3
-"""Аудит «ноль отпечатков» — то, что не должно попасть в публичный репозиторий.
+"""The "zero fingerprints" audit — the things that must never reach a public repository.
 
-    python3 scripts/audit.py              отчёт по дереву, код возврата 0
-    python3 scripts/audit.py --strict     то же, но любой hit — код 1 (это то, что гоняет CI)
-    python3 scripts/audit.py --git        проверять только то, что лежит в git (быстро, для хука)
-    python3 scripts/audit.py --json       машиночитаемый отчёт
-    python3 scripts/audit.py --log FILE   дописать отчёт в FILE (для PR-описания)
+python3 scripts/audit.py              report over the tree, exit code 0
+python3 scripts/audit.py --strict     the same, but any hit means exit 1 (this is what CI runs)
+python3 scripts/audit.py --git        only what is in git (fast, for a hook)
+python3 scripts/audit.py --json       a machine-readable report
+python3 scripts/audit.py --log FILE   append the report to FILE (for the PR description)
 
-Что ищется:
-  * токены и ключи: bot-токены Telegram, ghp_/gho_, sk-, GOCSPX-, OAuth client secret, PEM-ключи;
-  * адреса: IP вне документации (127.0.0.1/localhost и сети из RFC 5737 разрешены), socks-прокси;
-  * контакты: e-mail не на example.*, telegram-ссылки t.me с ником;
-  * туннели: конкретные trycloudflare-адреса, чужие *.ts.net, ngrok/localtunnel;
-  * чужие пути: домашние каталоги вроде /home/<name>/…, ~/.config/<tool>, antigravity-cli;
-  * живые Moodle-хосты вместо заглушек (всё, что не example.* и не публичный демо-сайт moodle.org).
+What it looks for:
+* tokens and keys: Telegram bot tokens, ghp_/gho_, sk-, GOCSPX-, OAuth client secrets, PEM keys;
+* addresses: IPs outside documentation (127.0.0.1/localhost and the RFC 5737 ranges are allowed), socks proxies;
+* contacts: e-mail not at example.*, t.me links with a handle;
+* tunnels: concrete trycloudflare addresses, somebody else's *.ts.net, ngrok/localtunnel;
+* foreign paths: home directories such as /home/<name>/…, ~/.config/<tool>, antigravity-cli;
+* live Moodle hosts instead of placeholders (anything that is not example.* and not the public moodle.org demo).
 
-Чего нет и быть не может: словаря фамилий. Вместо него — «тестовые» идентификаторы: moodleId в примерах
-обязан быть 12345/12346 и подобным, а ФИО — Test User / Тестовый Пользователь (см. правила SAMPLE_*).
+What it deliberately does not have: a dictionary of surnames. Instead it uses "test" identifiers: a moodleId in
+the examples has to be 12345/12346 and the like, and a name has to be Test User (see the SAMPLE_* rules).
 
-Сознательные исключения перечислены в ALLOW: это места, где строка — часть смысла продукта
-(адрес их базы ответов, публичный демо-сайт Moodle, локальный loopback).
+The deliberate exceptions are listed in ALLOW: places where the string is part of the product's meaning
+(the address of their answer database, the public Moodle demo site, the local loopback).
 """
 from __future__ import annotations
 
@@ -32,18 +31,18 @@ import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-# корень дерева: рядом со scripts/ по умолчанию, но его можно указать и снаружи (--root / MSE_AUDIT_ROOT),
-# чтобы прогнать тот же сканер по чужому дереву, не копируя скрипт
+# the root of the tree: next to scripts/ by default, but it can be pointed outside (--root / MSE_AUDIT_ROOT),
+# so the same scanner can be run over somebody else's tree without copying the script
 ROOT = Path(os.environ.get('MSE_AUDIT_ROOT') or Path(__file__).resolve().parent.parent).resolve()
 
-# ---------------------------------------------------------------------- что не читаем вовсе
+# ---------------------------------------------------------------------- what is never read
 SKIP_DIRS = {
     '.git', 'node_modules', 'vendor', '.venv', 'venv', '__pycache__', 'dist', 'build-out',
     '.mypy_cache', '.pytest_cache', '.ruff_cache', 'evidence', '.original', 'artifacts-cache',
 }
-# сторонние библиотеки, вендоренные для тестов: там адреса их авторов — не наш отпечаток
-SKIP_PREFIXES = ('tests/lib/stay/', 'tests/fixtures/tls/')  # сгенерированный ключ тоже не читаем
-# собранный userscript читаем, но только по «нашим» правилам: в нём живут адреса чужой сборки
+# third-party libraries vendored for the tests: the addresses of their authors are not our fingerprint
+SKIP_PREFIXES = ('tests/lib/stay/', 'tests/fixtures/tls/')  # the generated key is not read either
+# the built userscript is read, but only by "our" rules: somebody else's build addresses live inside it
 BUNDLE_RULES = {'telegram-bot-token', 'github-token', 'openai-key', 'google-oauth', 'oauth-secret',
                 'private-key', 'tailscale-key', 'admin-token', 'socks-proxy', 'tunnel-url',
                 'tailnet-host', 'telegram-link', 'home-path', 'tool-config-path', 'owner-tool', 'ip-address'}
@@ -52,7 +51,7 @@ BINARY_EXT = {
     '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.woff', '.woff2', '.ttf', '.otf',
     '.zip', '.gz', '.tgz', '.pdf', '.mp4', '.webm', '.so', '.wasm',
 }
-# большой собранный userscript читаем: внутри наш shell, но НЕ внутренности чужой сборки
+# the large built userscript is read: our shell is inside, but NOT the internals of the foreign build
 MAX_BYTES = 4 * 1024 * 1024
 
 
@@ -68,7 +67,7 @@ class Hit:
         return f"{self.path}:{self.line}: [{self.rule}] {self.text}" + (f"  ({self.note})" if self.note else "")
 
 
-# ---------------------------------------------------------------------- правила
+# ---------------------------------------------------------------------- the rules
 @dataclass
 class Rule:
     name: str
@@ -81,38 +80,38 @@ def _r(name: str, pattern: str, note: str = "", flags: int = 0) -> Rule:
 
 
 RULES = [
-    # --- токены и ключи
-    _r('telegram-bot-token', r'\b\d{8,10}:[A-Za-z0-9_-]{30,}\b', 'bot token от @BotFather'),
+    # --- tokens and keys
+    _r('telegram-bot-token', r'\b\d{8,10}:[A-Za-z0-9_-]{30,}\b', 'a bot token from @BotFather'),
     _r('github-token', r'\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b'),
     _r('openai-key', r'\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b'),
     _r('google-oauth', r'\bGOCSPX-[A-Za-z0-9_-]{10,}\b'),
     _r('oauth-secret', r'(?i)\bclient[_-]?secret\b\s*[:=]\s*["\']?[A-Za-z0-9_-]{16,}'),
     _r('private-key', r'-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----'),
     _r('tailscale-key', r'\btskey-(?:auth|api|client)-[A-Za-z0-9_-]{10,}'),
-    _r('admin-token', r'\badm_[A-Za-z0-9_-]{16,}', 'в репозитории допустим только тестовый adm_*_test'),
-    # --- сеть и адреса
-    _r('socks-proxy', r'\bsocks5h?://[^\s"\'<>]+', 'прокси инфраструктуры'),
+    _r('admin-token', r'\badm_[A-Za-z0-9_-]{16,}', 'only a test adm_*_test is allowed in the repository'),
+    # --- network and addresses
+    _r('socks-proxy', r'\bsocks5h?://[^\s"\'<>]+', 'infrastructure proxy'),
     _r('tunnel-url', r'https?://[a-z0-9-]+\.trycloudflare\.com'),
     _r('tunnel-url', r'https?://[a-z0-9-]+\.(?:ngrok\.io|ngrok-free\.app|loca\.lt|localhost\.run|serveo\.net)'),
-    _r('tailnet-host', r'https?://[a-z0-9-]+\.ts\.net', 'адрес конкретного tailnet'),
+    _r('tailnet-host', r'https?://[a-z0-9-]+\.ts\.net', 'the address of a concrete tailnet'),
     _r('telegram-link', r'https?://t\.me/[A-Za-z0-9_]{4,}'),
-    # --- контакты
+    # --- contacts
     _r('email', r'\b[A-Za-z0-9._%+-]+@(?!example\.(?:com|org|edu|net)\b)[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'),
-    # --- чужие файловые пути
-    _r('home-path', r'/(?:home|Users)/(?!user\b|<|\[|\$|\{|\()(?!runner\b)[A-Za-z][A-Za-z0-9._-]{1,32}/', 'домашний каталог с именем'),
-    _r('tool-config-path', r'~/\.(?:config|gemini|ssh)/[A-Za-z0-9._/-]+', 'путь личного каталога инструмента'),
+    # --- foreign file paths
+    _r('home-path', r'/(?:home|Users)/(?!user\b|<|\[|\$|\{|\()(?!runner\b)[A-Za-z][A-Za-z0-9._-]{1,32}/', 'a home directory with a name'),
+    _r('tool-config-path', r'~/\.(?:config|gemini|ssh)/[A-Za-z0-9._/-]+', 'the personal directory of a tool'),
     _r('owner-tool', r'(?i)antigravity-cli'),
 ]
 
-# IP: разрешены loopback, «документационные» и заведомо локальные сети (они ничего не выдают)
+# IP: loopback, the documentation ranges and the obviously local networks are allowed (they reveal nothing)
 ALLOWED_IPS = {
     '127.0.0.1', '0.0.0.0', '0.0.0.0.', '255.255.255.255',
     '192.0.2.1', '192.0.2.10', '198.51.100.1', '203.0.113.1',
 }
 PRIVATE_PREFIXES = ('10.', '192.168.', '172.16.', '172.17.', '172.18.', '172.19.', '172.2', '172.30.', '172.31.', '169.254.')
-RULE_IP = _r('ip-address', r'\b(?:\d{1,3}\.){3}\d{1,3}\b', 'адрес вне документации')
+RULE_IP = _r('ip-address', r'\b(?:\d{1,3}\.){3}\d{1,3}\b', 'an address outside documentation')
 
-# живые Moodle-хосты: разрешены только заглушки и публичный демо-сайт moodle.org
+# live Moodle hosts: only placeholders and the public moodle.org demo are allowed
 LIVE_HOST_OK = (
     'example.com', 'example.org', 'example.edu', 'example.net', 'sub.example.edu',
     'school.moodledemo.net', 'moodledemo.net', 'moodle.org', 'moodle.com', 'download.moodle.org',
@@ -124,13 +123,13 @@ LIVE_HOST_OK = (
     'code.google.com', 'pegjs.org', 'bugzil.la', 'addons.mozilla.org', 'chrome.google.com',
     'microsoftedge.microsoft.com', 'apps.apple.com', 'play.google.com', 'violentmonkey.github.io',
     'www.tampermonkey.net', 'tampermonkey.net', 'github.com', 'raw.githubusercontent.com',
-    'pkgs.tailscale.com', 'tailscale.com', 'archive.ubuntu.com', 'security.ubuntu.com',
+    'pkgs.tailscale.com', 'tailscale.com', 'deb.nodesource.com', 'archive.ubuntu.com', 'security.ubuntu.com',
 )
-RULE_HOST = _r('live-moodle-host', r'\bhttps?://([a-z0-9][a-z0-9.-]*\.[a-z]{2,})', 'хост вне разрешённых заглушек')
+RULE_HOST = _r('live-moodle-host', r'\bhttps?://([a-z0-9][a-z0-9.-]*\.[a-z]{2,})', 'a host outside the allowed placeholders')
 
-# ---------------------------------------------------------------------- исключения по строкам
+# ---------------------------------------------------------------------- per-line exceptions
 ALLOW_PATTERNS = [
-    re.compile(r'Storage/artifacts/mse\.user\.js'),       # собранный файл: правила те же, но путь длинный
+    re.compile(r'Storage/artifacts/mse\.user\.js'),       # the built file: the same rules, but the path is long
 ]
 
 
@@ -167,7 +166,7 @@ def iter_files(use_git: bool) -> list[Path]:
     return files
 
 
-# файлы-константы вроде сумм sha256: «logo@16.png» — не почта, а имя файла
+# constant files such as sha256 sums: "logo@16.png" is a file name, not an e-mail
 CHECKSUM_FILE = re.compile(r'\.(?:sha256|sha256sums|md5|sha1)$', re.I)
 
 
@@ -200,7 +199,7 @@ def scan_text(rel: str, text: str) -> list[Hit]:
                 continue
             if any(int(part) > 255 for part in ip.split('.')):
                 continue
-            hits.append(Hit('ip-address', rel, lineno, ip, 'адрес вне документации'))
+            hits.append(Hit('ip-address', rel, lineno, ip, 'an address outside documentation'))
         for m in RULE_HOST.pattern.finditer(line):
             host = m.group(1).lower()
             if host in LIVE_HOST_OK or host.endswith('.example.com') or host.endswith('.example.edu'):
@@ -211,7 +210,7 @@ def scan_text(rel: str, text: str) -> list[Hit]:
                 continue
             if host.endswith('.ts.net') and 'example' in host:
                 continue
-            hits.append(Hit('live-moodle-host', rel, lineno, host, 'хост вне разрешённых заглушек'))
+            hits.append(Hit('live-moodle-host', rel, lineno, host, 'a host outside the allowed placeholders'))
     if allowed_line:
         return [h for h in hits if h.rule not in ('ip-address', 'live-moodle-host')]
     return hits
@@ -219,12 +218,12 @@ def scan_text(rel: str, text: str) -> list[Hit]:
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--strict', action='store_true', help='любой hit → код возврата 1 (для CI)')
-    ap.add_argument('--git', action='store_true', help='только файлы в git')
-    ap.add_argument('--json', action='store_true', help='машиночитаемый отчёт')
-    ap.add_argument('--log', default='', help='дописать отчёт в файл')
-    ap.add_argument('--quiet', action='store_true', help='только сводка')
-    ap.add_argument('--root', default='', help='дерево для проверки (по умолчанию — это репозиторий)')
+    ap.add_argument('--strict', action='store_true', help='any hit means exit code 1 (for CI)')
+    ap.add_argument('--git', action='store_true', help='only files in git')
+    ap.add_argument('--json', action='store_true', help='a machine-readable report')
+    ap.add_argument('--log', default='', help='append the report to a file')
+    ap.add_argument('--quiet', action='store_true', help='the summary only')
+    ap.add_argument('--root', default='', help='the tree to check (this repository by default)')
     args = ap.parse_args(argv)
 
     global ROOT
@@ -253,7 +252,7 @@ def main(argv: list[str]) -> int:
             for h in sorted(hits, key=lambda x: (x.path, x.line)):
                 lines.append("  " + h.render())
     else:
-        lines.append("  чисто: ни одного отпечатка")
+        lines.append("  clean: not a single fingerprint")
 
     report = {
         'files': len(files),

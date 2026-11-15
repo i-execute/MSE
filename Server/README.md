@@ -1,17 +1,25 @@
-# MSE gateway
+# MSE router
 
-OpenAI-совместимый шлюз для расширения MSE: свой ключ устройства на клиенте, allow-list по Moodle ID,
-квоты, стриминг, лог. Наружу — через Cloudflare Tunnel.
+The OpenAI-compatible gateway behind the MSE extension: a device key on the client, an allow list by Moodle id,
+quotas, streaming, a log. The outside world reaches it only through tailscale.
 
 ```bash
-cp .env.example .env && $EDITOR .env
-set -a; . ./.env; set +a
-node mse-server.js                 # http://127.0.0.1:8788
-cloudflared tunnel --url http://127.0.0.1:8788
+MSE_ADMIN_TOKEN=$(openssl rand -hex 24) node mse-router.js     # http://127.0.0.1:8788
 ```
 
-Проверка: `curl -s http://127.0.0.1:8788/health` → `"name":"MSE gateway"`.
+Health check: `curl -s http://127.0.0.1:8788/health` → `"role":"router"`.
 
-Разрешить человека по ID: `curl -X POST $GW/admin/allow -H "x-admin-token: $MSE_ADMIN_TOKEN" -H 'content-type: application/json' -d '{"moodleId":"12345"}'`
+Allow a person by id:
 
-Полное задание для агента, который это поднимает: `AGENT-TASK.md`.
+```bash
+curl -X POST http://127.0.0.1:8788/admin/allow \
+  -H "x-admin-token: $MSE_ADMIN_TOKEN" -H 'content-type: application/json' \
+  -d '{"moodleId":"12345"}'
+```
+
+A new application is queued (`/admin/applications`), and the bot drains that queue to ping the owner in Telegram.
+
+Flags: none of this is meant to be typed by hand on a fresh machine — `Storage/get.sh` installs everything and
+`sudo mse` is the panel. The full brief for an agent that brings it up is in `AGENT-TASK.md`.
+
+`mse-server.js` is the older 1.0 gateway (no proxying); the tests keep it working as a reference.

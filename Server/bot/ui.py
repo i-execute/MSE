@@ -88,11 +88,11 @@ def screen(title: str, subtitle: str = "", blocks: Iterable[str] = (), buttons: 
 
 def state_of(device: dict[str, Any]) -> str:
     status = str(device.get("status") or "?")
-    return {"active": "работает", "pending": "ждёт", "revoked": "отозван"}.get(status, status)
+    return {"active": "active", "pending": "pending", "revoked": "revoked"}.get(status, status)
 
 
 def device_line(device: dict[str, Any]) -> str:
-    name = str(device.get("name") or "без имени")[:28]
+    name = str(device.get("name") or "no name")[:28]
     moodle = device.get("moodleId") or "—"
     left = device.get("quota")
     used = device.get("quotaUsed") or 0
@@ -109,101 +109,101 @@ def home(snap: dict[str, Any]) -> Rich:
     up = snap.get("upstream") or {}
     url = health.get("publicUrl") or "—"
     blocks = [
-        "<p>адрес: " + code(url) + "</p>",
-        "<p>бэкенд: " + code(f"{up.get('host', '127.0.0.1')}:{up.get('port', '?')}") + " · модель " + code(health.get("model") or "—") + "</p>",
-        "<p>квота: " + code(str(health.get("quota", "—")) + "/сутки") + " · устройств " + code(len(devices))
-        + " · работают " + code(len(active)) + " · ждут " + code(len(pending)) + "</p>",
+        "<p>address: " + code(url) + "</p>",
+        "<p>backend: " + code(f"{up.get('host', '127.0.0.1')}:{up.get('port', '?')}") + " · model " + code(health.get("model") or "—") + "</p>",
+        "<p>quota: " + code(str(health.get("quota", "—")) + "/day") + " · devices " + code(len(devices))
+        + " · active " + code(len(active)) + " · pending " + code(len(pending)) + "</p>",
     ]
     if pending:
-        blocks.append("<p>ждут решения:</p>")
+        blocks.append("<p>waiting for a decision:</p>")
         for d in pending[:6]:
             blocks.append("<p>" + device_line(d) + "</p>")
-    buttons = [row(button("устройства", "dev:list"), button("заявки" + (f" ({len(pending)})" if pending else ""), "dev:pending"))]
-    buttons.append(row(button("модель", "model:show"), button("квота", "quota:show"), button("лог", "log:show")))
-    buttons.append(row(button("туннель", "tunnel:show"), button("обновить", "home")))
-    return screen("MSE · шлюз", subtitle="управление сервером", blocks=blocks, buttons=buttons,
-                  footer=muted("версия " + str(health.get("version") or "?")))
+    buttons = [row(button("devices", "dev:list"), button("requests" + (f" ({len(pending)})" if pending else ""), "dev:pending"))]
+    buttons.append(row(button("model", "model:show"), button("quota", "quota:show"), button("log", "log:show")))
+    buttons.append(row(button("tunnel", "tunnel:show"), button("refresh", "home")))
+    return screen("MSE · gateway", subtitle="server control", blocks=blocks, buttons=buttons,
+                  footer=muted("version " + str(health.get("version") or "?")))
 
 
 def devices(snap: dict[str, Any], only: str = "") -> Rich:
     items = [d for d in (snap.get("devices") or []) if not only or str(d.get("status")) == only]
     blocks = []
     if not items:
-        blocks.append("<p>пока никого</p>")
+        blocks.append("<p>nobody yet</p>")
     for d in items[:10]:
         blocks.append("<p>" + device_line(d) + "</p>")
     buttons = []
     for d in items[:6]:
         did = str(d.get("deviceId") or "")
         if str(d.get("status")) == "pending":
-            buttons.append(row(button("пустить " + str(d.get("moodleId")), "dev:approve:" + did),
-                               button("отказ", "dev:revoke:" + did)))
+            buttons.append(row(button("allow " + str(d.get("moodleId")), "dev:approve:" + did),
+                               button("decline", "dev:revoke:" + did)))
         elif str(d.get("status")) == "active":
-            buttons.append(row(button("отозвать " + str(d.get("moodleId")), "dev:revoke:" + did)))
+            buttons.append(row(button("revoke " + str(d.get("moodleId")), "dev:revoke:" + did)))
         else:
-            buttons.append(row(button("вернуть " + str(d.get("moodleId")), "dev:approve:" + did)))
-    buttons.append(row(button("по ID…", "dev:allowask"), button("назад", "home")))
-    return screen("устройства", subtitle=("ждут" if only == "pending" else "все"), blocks=blocks, buttons=buttons)
+            buttons.append(row(button("restore " + str(d.get("moodleId")), "dev:approve:" + did)))
+    buttons.append(row(button("by id…", "dev:allowask"), button("back", "home")))
+    return screen("devices", subtitle=("waiting" if only == "pending" else "all"), blocks=blocks, buttons=buttons)
 
 
 def log(snap: dict[str, Any]) -> Rich:
     lines = (snap.get("log") or [])[-20:]
-    body = "\n".join(f"{str(l.get('at') or '')[11:19]}  {l.get('text') or ''}" for l in lines) or "пусто"
-    return screen("журнал", subtitle="последние 20 записей",
-                  blocks=[pre(body)], buttons=[row(button("обновить", "log:show"), button("назад", "home"))])
+    body = "\n".join(f"{str(l.get('at') or '')[11:19]}  {l.get('text') or ''}" for l in lines) or "empty"
+    return screen("log", subtitle="the last 20 records",
+                  blocks=[pre(body)], buttons=[row(button("refresh", "log:show"), button("back", "home"))])
 
 
 def model_screen(snap: dict[str, Any], notice: str = "", error: str = "") -> Rich:
     health = snap.get("health") or {}
     models = health.get("models") or []
-    blocks = ["<p>сейчас: " + code(health.get("model") or "—") + "</p>"]
+    blocks = ["<p>now: " + code(health.get("model") or "—") + "</p>"]
     if models:
-        blocks.append("<p>доступны: " + esc(", ".join(str(m) for m in models)) + "</p>")
+        blocks.append("<p>available: " + esc(", ".join(str(m) for m in models)) + "</p>")
     if notice:
         blocks.append("<p>" + esc(notice) + "</p>")
     if error:
-        blocks.append("<p>ошибка: " + esc(error) + "</p>")
+        blocks.append("<p>error: " + esc(error) + "</p>")
     buttons = [row(button(str(m), "model:set:" + str(m))) for m in models[:8]]
-    buttons.append(row(button("назад", "home")))
-    return screen("модель", subtitle="выбор сервером", blocks=blocks, buttons=buttons)
+    buttons.append(row(button("back", "home")))
+    return screen("model", subtitle="chosen by the server", blocks=blocks, buttons=buttons)
 
 
 def quota_screen(snap: dict[str, Any], notice: str = "", error: str = "") -> Rich:
     health = snap.get("health") or {}
-    blocks = ["<p>сейчас: " + code(str(health.get("quota", "—")) + " запросов в сутки на устройство") + "</p>"]
+    blocks = ["<p>now: " + code(str(health.get("quota", "—")) + " requests per day per device") + "</p>"]
     if notice:
         blocks.append("<p>" + esc(notice) + "</p>")
     if error:
-        blocks.append("<p>ошибка: " + esc(error) + "</p>")
+        blocks.append("<p>error: " + esc(error) + "</p>")
     buttons = [row(button("50", "quota:set:50"), button("100", "quota:set:100"), button("200", "quota:set:200"), button("500", "quota:set:500")),
-               row(button("назад", "home"))]
-    return screen("квота", subtitle="дневная, на устройство", blocks=blocks, buttons=buttons)
+               row(button("back", "home"))]
+    return screen("quota", subtitle="daily, per device", blocks=blocks, buttons=buttons)
 
 
 def tunnel_screen(info: dict[str, Any], notice: str = "", error: str = "") -> Rich:
     blocks = [
-        "<p>бэкенд: " + code(str(info.get("backend") or "tailscale")) + "</p>",
-        "<p>режим: " + code(str(info.get("mode") or "нет")) + "</p>",
-        "<p>адрес: " + code(str(info.get("url") or "—")) + "</p>",
-        "<p>ip в tailnet: " + code(str(info.get("ip") or "—")) + "</p>",
+        "<p>backend: " + code(str(info.get("backend") or "tailscale")) + "</p>",
+        "<p>mode: " + code(str(info.get("mode") or "none")) + "</p>",
+        "<p>address: " + code(str(info.get("url") or "—")) + "</p>",
+        "<p>tailnet ip: " + code(str(info.get("ip") or "—")) + "</p>",
     ]
     if info.get("installed") is not None:
-        blocks.append("<p>tailscale: " + esc("установлен" if info.get("installed") else "не установлен")
-                      + " · " + esc("поднят" if info.get("running") else "не поднят") + "</p>")
+        blocks.append("<p>tailscale: " + esc("installed" if info.get("installed") else "not installed")
+                      + " · " + esc("up" if info.get("running") else "not up") + "</p>")
     if notice:
         blocks.append("<p>" + esc(notice) + "</p>")
     if error:
-        blocks.append("<p>ошибка: " + esc(error) + "</p>")
+        blocks.append("<p>error: " + esc(error) + "</p>")
     url = str(info.get("url") or "")
-    buttons = [row(button("funnel", "tunnel:funnel"), button("serve", "tunnel:serve"), button("выключить", "tunnel:off"))]
+    buttons = [row(button("funnel", "tunnel:funnel"), button("serve", "tunnel:serve"), button("turn off", "tunnel:off"))]
     if url.startswith("https://"):
-        buttons.append(row(url_button("открыть", url + "/health")))
-    buttons.append(row(button("обновить", "tunnel:show"), button("назад", "home")))
-    return screen("туннель", subtitle="tailscale вместо cloudflared", blocks=blocks, buttons=buttons)
+        buttons.append(row(url_button("open", url + "/health")))
+    buttons.append(row(button("refresh", "tunnel:show"), button("back", "home")))
+    return screen("tunnel", subtitle="tailscale instead of cloudflared", blocks=blocks, buttons=buttons)
 
 
 def help_screen(admin: bool) -> Rich:
-    commands = "/start — эта панель\n/state — состояние шлюза\n/pending — заявки устройств\n/devices — все устройства"
+    commands = "/start — this panel\n/state — gateway state\n/pending — device requests\n/devices — all devices"
     if admin:
-        commands += "\n/allow <moodleId> — пустить по ID\n/revoke <moodleId|deviceId> — отозвать\n/quota <N> — квота в сутки\n/model <id> — модель"
-    return screen("MSE · команды", blocks=[pre(commands)], buttons=[row(button("панель", "home"))])
+        commands += "\n/allow <moodleId> — allow by id\n/revoke <moodleId|deviceId> — revoke\n/quota <N> — quota per day\n/model <id> — model"
+    return screen("MSE · commands", blocks=[pre(commands)], buttons=[row(button("panel", "home"))])

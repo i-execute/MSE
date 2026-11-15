@@ -284,7 +284,7 @@ const header = [
   '// @namespace    https://github.com/mse',
   `// @version      ${VERSION}`,
   '// @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.',
-  '// @description:ru Ответы и подсказки в тестах Moodle: кнопка MSE, встроенный сниффер трафика и ID вошедшего пользователя.',
+  '// @description Answers and hints for Moodle quizzes: the MSE button, a built-in traffic sniffer and the id of the signed-in user.',
   '// @author       MSE',
   '// @homepage     https://github.com/mse',
   ...MATCHES.map((m) => `// @match        ${m}`),

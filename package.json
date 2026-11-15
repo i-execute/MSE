@@ -6,7 +6,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "audit": "python3 scripts/audit.py --strict",
-    "build": "bash Extensions/build/build.sh",
+    "build": "bash Extensions/tools/build.sh",
     "test": "node --test --test-concurrency=1 tests/gateway.test.js tests/router.test.js",
     "test:ext": "SS_BROWSER=webkit node --test --test-concurrency=1 tests/mse.test.js",
     "test:bot": "python3 tests/bot_selftest.py"
