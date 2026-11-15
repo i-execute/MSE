@@ -26,16 +26,160 @@
   var CONFIG = Object.assign({
     urlKey: 'mse.gateway.url',
     urlMirrorKey: 'mse:local:gatewayUrl',
+    /* the one address of an older build: it is cleared on the first read and on every setUrl, so nothing can pick
+       it up again by itself */
+    urlLegacyKey: 'mse.gateway.url.legacy',
     keyKey: 'mse.gateway.key',
     keyMirrorKey: 'mse:local:gatewayKey',
     metaKey: 'mse.gateway.meta',
     timeoutMs: 8000
   }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
 
+  /* every place the address can hide: the site localStorage, the Stay storage (`ss:L:` area, the same keys the
+     panel writes through chrome.storage) and the two mirrors above */
+  var URL_PLACES = [
+    { where: 'localStorage', key: CONFIG.urlKey },
+    { where: 'localStorage', key: CONFIG.urlMirrorKey },
+    { where: 'localStorage', key: CONFIG.urlLegacyKey },
+    { where: 'stay', key: CONFIG.urlKey },
+    { where: 'stay', key: CONFIG.urlMirrorKey },
+    { where: 'stay', key: 'mse:L:' + CONFIG.urlKey }
+  ];
+  var LEGACY_URLS = ['https://syncshare.ru/api/', 'https://mse-gateway.example-tailnet.ts.net'];
+
   /* ------------------------------------------------------------ storage: twice, so nothing is lost */
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
   function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+  /* the Stay side of the storage. The page script does not see the extension api object: the runtime hands out its
+     chosen backend (script storage, the site localStorage or memory — the same one the panel writes through), and
+     that is what the second store is. A synchronous cache keeps the address readable without a tick. */
+  var stayCache = {};
+  var stayQueue = Promise.resolve();
+  function stayStore() {
+    var rt = window.__mseRuntime;
+    if (rt && typeof rt.pageStorage === 'function') return rt.pageStorage();
+    try {
+      var api = window.browser || window.chrome;
+      if (api && api.storage && api.storage.local) {
+        return {
+          get: function (k) { return Promise.resolve(api.storage.local.get(k)).then(function (o) { return o && o[k] !== undefined ? o[k] : null; }); },
+          set: function (k, v) { var o = {}; o[k] = v; return Promise.resolve(api.storage.local.set(o)); },
+          del: function (k) { return Promise.resolve(api.storage.local.remove ? api.storage.local.remove(k) : null); },
+          keys: function () { return Promise.resolve(api.storage.local.get(null)).then(function (o) { return Object.keys(o || {}); }); }
+        };
+      }
+    } catch (e) {}
+    return null;
+  }
+  /* one name for the second store: the runtime prefix it uses for its own local area */
+  function stayPrefixed(k) { return /^(mse|ss):L:/.test(k) ? k : 'mse:L:' + k; }
+  function stayGet(k) {
+    var full = stayPrefixed(k);
+    if (Object.prototype.hasOwnProperty.call(stayCache, full)) return stayCache[full];
+    var st = stayStore();
+    if (st) {
+      try {
+        st.get(full).then(function (v) {
+          if (v !== undefined && v !== null && v !== '') stayCache[full] = String(v);
+          else delete stayCache[full];
+        }, function () {});
+      } catch (e) {}
+    }
+    return null;
+  }
+  function staySet(k, v) {
+    var full = stayPrefixed(k);
+    stayCache[full] = String(v);
+    stayQueue = stayQueue.then(function () {
+      var st = stayStore();
+      if (!st) return null;
+      try { return st.set(full, String(v)); } catch (e) { return null; }
+    }).then(null, function () {});
+    return stayQueue;
+  }
+  function stayDel(k) {
+    var full = stayPrefixed(k);
+    delete stayCache[full];
+    stayQueue = stayQueue.then(function () {
+      var st = stayStore();
+      if (!st) return null;
+      try { return st.del(full); } catch (e) { return null; }
+    }).then(null, function () {});
+    return stayQueue;
+  }
+  /* the truth on disk, not the cache: what the audit and the test read */
+  function stayRead(k) {
+    var st = stayStore();
+    if (!st) return Promise.resolve(stayCache[stayPrefixed(k)] || null);
+    return Promise.resolve(st.get(stayPrefixed(k))).then(function (v) { return v === undefined ? null : v; }, function () { return null; });
+  }
+  function stayKeys() {
+    var st = stayStore();
+    if (!st) return Promise.resolve(Object.keys(stayCache));
+    return Promise.resolve(st.keys()).then(function (x) { return x || []; }, function () { return []; });
+  }
+
+  /* the address, from the one place it is allowed to be */
+  function normUrl(raw) { return String(raw || '').trim().replace(/\/+$/, ''); }
+  function sameUrl(a, b) { return normUrl(a) !== '' && normUrl(a) === normUrl(b); }
+  /* after the address changes, the old one must not be left anywhere. This is a scan, not a fixed list: every key
+     that looks like an address in every store is compared with the one that counts, and anything else is deleted. */
+  var lastScrub = [];
+  function scrubUrl(keep) {
+    var kept = normUrl(keep);
+    var dropped = [];
+    function consider(where, key, value, del) {
+      if (value === null || value === undefined || value === '') { if (where) del(); return; }
+      if (kept && sameUrl(value, kept)) return;
+      del();
+      dropped.push(where + ':' + key);
+    }
+    var lsList = [];
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var lk = localStorage.key(i);
+        if (/url/i.test(lk) && lsList.indexOf(lk) < 0) lsList.push(lk);
+      }
+    } catch (e) {}
+    [CONFIG.urlKey, CONFIG.urlMirrorKey, CONFIG.urlLegacyKey].forEach(function (k) { if (lsList.indexOf(k) < 0) lsList.push(k); });
+    lsList.forEach(function (k) {
+      consider('localStorage', k, lsGet(k), function () { lsDel(k); });
+    });
+    return stayKeys().then(function (all) {
+      var mine = (all || []).filter(function (k) { return /url/i.test(k); });
+      [CONFIG.urlKey, CONFIG.urlMirrorKey, CONFIG.urlLegacyKey].map(stayPrefixed).forEach(function (k) {
+        if (mine.indexOf(k) < 0) mine.push(k);
+      });
+      return Promise.all(mine.map(function (k) { return stayRead(k); })).then(function (vals) {
+        mine.forEach(function (k, i) {
+          consider('stay', k, vals[i], function () { stayDel(k); });
+        });
+        try {
+          var mirror = dig(window, CONFIG.urlMirrorKey.split(':'));
+          if (mirror && (!kept || !sameUrl(mirror, kept))) {
+            window[CONFIG.urlMirrorKey] = null;
+            dropped.push('window:' + CONFIG.urlMirrorKey);
+          }
+        } catch (e) {}
+        lastScrub = dropped;
+        return dropped;
+      });
+    }, function () {
+      lastScrub = dropped;
+      return dropped;
+    });
+  }
+  /* the places the address was removed from at the last change: the panel writes this line to its journal */
+  function scrubLog() { return lastScrub.slice(); }
+  /* every place, read for the audit the panel and the test use: what is really stored right now */
+  function urlPlaces() {
+    return URL_PLACES.map(function (place) {
+      var v = place.where === 'localStorage' ? lsGet(place.key) : stayGet(place.key);
+      return { where: place.where, key: place.key, value: v === undefined ? null : v };
+    });
+  }
   function dig(obj, p) {
     try {
       for (var i = 0; i < p.length; i++) { if (obj == null) return null; obj = obj[p[i]]; }
@@ -55,23 +199,71 @@
   var MSEBridge = {
     /* ---------------- the address ---------------- */
     url: function () {
-      var fromLs = lsGet(CONFIG.urlKey);
-      if (fromLs) return fromLs;
-      var fromStay = dig(window, CONFIG.urlMirrorKey.split(':'));
-      if (fromStay) { lsSet(CONFIG.urlKey, fromStay); return fromStay; }
+      var fromLs = lsGet(CONFIG.urlKey) || lsGet(CONFIG.urlMirrorKey);
+      if (fromLs) {
+        /* one address, one place: whatever is left elsewhere is cleared here, before it can be read again */
+        scrubUrl(fromLs);
+        return fromLs;
+      }
+      var fromStay = stayGet(CONFIG.urlKey) || stayGet(CONFIG.urlMirrorKey);
+      if (fromStay) {
+        var kept = normUrl(fromStay);
+        lsSet(CONFIG.urlKey, kept);
+        scrubUrl(kept);
+        return kept;
+      }
       return null;
     },
+    /* where the address is stored right now, and every place that still holds something else — read from disk,
+       not from the cache, so the answer is the truth after a reload */
+    audit: function () {
+      var current = this.url();
+      var keys = [CONFIG.urlKey, CONFIG.urlMirrorKey, CONFIG.urlLegacyKey];
+      var lsKeys = [];
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var lk = localStorage.key(i);
+          if (/url/i.test(lk) && lsKeys.indexOf(lk) < 0) lsKeys.push(lk);
+        }
+      } catch (e) {}
+      var lsPlaces = lsKeys.map(function (k) { return { where: 'localStorage', key: k, value: lsGet(k) }; });
+      return stayKeys().then(function (all) {
+        var stayPlaces = (all || []).filter(function (k) { return /url/i.test(k); }).map(function (k) {
+          return { where: 'stay', key: k, value: stayCache[k] === undefined ? null : stayCache[k] };
+        });
+        return Promise.all((all || []).filter(function (k) { return /url/i.test(k); }).map(function (k) { return stayRead(k); })).then(function (vals) {
+          vals.forEach(function (v, i) { stayPlaces[i].value = v; });
+          var places = lsPlaces.concat(stayPlaces);
+          var strays = places.filter(function (p) { return p.value && !sameUrl(p.value, current); });
+          return { url: current, places: places, strays: strays };
+        });
+      }, function () {
+        var places = lsPlaces.concat(urlPlaces().filter(function (p) { return p.where === 'stay'; }));
+        var strays = places.filter(function (p) { return p.value && !sameUrl(p.value, current); });
+        return { url: current, places: places, strays: strays };
+      });
+    },
     setUrl: function (raw) {
-      var url = String(raw || '').trim().replace(/\/+$/, '');
-      if (!url) { lsDel(CONFIG.urlKey); lsDel(CONFIG.urlMirrorKey); return null; }
+      var url = normUrl(raw);
+      if (!url) {
+        lsDel(CONFIG.urlKey); lsDel(CONFIG.urlMirrorKey);
+        stayDel(CONFIG.urlKey); stayDel(CONFIG.urlMirrorKey);
+        scrubUrl(null);
+        return null;
+      }
       if (!/^https?:\/\/[^\s\/]+\.[^\s\/]+/.test(url) && !/^http:\/\/127\.0\.0\.1(:\d+)?$/.test(url) && !/^http:\/\/localhost(:\d+)?$/.test(url)) {
         throw new Error('this does not look like an address: an http:// or https:// with a domain is needed');
       }
       if (!/^https:/.test(url) && !/^http:\/\/(127\.0\.0\.1|localhost)/.test(url)) {
         throw new Error('without https only localhost works: the tunnel is always https');
       }
+      /* the new address replaces the old one everywhere: written to both stores, then every other place is
+         cleared, so there is exactly one address and no way back to the one before */
+      staySet(CONFIG.urlKey, url);
       lsSet(CONFIG.urlKey, url);
       lsSet(CONFIG.urlMirrorKey, url);
+      try { window[CONFIG.urlMirrorKey] = url; } catch (e) {}
+      scrubUrl(url);
       return url;
     },
 
@@ -130,8 +322,12 @@
     },
     reset: function () {
       this.forgetKey();
-      try { window[CONFIG.urlMirrorKey] = null; } catch (e) {}
+      this.setUrl('');
     },
+    /* the api the panel and the test reach: no window property is the source of truth any more */
+    places: urlPlaces,
+    scrub: scrubUrl,
+    cleared: scrubLog,
 
     /* ---------------- the call that matters: register this device with the gateway ---------------- */
     register: function (identity) {

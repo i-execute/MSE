@@ -236,6 +236,17 @@ function createSyncShareRuntime(env) {
       'storage probe ' + b.name
     );
   }
+  /* the page script keeps out of the stand-in api: the layer that runs beside it reads the same keys through the
+     storage it is handed, and that storage is the very backend chosen here */
+  function pageStorage() {
+    return {
+      get: function (k) { return kv.get(k).then(function (v) { return v === undefined ? null : v; }, function () { return null; }); },
+      set: function (k, v) { return kv.set(k, v).then(function () { return true; }, function () { return false; }); },
+      del: function (k) { return kv.del(k).then(function () { return true; }, function () { return false; }); },
+      keys: function () { return (kv.list ? kv.list() : Promise.resolve([])).then(function (x) { return normList(x, ''); }, function () { return []; }); }
+    };
+  }
+
   function pickBackend() {
     var candidates = [gmAsyncBackend(), gmSyncBackend(), localStorageBackend(), memoryBackend()].filter(Boolean);
     var i = 0;
@@ -1731,6 +1742,7 @@ function createSyncShareRuntime(env) {
     openExtensionPage: openExtensionPage,
     closeExtensionPage: closeExtensionPage,
     bgReady: bgReady.promise,
+    pageStorage: pageStorage,
     _internals: {
       contexts: contexts,
       newContext: newContext,

@@ -556,8 +556,12 @@ setup_tunnel() {
       # and only then let the router read the address (its /health must carry it, and the owner checks it from a phone)
       say "  tunnel:    waiting for https from the outside (up to 60s)"
       if have mse-tunnel.sh MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh wait --timeout 60 --quiet; then
-        url="$(MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh url 2>/dev/null | tail -1 || true)"
-        env_set MSE_PUBLIC_URL "$url"
+        # the address the tunnel reports after the wait is the same one: take it only if it is really an address, so a
+        # silent helper can never blank what the funnel already wrote
+        fresh="$(MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh url 2>/dev/null | tail -1 || true)"
+        case "$fresh" in
+          https://*) url="$fresh"; env_set MSE_PUBLIC_URL "$url" ;;
+        esac
         say "  tunnel:    https answers from the outside"
       else
         note "the address does not answer from the outside yet"

@@ -342,7 +342,7 @@ test('M9 the network journal: a failing request is reported in one line and kept
     await page.waitForTimeout(500);
     const net = await page.evaluate(() => window.__mse.state());
     assert.equal(net.route, 'net');
-    assert.match(net.pop.text, /NETWORK LOG/);
+    assert.match(net.pop.text, /journal/i);
     assert.match(net.pop.text, /500/);
     await page.screenshot({ path: path.join(EVID, '4-net.png') });
     report.m9 = { journal: journal.slice(-3), text: net.pop.text.slice(0, 240) };

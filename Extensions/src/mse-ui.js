@@ -27,154 +27,12 @@
     client: '2.22.0',
     posKey: 'mse.pos',
     logKey: 'mse.log',
-    width: 272,
+    width: 300,
     agentRetryMs: 5000
   }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
 
   /* ------------------------------------------------------------------ styles */
-  var CSS = [
-    ':host,*{box-sizing:border-box}',
-    '.mse{',
-      /* the palette of the reference: paper #0a0a0b, rule oklch(22%), ink oklch(98%) */
-      '--paper:#0d1420;--paper-2:#121b2a;--paper-3:#182335;',
-      '--ink:#eaf2ff;--ink-2:#c3d2e8;--muted:#8ba0bd;--rule:#243349;--rule-2:#334762;',
-      '--glow:rgba(169,205,255,.22);--glow-hard:rgba(198,222,255,.42);',
-      '--r:12px;--r-panel:16px;--pill:999px;',
-      '--ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);',
-      'font:14px/1.45 "Onest",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink);',
-      '-webkit-font-smoothing:antialiased',
-    '}',
-
-    /* ---------- the pill: tiny, dark, only the letters carry light ---------- */
-    '.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;',
-      'height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);',
-      'background:#101a2b;border:1px solid rgba(160,200,255,.24);color:var(--ink);',
-      'font:700 10.5px/1 "Tektur","Onest",sans-serif;letter-spacing:.16em;text-indent:.16em;',
-      'text-shadow:0 0 9px rgba(180,214,255,.55),0 0 20px rgba(150,196,255,.26);',
-      'cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;',
-      'transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}',
-    '.pill.dragging{opacity:.9}',
-    '.pill:active{transform:scale(.97)}',
-    '.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;',
-      'background:#a9cdff;color:#0d1420;font:700 9px/14px "Onest",sans-serif;text-align:center;text-indent:0;text-shadow:none}',
-    '.pill.lit{animation:pill-press .9s linear;border-color:rgba(169,205,255,.55)}',
-    '@keyframes pill-press{0%,100%{text-shadow:0 0 9px rgba(180,214,255,.55),0 0 20px rgba(150,196,255,.26)}',
-      '8%{text-shadow:0 0 13px rgba(206,228,255,.9),0 0 30px rgba(160,200,255,.55)}',
-      '40%{text-shadow:0 0 11px rgba(190,220,255,.65),0 0 24px rgba(150,196,255,.34)}}',
-
-    /* ---------- every control inside takes the light on press ---------- */
-    '.press{position:relative;isolation:isolate}',
-    '.press::before,.press::after{content:"";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;',
-      'opacity:0;transition:opacity .2s var(--ease-out)}',
-    '.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;',
-      'box-shadow:0 0 12px 1px rgba(190,220,255,.55),0 0 34px 6px rgba(150,196,255,.28),0 0 84px 20px rgba(120,170,255,.12)}',
-    '.press::after{top:0;right:0;bottom:0;left:0;background:rgba(169,205,255,.22);',
-      'box-shadow:0 0 24px 3px rgba(170,206,255,.42),0 0 72px 18px rgba(140,190,255,.18),inset 0 0 12px 1px rgba(190,220,255,.24)}',
-    /* the exact curve of the reference, done with a keyframed custom property */
-    '.press.hot{animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards;border-color:rgba(169,205,255,.62)}',
-    '@property --press{syntax:"<number>";inherits:false;initial-value:0}',
-    '@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}',
-      '18%{--press:.52;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.3}74%{--press:.15}to{--press:0}}',
-    '@keyframes press-ink{0%{text-shadow:0 0 12px rgba(169,205,255,0),0 0 26px rgba(169,205,255,0)}',
-      '4%{text-shadow:0 0 13px rgba(206,228,255,.55),0 0 30px rgba(160,200,255,.36)}',
-      '18%{text-shadow:0 0 11px rgba(190,220,255,.3),0 0 26px rgba(150,196,255,.2)}',
-      '46%{text-shadow:0 0 9px rgba(170,206,255,.17),0 0 22px rgba(140,190,255,.12)}',
-      '74%{text-shadow:0 0 8px rgba(160,200,255,.08),0 0 18px rgba(130,180,255,.06)}',
-      'to{text-shadow:0 0 6px rgba(169,205,255,0),0 0 14px rgba(169,205,255,0)}}',
-    '.press.hot::before{opacity:var(--press)}',
-    '.press.hot::after{opacity:calc(var(--press) * .82)}',
-    /* a control that stays lit (the chosen answer): quieter than the flash, and it does not go out */
-    '.press.lit{border-color:rgba(169,205,255,.55);text-shadow:0 0 11px rgba(190,220,255,.5),0 0 26px rgba(150,196,255,.26)}',
-    '.press.lit::before{opacity:.42}',
-    '.press.lit::after{opacity:.28}',
-    '.press:active{transform:scale(.985)}',
-
-    /* ---------- the panel ---------- */
-    '.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:272px;max-width:calc(100vw - 16px);',
-      'background:linear-gradient(180deg,#111b2c,#0b1220 62%);border:1px solid var(--rule);border-radius:var(--r-panel);',
-      'box-shadow:0 22px 54px rgba(4,10,22,.78),0 0 0 1px rgba(150,196,255,.07);overflow:hidden;',
-      'transform-origin:var(--ox,100%) var(--oy,100%);',
-      'opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);',
-      'transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}',
-    '.pop.in{opacity:1;transform:none;filter:none}',
-    '.pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}',
-    /* the rows float in one after another: only while opening, never on the way out */
-    '.pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}',
-    '@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}',
-    '.ph{display:flex;align-items:center;gap:6px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.07)}',
-    '.ph .t{flex:1 1 auto;min-width:0;font:700 11px/1 "Tektur","Onest",sans-serif;letter-spacing:.15em;',
-      'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 0 10px rgba(169,205,255,.34)}',
-    '.ph .t em{font:400 10.5px/1 "Onest",sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none}',
-    '.ib{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;',
-      'border-radius:9px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);',
-      'font:600 13px/1 Georgia,serif;cursor:pointer}',
-    '.ib.x{font:400 15px/1 -apple-system,sans-serif}',
-    '.ib.back{font:400 14px/1 -apple-system,sans-serif}',
-    '.pb{max-height:min(52vh,340px);overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 10px 10px}',
-    '.pb::-webkit-scrollbar{width:0}',
-
-    /* ---------- answers ---------- */
-    '.ans{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;margin:0 0 6px;padding:7px 9px;',
-      'border-radius:var(--r);border:1px solid #2a3b52;background:#121c2c;color:#e4eefc;',
-      'font:400 13px/1.3 inherit;text-align:left;cursor:pointer}',
-    '.ans .mark{flex:0 0 auto;width:17px;height:17px;border-radius:5px;border:1px solid #3c5470;',
-      'display:flex;align-items:center;justify-content:center;font:700 10px/1 inherit;color:#0d1420}',
-    '.ans.best .mark{background:#a9cdff;border-color:#a9cdff}',
-    '.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}',
-    '.ans .pct{flex:0 0 auto;font:600 10.5px/1 "Onest",sans-serif;color:var(--muted)}',
-    '.ans.agent{border-style:dashed}',
-    '.ans.ai{border-style:dotted;border-color:#5b7899}',
-    '.ans.ai.busy .lbl{color:var(--muted)}',
-    '.tag{font:600 9px/1 "Tektur","Onest",sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:4px}',
-
-    /* ---------- one status line, not a paragraph ---------- */
-    '.row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border-radius:10px;border:1px solid #23364d;',
-      'background:#101a2a;color:var(--ink-2);font:400 11.5px/1.35 inherit;text-align:left;cursor:pointer}',
-    '.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:#5f7a9c}',
-    '.row .dot.ok{background:#8fd8f0;box-shadow:0 0 8px rgba(143,216,240,.7)}',
-    '.row .dot.warn{background:#f2c26b;box-shadow:0 0 8px rgba(242,194,107,.7)}',
-    '.row .dot.bad{background:#ff8f8f;box-shadow:0 0 8px rgba(255,143,143,.7)}',
-    '.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.row .more{flex:0 0 auto;font-size:10.5px;color:var(--muted)}',
-    '.btn{flex:1 1 auto;min-width:0;height:32px;padding:0 10px;border-radius:10px;border:1px solid var(--rule-2);',
-      'background:#152135;color:#e4eefc;font:600 12px/1 inherit;cursor:pointer;white-space:nowrap}',
-    '.btn.solid{background:#a9cdff;color:#0d1420;border-color:#a9cdff}',
-    '.frow{display:flex;gap:6px;flex-wrap:wrap}',
-    '.inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 9px;border-radius:10px;border:1px solid #2b3f59;',
-      'background:#0e1726;color:#e4eefc;font:12.5px/1 "Onest",sans-serif;outline:none}',
-    '.inp:focus{border-color:#7ea6d8}',
-    '.sec{font:700 9.5px/1 "Tektur","Onest",sans-serif;letter-spacing:.18em;color:#8ba0bd;margin:9px 0 6px}',
-    '.sec:first-child{margin-top:2px}',
-    /* the copy value: no frame that can cut it, a tap copies and flashes */
-    '.val{display:flex;align-items:center;gap:8px;width:100%;padding:8px 9px;margin:0 0 6px;border-radius:10px;',
-      'border:1px solid #23364d;background:#101a2a;color:var(--ink);font:400 12px/1.35 "JetBrains Mono",ui-monospace,Menlo,monospace;',
-      'text-align:left;cursor:pointer}',
-    '.val .k{flex:0 0 46px;font:600 9.5px/1.4 "Onest",sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}',
-    '.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}',
-    /* a human value: the same row, but set in the text face, so a name never breaks mid-letter */
-    '.val.human{font:400 12.5px/1.35 "Onest",sans-serif}',
-    '.val.human .v{overflow-wrap:break-word}',
-    '.val .copy{flex:0 0 auto;font:600 9.5px/1 "Onest",sans-serif;color:var(--muted)}',
-    '.models{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}',
-    '.chip{padding:4px 8px;border-radius:999px;border:1px solid #2a3b52;background:#101a2a;',
-      'font:500 10.5px/1 "JetBrains Mono",ui-monospace,Menlo,monospace;color:var(--ink-2)}',
-    '.log{font:400 10.5px/1.5 "JetBrains Mono",ui-monospace,Menlo,monospace;color:var(--ink-2)}',
-    '.log .ln{display:flex;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05);word-break:break-word}',
-    '.log .ln .g{flex:0 0 auto;width:6px;height:6px;margin-top:5px;border-radius:50%;background:#5f7a9c}',
-    '.log .ln.ok .g{background:#8ee6a4}',
-    '.log .ln.warn .g{background:#f2c26b}',
-    '.log .ln.bad .g{background:#ff8f8f}',
-    '.log .ln .t{flex:0 0 auto;color:#6f6f78}',
-    '.log .ln .m{flex:1 1 auto;min-width:0}',
-    '.empty{padding:12px 4px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5}',
-    '.spin{width:14px;height:14px;margin:8px auto;border-radius:50%;border:1.5px solid #2b3f59;border-top-color:#bcd8ff;animation:sp .7s linear infinite}',
-    '@keyframes sp{to{transform:rotate(360deg)}}',
-    '.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:8px 13px;',
-      'border-radius:999px;background:#152135;border:1px solid #34496a;color:#e4eefc;font:12px/1.35 inherit;text-align:center;',
-      'box-shadow:0 0 20px rgba(255,255,255,.12);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:2147483647}',
-    '.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}',
-    '@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}'
-  ].join('');
+  var CSS = [ /* @theme */ ];
 
   /* ------------------------------------------------------------------ per-type knowledge */
   /* the types the answer service of the original understands, and how each is read and filled here */
@@ -773,8 +631,16 @@
     var pos = { x: null, y: null };
     try { var saved = JSON.parse(ls.get(CONFIG.posKey, 'null') || 'null'); if (saved && typeof saved.x === 'number') { pos.x = saved.x; pos.y = saved.y; } } catch (e) {}
 
+    function viewport() {
+      /* what the phone really shows: the visual viewport shrinks when the browser bars come in */
+      var vv = win.visualViewport;
+      var w = Math.round((vv && vv.width) || win.innerWidth);
+      var h = Math.round((vv && vv.height) || win.innerHeight);
+      return { w: w, h: h };
+    }
+
     function place() {
-      var w = win.innerWidth, h = win.innerHeight;
+      var vp = viewport(), w = vp.w, h = vp.h;
       var pw = pill.offsetWidth || 44, ph = pill.offsetHeight || 28;
       var x = pos.x == null ? w - 12 - pw : pos.x;
       var y = pos.y == null ? h - 76 : pos.y;
@@ -851,14 +717,16 @@
 
     function layout() {
       if (!pop) return;
-      var w = Math.min(CONFIG.width, win.innerWidth - 16);
+      var vp = viewport(), vw = vp.w, vh = vp.h;
+      /* never wider than the screen with a gutter on both sides: a phone is 390 wide, two of those have 8px each */
+      var w = Math.min(CONFIG.width, vw - 16);
       pop.style.width = w + 'px';
       var r = pill.getBoundingClientRect();
       var gap = 8;
       var h = pop.offsetHeight || 180;
-      var left = Math.max(8, Math.min(r.right - w, win.innerWidth - w - 8));
+      var left = Math.max(8, Math.min(r.right - w, vw - w - 8));
       pop.style.left = left + 'px';
-      var above = r.top - gap - 6, below = win.innerHeight - r.bottom - gap - 6;
+      var above = r.top - gap - 6, below = vh - r.bottom - gap - 6;
       var top;
       if (above >= h || above >= below) {
         top = Math.max(6, r.top - gap - h);
@@ -867,6 +735,8 @@
         top = r.bottom + gap;
         pop.style.setProperty('--oy', '0%');
       }
+      /* it stays inside the screen even when there is not enough room on either side */
+      top = Math.max(6, Math.min(top, vh - h - 6));
       pop.style.top = top + 'px';
       pop.style.setProperty('--ox', Math.max(0, Math.min(100, ((r.right - 24 - left) / w) * 100)) + '%');
     }
@@ -901,8 +771,12 @@
 
     var rise = 0;
     function N(node, index) {
-      /* the stagger index of a row inside the panel: 0 is a valid index, undefined is "no stagger" */
-      node.classList.add('rise');
+      /* the stagger index of a row inside the panel: 0 is a valid index, undefined is "no stagger". A row that
+         already went up does not do it twice, so a redraw keeps its place instead of flashing the whole panel. */
+      if (!node.__mseRisen) {
+        node.__mseRisen = true;
+        node.classList.add('rise');
+      }
       node.style.setProperty('--i', String(index === undefined ? rise++ : index));
       return node;
     }
@@ -916,7 +790,7 @@
       lead.style.fontFamily = leading === 'back' ? '' : 'Georgia,serif';
       h.appendChild(lead);
       var t = el('div', 't', titleText);
-      if (sub) t.appendChild(el('em', '', ' · ' + sub));
+      if (sub) t.appendChild(el('em', '', sub));
       h.appendChild(t);
       var x = press(el('button', 'ib x', '×'), closePop);
       x.setAttribute('aria-label', 'close');
@@ -1084,6 +958,8 @@
         body.appendChild(N(el('div', 'empty', 'no answers yet')));
         if (aiAllowed()) appendAi(q);
       } else {
+        var list = el('div', 'group');
+        body.appendChild(N(list, 0));
         rows.slice(0, 6).forEach(function (r, i) {
           var a = el('button', 'ans press' + (r.correctness > 0 ? ' best' : ''));
           a.setAttribute('type', 'button');
@@ -1101,11 +977,11 @@
               else toast('no such option in the form');
             }, 70);
           });
-          body.appendChild(N(a, i));
+          list.appendChild(N(a, i));
         });
       }
-      body.appendChild(N(statusLine(), 1));
       if (aiAllowed()) body.appendChild(N(agentStrip(), 1));
+      body.appendChild(N(statusLine(), 1));
     }
 
     /* the AI row: one call to the model when their base stayed silent; the text grows while it arrives */
@@ -1310,12 +1186,14 @@
     function viewAccount() {
       var id = identity();
       var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
-      body.appendChild(N(el('div', 'sec', 'MOODLE ACCOUNT')));
+      body.appendChild(N(el('div', 'sec', 'account')));
       body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
       body.appendChild(N(valueRow('login', id.login, !!id.login), 1));
       body.appendChild(N(valueRow('name', id.name, !!id.name, true), 1));
-      body.appendChild(N(el('div', 'sec', 'DEVICE'), 1));
-      body.appendChild(N(valueRow('key', win.MSEBridge ? win.MSEBridge.key() : null, !!(win.MSEBridge && win.MSEBridge.key())), 1));
+      body.appendChild(N(el('div', 'sec', 'this device'), 1));
+      /* the key itself is never drawn: it lives on this device and is used, not shown */
+      var key = win.MSEBridge ? win.MSEBridge.key() : null;
+      body.appendChild(N(valueRow('key', win.MSEBridge ? win.MSEBridge.maskedKey() : null, !!key), 1));
       var st = state.gw.check;
       var line = el('div', 'row');
       var good = st && st.state === 'active';
@@ -1330,13 +1208,49 @@
       body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
     }
 
+    /* the one path an address takes: checked, then it replaces the old one everywhere, then it is used */
+    function checkGateway(raw) {
+      var gw = state.gw;
+      var br = win.MSEBridge;
+      if (!br || !raw) return Promise.resolve(null);
+      gw.busy = 'check';
+      gw.probe = null;
+      gw.models = null;
+      render();
+      return br.probe(raw).then(function (r) {
+        gw.probe = r;
+        if (!r.ok) { gw.busy = null; logAdd('gateway', false, 'AI gateway: ' + r.message); render(); return null; }
+        /* the new address replaces the old one in every store before anything else can read it */
+        br.setUrl(raw);
+        (br.audit ? br.audit() : Promise.resolve({ strays: [] })).then(function (audit) {
+          var cleared = br.cleared ? br.cleared() : [];
+          if (audit && audit.strays.length) logAdd('gateway', false, 'the old address is still in ' + audit.strays.length + ' place(s)');
+          else if (cleared.length) logAdd('gateway', true, 'the old address was cleared from ' + cleared.length + ' place(s)');
+        }, function () {});
+        /* the address answers: now ask it what it accepts and whether this key is welcome */
+        return Promise.all([br.models(), br.check()]).then(function (out) {
+          gw.models = out[0];
+          gw.check = out[1];
+          gw.busy = null;
+          logAdd('gateway', true, 'AI gateway is up · ' + (out[0].models.length || 0) + ' models', { ms: r.ms });
+          render();
+          return r;
+        });
+      }, function (e) {
+        gw.busy = null;
+        gw.probe = { ok: false, message: (e && e.message) || 'error' };
+        render();
+        return null;
+      });
+    }
+
     /* ---------------- the gateway: address, one check, the model that will help ---------------- */
     function viewGateway() {
       var gw = state.gw;
       var br = win.MSEBridge;
       if (!br) { body.appendChild(N(el('div', 'empty', 'the AI gateway layer did not load'))); return; }
 
-      body.appendChild(N(el('div', 'sec', 'AI GATEWAY'), 0));
+      body.appendChild(N(el('div', 'sec', 'address'), 0));
       var input = el('input', 'inp');
       input.type = 'url';
       input.inputMode = 'url';
@@ -1344,37 +1258,24 @@
       input.spellcheck = false;
       input.placeholder = 'https://…';
       input.value = br.url() || '';
+      /* a typed address is not used until it is checked: the saved one is the only one that counts */
+      input.addEventListener('input', function () {
+        var typed = String(input.value || '').trim().replace(/\/+$/, '');
+        var saved = br.url() || '';
+        input.setAttribute('data-changed', typed && typed !== saved ? '1' : '0');
+      });
       body.appendChild(N(input, 1));
+      body.appendChild(N(el('div', 'sec', 'connection'), 0));
       var frow = el('div', 'frow');
-      body.appendChild(N(frow, 1));
+      body.appendChild(N(frow, 0));
       var check = press(el('button', 'btn solid', gw.busy ? 'checking…' : 'check'), function () {
-        var url = String(input.value || '').trim();
-        gw.busy = 'check';
-        gw.probe = null;
-        gw.models = null;
-        render();
-        br.probe(url).then(function (r) {
-          gw.probe = r;
-          if (!r.ok) { gw.busy = null; logAdd('gateway', false, 'AI gateway: ' + r.message); render(); return; }
-          br.setUrl(url);
-          /* the address answers: now ask it what it accepts and whether this key is welcome */
-          return Promise.all([br.models(), br.check()]).then(function (out) {
-            gw.models = out[0];
-            gw.check = out[1];
-            gw.busy = null;
-            logAdd('gateway', true, 'AI gateway is up · ' + (out[0].models.length || 0) + ' models', { ms: r.ms });
-            render();
-          });
-        }, function (e) {
-          gw.busy = null;
-          gw.probe = { ok: false, message: (e && e.message) || 'error' };
-          render();
-        });
+        return checkGateway(String(input.value || '').trim());
       });
       frow.appendChild(check);
       if (gw.busy === 'check') check.textContent = 'checking…';
 
       if (gw.probe) {
+        body.appendChild(N(el('div', 'sec', 'answer'), 0));
         var p = el('div', 'row');
         p.appendChild(el('span', 'dot ' + (gw.probe.ok ? 'ok' : 'bad')));
         p.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered · ' + gw.probe.ms + ' ms' : gw.probe.message));
@@ -1403,7 +1304,7 @@
         }
       }
       if (gw.models && gw.models.models.length) {
-        body.appendChild(N(el('div', 'sec', 'MODELS · CHOSEN BY THE SERVER'), 1));
+        body.appendChild(N(el('div', 'sec', 'models'), 1));
         var list = el('div', 'models');
         gw.models.models.forEach(function (m) { list.appendChild(el('span', 'chip', m)); });
         body.appendChild(N(list, 1));
@@ -1415,7 +1316,7 @@
 
     /* ---------------- the network log ---------------- */
     function viewNet() {
-      body.appendChild(N(el('div', 'sec', 'NETWORK LOG'), 0));
+      body.appendChild(N(el('div', 'sec', 'journal'), 0));
       if (!log.length) { body.appendChild(N(el('div', 'empty', 'empty so far'))); return; }
       var box = el('div', 'log');
       log.slice(-40).reverse().forEach(function (l, i) {
@@ -1513,10 +1414,19 @@
         if (open) { if (!pop) openPop(); state.route = 'gateway'; render(); }
         return win.MSEBridge ? win.MSEBridge.status() : null;
       },
+      /* the panel's own check, reachable the way the panel reaches it: the same function the button calls */
+      gateway: function (url) { return checkGateway(String(url || '').trim()).then(function (r) { return r ? { ok: true } : { ok: false, probe: state.gw.probe }; }); },
       route: function (r) { if (r) { if (!pop) openPop(); state.route = r; render(); } return state.route; },
       pos: function () { return { x: pos.x, y: pos.y }; },
       move: function (x, y) { pos.x = x; pos.y = y; place(); ls.set(CONFIG.posKey, JSON.stringify({ x: pos.x, y: pos.y })); return { x: pos.x, y: pos.y }; },
       toast: toast,
+      /* the panel itself, for a test that has to measure it: the shadow root is closed on purpose, so the element is
+         handed out here rather than opened to the page's own scripts */
+      root: function () {
+        /* the panel element itself: the shadow root is closed on purpose, and a node handed out from inside it can
+           still be measured and queried, which is all a test needs */
+        return wrap || root || null;
+      },
       state: function () {
         return {
           visible: !!pop,

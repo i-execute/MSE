@@ -28,7 +28,7 @@ const VENDOR = LAYOUT.VENDOR;
 const OUT = LAYOUT.OUT;
 const SRC = LAYOUT.SRC;
 const BRAND = 'MSE';
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const read = (p) => fs.readFileSync(path.join(VENDOR, p), 'utf8');
@@ -178,7 +178,15 @@ for (const k of ['action', 'browser_action', 'page_action', 'sidebar_action']) {
   if (manifest[k] && typeof manifest[k].default_title === 'string') manifest[k].default_title = rebrand(manifest[k].default_title, 'manifest.' + k + '.default_title');
 }
 const data = { manifest, locales, resources, pages };
-const shellSrc = fs.readFileSync(path.join(SRC, 'mse-ui.js'), 'utf8');
+/* the whole theme lives in one file and is injected into the interface at build time: no second copy to drift, and
+   the shipped script keeps a single <style> of its own */
+const shellSrc = (() => {
+  const css = fs.readFileSync(path.join(SRC, 'theme.css'), 'utf8');
+  const shell = fs.readFileSync(path.join(SRC, 'mse-ui.js'), 'utf8');
+  const marker = '  var CSS = [ /* @theme */ ];';
+  if (!shell.includes(marker)) throw new Error('the theme marker is gone from src/mse-ui.js');
+  return shell.replace(marker, '  var CSS = ' + JSON.stringify(':host,*{box-sizing:border-box}\n' + css) + ';');
+})();
 const debugSrc = rebrand(fs.readFileSync(path.join(SRC, 'debug.js'), 'utf8'), 'src/debug.js');
 const authSrc = fs.readFileSync(path.join(SRC, 'mse-auth.js'), 'utf8');
 const bridgeSrc = fs.readFileSync(path.join(SRC, 'mse-bridge.js'), 'utf8');
@@ -249,6 +257,9 @@ manifest:__mseData.manifest,locales:__mseData.locales,resources:__mseData.resour
 config:Object.assign({extId:"mse-stay",keyPrefix:"mse:",popupHash:"#mse"},__mseConfig)
 });
 try{__mseRuntime.boot();}catch(e){}
+/* the layer beside the page script reads the same storage through this name: the runtime picks the backend, and
+   that backend is what the extension's own storage would be */
+try{__mseW.__mseRuntime=__mseRuntime;}catch(e){}
 /* ---- the bridge, the authorisation, the debug layer and the interface: one scope each, no extra <script> tags */
 ${bridgeClean}
 ${authClean}
