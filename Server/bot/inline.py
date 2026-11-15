@@ -188,14 +188,32 @@ def clean_value(ident: str, value: str) -> str:
 
 
 # ------------------------------------------------------------------ results
-def article(rid: str, title: str, description: str, text: str, src: str = "bot") -> dict[str, Any]:
+def article(rid: str, title: str, description: str, text: str, src: str = "mt") -> dict[str, Any]:
+    """One inline result, in the shape the transport actually wants.
+
+    goygram's inline answer goes out over MTProto as messages.setInlineBotResults, and there every nested object
+    needs its constructor name in "_" — a bot-API shaped dict fails with "nested object missing _", which is exactly
+    what happened before. MSE only ever runs on the MTProto path (the bot token is used for requests, the account
+    for transport), so the MTProto shape is the only one built here; `src="bot"` stays for a plain bot-api client.
+    """
+    ident = rid if len(rid) <= 64 else rid[:64]
+    title = " ".join(str(title or "").split())[:120]
+    description = " ".join(str(description or "").split())[:240]
+    if str(src) == "bot":
+        return {
+            "type": "article",
+            "id": ident,
+            "title": title,
+            "description": description,
+            "input_message_content": {"message_text": text, "disable_web_page_preview": True},
+        }
     return {
+        "_": "inputBotInlineResult",
+        "id": ident,
         "type": "article",
-        "id": rid[:64],
         "title": title,
-        "description": description[:200],
-        "text": text,
-        "input_message_content": {"message_text": text},
+        "description": description,
+        "send_message": {"_": "inputBotInlineMessageText", "no_webpage": True, "message": text},
     }
 
 

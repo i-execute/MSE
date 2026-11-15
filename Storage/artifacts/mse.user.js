@@ -1816,13 +1816,3045 @@ config:Object.assign({extId:"mse-stay",keyPrefix:"mse:",popupHash:"#mse"},__mseC
 });
 try{__mseRuntime.boot();}catch(e){}
  
-var __mseShellSrc="var __ssW=window,__msePageWindow=window;\n'use strict';\n\n\n(function () {\n  'use strict';\n\n  var CONFIG = Object.assign({\n    brand: 'MSE',\n    version: '0.3.0',\n    apiBase: 'https:/\\/syncshare.ru/api/',\n    client: '2.22.0',\n    posKey: 'mse.pos',\n    logKey: 'mse.log',\n    width: 272,\n    agentRetryMs: 5000\n  }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});\n\n   \n  var CSS = [\n    ':host,*{box-sizing:border-box}',\n    '.mse{',\n       \n      '--paper:#0d1420;--paper-2:#121b2a;--paper-3:#182335;',\n      '--ink:#eaf2ff;--ink-2:#c3d2e8;--muted:#8ba0bd;--rule:#243349;--rule-2:#334762;',\n      '--glow:rgba(169,205,255,.22);--glow-hard:rgba(198,222,255,.42);',\n      '--r:12px;--r-panel:16px;--pill:999px;',\n      '--ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);',\n      'font:14px/1.45 \"Onest\",-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;color:var(--ink);',\n      '-webkit-font-smoothing:antialiased',\n    '}',\n\n     \n    '.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;',\n      'height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);',\n      'background:#101a2b;border:1px solid rgba(160,200,255,.24);color:var(--ink);',\n      'font:700 10.5px/1 \"Tektur\",\"Onest\",sans-serif;letter-spacing:.16em;text-indent:.16em;',\n      'text-shadow:0 0 9px rgba(180,214,255,.55),0 0 20px rgba(150,196,255,.26);',\n      'cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;',\n      'transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}',\n    '.pill.dragging{opacity:.9}',\n    '.pill:active{transform:scale(.97)}',\n    '.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;',\n      'background:#a9cdff;color:#0d1420;font:700 9px/14px \"Onest\",sans-serif;text-align:center;text-indent:0;text-shadow:none}',\n    '.pill.lit{animation:pill-press .9s linear;border-color:rgba(169,205,255,.55)}',\n    '@keyframes pill-press{0%,100%{text-shadow:0 0 9px rgba(180,214,255,.55),0 0 20px rgba(150,196,255,.26)}',\n      '8%{text-shadow:0 0 13px rgba(206,228,255,.9),0 0 30px rgba(160,200,255,.55)}',\n      '40%{text-shadow:0 0 11px rgba(190,220,255,.65),0 0 24px rgba(150,196,255,.34)}}',\n\n     \n    '.press{position:relative;isolation:isolate}',\n    '.press::before,.press::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;',\n      'opacity:0;transition:opacity .2s var(--ease-out)}',\n    '.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;',\n      'box-shadow:0 0 12px 1px rgba(190,220,255,.55),0 0 34px 6px rgba(150,196,255,.28),0 0 84px 20px rgba(120,170,255,.12)}',\n    '.press::after{top:0;right:0;bottom:0;left:0;background:rgba(169,205,255,.22);',\n      'box-shadow:0 0 24px 3px rgba(170,206,255,.42),0 0 72px 18px rgba(140,190,255,.18),inset 0 0 12px 1px rgba(190,220,255,.24)}',\n     \n    '.press.hot{animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards;border-color:rgba(169,205,255,.62)}',\n    '@property --press{syntax:\"<number>\";inherits:false;initial-value:0}',\n    '@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}',\n      '18%{--press:.52;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.3}74%{--press:.15}to{--press:0}}',\n    '@keyframes press-ink{0%{text-shadow:0 0 12px rgba(169,205,255,0),0 0 26px rgba(169,205,255,0)}',\n      '4%{text-shadow:0 0 13px rgba(206,228,255,.55),0 0 30px rgba(160,200,255,.36)}',\n      '18%{text-shadow:0 0 11px rgba(190,220,255,.3),0 0 26px rgba(150,196,255,.2)}',\n      '46%{text-shadow:0 0 9px rgba(170,206,255,.17),0 0 22px rgba(140,190,255,.12)}',\n      '74%{text-shadow:0 0 8px rgba(160,200,255,.08),0 0 18px rgba(130,180,255,.06)}',\n      'to{text-shadow:0 0 6px rgba(169,205,255,0),0 0 14px rgba(169,205,255,0)}}',\n    '.press.hot::before{opacity:var(--press)}',\n    '.press.hot::after{opacity:calc(var(--press) * .82)}',\n     \n    '.press.lit{border-color:rgba(169,205,255,.55);text-shadow:0 0 11px rgba(190,220,255,.5),0 0 26px rgba(150,196,255,.26)}',\n    '.press.lit::before{opacity:.42}',\n    '.press.lit::after{opacity:.28}',\n    '.press:active{transform:scale(.985)}',\n\n     \n    '.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:272px;max-width:calc(100vw - 16px);',\n      'background:linear-gradient(180deg,#111b2c,#0b1220 62%);border:1px solid var(--rule);border-radius:var(--r-panel);',\n      'box-shadow:0 22px 54px rgba(4,10,22,.78),0 0 0 1px rgba(150,196,255,.07);overflow:hidden;',\n      'transform-origin:var(--ox,100%) var(--oy,100%);',\n      'opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);',\n      'transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}',\n    '.pop.in{opacity:1;transform:none;filter:none}',\n    '.pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}',\n     \n    '.pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}',\n    '@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}',\n    '.ph{display:flex;align-items:center;gap:6px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.07)}',\n    '.ph .t{flex:1 1 auto;min-width:0;font:700 11px/1 \"Tektur\",\"Onest\",sans-serif;letter-spacing:.15em;',\n      'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 0 10px rgba(169,205,255,.34)}',\n    '.ph .t em{font:400 10.5px/1 \"Onest\",sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none}',\n    '.ib{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;',\n      'border-radius:9px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);',\n      'font:600 13px/1 Georgia,serif;cursor:pointer}',\n    '.ib.x{font:400 15px/1 -apple-system,sans-serif}',\n    '.ib.back{font:400 14px/1 -apple-system,sans-serif}',\n    '.pb{max-height:min(52vh,340px);overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 10px 10px}',\n    '.pb::-webkit-scrollbar{width:0}',\n\n     \n    '.ans{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;margin:0 0 6px;padding:7px 9px;',\n      'border-radius:var(--r);border:1px solid #2a3b52;background:#121c2c;color:#e4eefc;',\n      'font:400 13px/1.3 inherit;text-align:left;cursor:pointer}',\n    '.ans .mark{flex:0 0 auto;width:17px;height:17px;border-radius:5px;border:1px solid #3c5470;',\n      'display:flex;align-items:center;justify-content:center;font:700 10px/1 inherit;color:#0d1420}',\n    '.ans.best .mark{background:#a9cdff;border-color:#a9cdff}',\n    '.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}',\n    '.ans .pct{flex:0 0 auto;font:600 10.5px/1 \"Onest\",sans-serif;color:var(--muted)}',\n    '.ans.agent{border-style:dashed}',\n    '.ans.ai{border-style:dotted;border-color:#5b7899}',\n    '.ans.ai.busy .lbl{color:var(--muted)}',\n    '.tag{font:600 9px/1 \"Tektur\",\"Onest\",sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:4px}',\n\n     \n    '.row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border-radius:10px;border:1px solid #23364d;',\n      'background:#101a2a;color:var(--ink-2);font:400 11.5px/1.35 inherit;text-align:left;cursor:pointer}',\n    '.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:#5f7a9c}',\n    '.row .dot.ok{background:#8fd8f0;box-shadow:0 0 8px rgba(143,216,240,.7)}',\n    '.row .dot.warn{background:#f2c26b;box-shadow:0 0 8px rgba(242,194,107,.7)}',\n    '.row .dot.bad{background:#ff8f8f;box-shadow:0 0 8px rgba(255,143,143,.7)}',\n    '.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',\n    '.row .more{flex:0 0 auto;font-size:10.5px;color:var(--muted)}',\n    '.btn{flex:1 1 auto;min-width:0;height:32px;padding:0 10px;border-radius:10px;border:1px solid var(--rule-2);',\n      'background:#152135;color:#e4eefc;font:600 12px/1 inherit;cursor:pointer;white-space:nowrap}',\n    '.btn.solid{background:#a9cdff;color:#0d1420;border-color:#a9cdff}',\n    '.frow{display:flex;gap:6px;flex-wrap:wrap}',\n    '.inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 9px;border-radius:10px;border:1px solid #2b3f59;',\n      'background:#0e1726;color:#e4eefc;font:12.5px/1 \"Onest\",sans-serif;outline:none}',\n    '.inp:focus{border-color:#7ea6d8}',\n    '.sec{font:700 9.5px/1 \"Tektur\",\"Onest\",sans-serif;letter-spacing:.18em;color:#8ba0bd;margin:9px 0 6px}',\n    '.sec:first-child{margin-top:2px}',\n     \n    '.val{display:flex;align-items:center;gap:8px;width:100%;padding:8px 9px;margin:0 0 6px;border-radius:10px;',\n      'border:1px solid #23364d;background:#101a2a;color:var(--ink);font:400 12px/1.35 \"JetBrains Mono\",ui-monospace,Menlo,monospace;',\n      'text-align:left;cursor:pointer}',\n    '.val .k{flex:0 0 46px;font:600 9.5px/1.4 \"Onest\",sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}',\n    '.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}',\n     \n    '.val.human{font:400 12.5px/1.35 \"Onest\",sans-serif}',\n    '.val.human .v{overflow-wrap:break-word}',\n    '.val .copy{flex:0 0 auto;font:600 9.5px/1 \"Onest\",sans-serif;color:var(--muted)}',\n    '.models{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}',\n    '.chip{padding:4px 8px;border-radius:999px;border:1px solid #2a3b52;background:#101a2a;',\n      'font:500 10.5px/1 \"JetBrains Mono\",ui-monospace,Menlo,monospace;color:var(--ink-2)}',\n    '.log{font:400 10.5px/1.5 \"JetBrains Mono\",ui-monospace,Menlo,monospace;color:var(--ink-2)}',\n    '.log .ln{display:flex;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05);word-break:break-word}',\n    '.log .ln .g{flex:0 0 auto;width:6px;height:6px;margin-top:5px;border-radius:50%;background:#5f7a9c}',\n    '.log .ln.ok .g{background:#8ee6a4}',\n    '.log .ln.warn .g{background:#f2c26b}',\n    '.log .ln.bad .g{background:#ff8f8f}',\n    '.log .ln .t{flex:0 0 auto;color:#6f6f78}',\n    '.log .ln .m{flex:1 1 auto;min-width:0}',\n    '.empty{padding:12px 4px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5}',\n    '.spin{width:14px;height:14px;margin:8px auto;border-radius:50%;border:1.5px solid #2b3f59;border-top-color:#bcd8ff;animation:sp .7s linear infinite}',\n    '@keyframes sp{to{transform:rotate(360deg)}}',\n    '.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:8px 13px;',\n      'border-radius:999px;background:#152135;border:1px solid #34496a;color:#e4eefc;font:12px/1.35 inherit;text-align:center;',\n      'box-shadow:0 0 20px rgba(255,255,255,.12);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:2147483647}',\n    '.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}',\n    '@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}'\n  ].join('');\n\n   \n   \n  var TYPE_INFO = {\n    multichoice: { label: 'one answer', kind: 'choice' },\n    multichoiceset: { label: 'several answers', kind: 'choice' },\n    truefalse: { label: 'true/false', kind: 'choice' },\n    shortanswer: { label: 'short answer', kind: 'text' },\n    numerical: { label: 'number', kind: 'text' },\n    match: { label: 'matching', kind: 'select' },\n    gapselect: { label: 'choose from a list', kind: 'select' },\n    multianswer: { label: 'nested questions', kind: 'select' },\n    gapfill: { label: 'gaps', kind: 'text' },\n    coderunner: { label: 'code', kind: 'text' },\n    calculated: { label: 'calculated', kind: 'text' },\n    calculatedsimple: { label: 'calculated', kind: 'text' },\n    calculatedmulti: { label: 'calculated', kind: 'text' }\n  };\n   \n  var UNSUPPORTED = {\n    ddwtos: 'drag into text',\n    ddimageortext: 'drag onto an image',\n    ddmarker: 'markers on an image',\n    dragdrop: 'drag and drop',\n    ordering: 'ordering',\n    essay: 'essay',\n    description: 'description (not a question)'\n  };\n\n  function boot() {\n    var win = window;\n    var doc = document;\n    if (win.__mse) return;\n\n    var ls = {\n      get: function (k, d) { try { var v = win.localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },\n      set: function (k, v) { try { win.localStorage.setItem(k, v); return true; } catch (e) { return false; } }\n    };\n    function el(tag, cls, text) {\n      var n = doc.createElement(tag);\n      if (cls) n.className = cls;\n      if (text != null) n.textContent = text;\n      return n;\n    }\n    function norm(s) {\n      return String(s == null ? '' : s).replace(/\\s+/g, ' ').trim().toLowerCase()\n        .replace(/^[a-zа-я]\\.\\s{0,}/i, '').replace(/[.,;:!?\"'«»()]/g, '');\n    }\n\n     \n    var log = [];\n    try { log = JSON.parse(ls.get(CONFIG.logKey, '[]')) || []; } catch (e) { log = []; }\n    function logAdd(kind, ok, text, extra) {\n      var line = { t: Date.now(), kind: kind, ok: ok, text: String(text || '') };\n      if (extra && extra.ms != null) line.ms = extra.ms;\n      log.push(line);\n      if (log.length > 120) log.splice(0, log.length - 120);\n      ls.set(CONFIG.logKey, JSON.stringify(log));\n      if (pop && state.route === 'net') render();\n      updateDot();\n      return line;\n    }\n    function logLast(kind) {\n      for (var i = log.length - 1; i >= 0; i--) if (!kind || log[i].kind === kind) return log[i];\n      return null;\n    }\n    function ago(ts) {\n      var s = Math.round((Date.now() - ts) / 1000);\n      if (s < 60) return s + ' s';\n      if (s < 3600) return Math.round(s / 60) + ' min';\n      return Math.round(s / 3600) + ' h';\n    }\n\n     \n    \n\n    function idFromValue(v) {\n      if (v === null || v === undefined) return null;\n      var s = String(v).trim();\n      if (!/^\\d{1,12}$/.test(s)) return null;\n      if (s === '0') return null;\n      return s;\n    }\n    function learnedKey() { return 'mse.id.' + String(win.location.host); }\n    function learnId(id, name, login) {\n      if (id) ls.set(learnedKey(), String(id));\n      if (name) ls.set(learnedKey() + '.name', String(name));\n      if (login) ls.set(learnedKey() + '.login', String(login));\n    }\n\n    function identity() {\n      var out = { id: null, idSource: null, name: null, nameSource: null, login: null, site: null };\n      var cfg = null;\n      try { cfg = win.M && win.M.cfg; } catch (e) { cfg = null; }\n      if (cfg) {\n        if (cfg.siteId) out.site = String(cfg.siteId);\n        if (cfg.username) out.login = String(cfg.username);\n      }\n       \n      var candidates = [];\n      if (cfg) {\n        candidates.push([idFromValue(cfg.userid), 'M.cfg.userid']);\n        candidates.push([idFromValue(cfg.userId), 'M.cfg.userId']);\n        candidates.push([idFromValue(cfg.user && cfg.user.id), 'M.cfg.user.id']);\n      }\n       \n      ['html', 'body'].forEach(function (sel) {\n        var node = doc.querySelector(sel);\n        if (!node) return;\n        candidates.push([idFromValue(node.getAttribute('data-userid')), sel + '@data-userid']);\n        candidates.push([idFromValue(node.getAttribute('data-user-id')), sel + '@data-user-id']);\n      });\n      var anyData = doc.querySelector('[data-userid], [data-user-id]');\n      if (anyData) {\n        candidates.push([idFromValue(anyData.getAttribute('data-userid')), 'data-userid']);\n        candidates.push([idFromValue(anyData.getAttribute('data-user-id')), 'data-user-id']);\n      }\n       \n      var links = doc.querySelectorAll('a[href*=\"profile.php\"], a[href*=\"user/view.php\"], a[href*=\"/user/profile\"], a[href*=\"user/index.php?id=\"]');\n      for (var i = 0; i < links.length && i < 12; i++) {\n        var href = links[i].getAttribute('href') || '';\n        var m = /[?&](?:id|userid)=(\\d+)/.exec(href) || /\\x2Fuser\\x2F(?:profile|view)\\x2F(\\d+)/.exec(href);\n        if (m) { candidates.push([idFromValue(m[1]), 'profile link']); break; }\n      }\n       \n      var hidden = doc.querySelector('input[name=\"userid\"], input[name=\"user_id\"], input[name=\"id\"][type=\"hidden\"]');\n      if (hidden) {\n        var ctx = String(hidden.form && hidden.form.getAttribute('action') || '');\n        if (/user|profile|message|course/.test(ctx) || hidden.name !== 'id') candidates.push([idFromValue(hidden.value), 'hidden field']);\n      }\n       \n      candidates.push([idFromValue(ls.get(learnedKey(), null)), 'remembered from /my/']);\n\n      for (var c = 0; c < candidates.length; c++) {\n        if (candidates[c][0]) { out.id = candidates[c][0]; out.idSource = candidates[c][1]; break; }\n      }\n\n       \n      var nameSel = [\n        '.usertext', '[data-region=\"user-menu\"] .usertext', '.userbutton .usertext', '#nav-user-menu .usertext',\n        '[data-region=\"user-menu\"] .fw-bold', '.usermenu .usertext', 'a.dropdown-toggle .usertext'\n      ];\n      for (var n = 0; n < nameSel.length && !out.name; n++) {\n        var node = doc.querySelector(nameSel[n]);\n        var t = node ? String(node.textContent || '').replace(/\\s+/g, ' ').trim() : '';\n        if (t && t.length > 1 && t.length < 120) { out.name = t; out.nameSource = 'user menu'; }\n      }\n      if (!out.name) {\n        var pic = doc.querySelector('img.userpicture, img.avatar, img[src*=\"/user/icon\"], img[src*=\"u/\"]');\n        var alt = pic && String(pic.getAttribute('alt') || pic.getAttribute('title') || '').replace(/^picture of\\s{0,}/i, '').trim();\n        if (alt && alt.length > 1 && alt.length < 120) { out.name = alt; out.nameSource = 'avatar'; }\n      }\n      if (!out.name) {\n        var kept = ls.get(learnedKey() + '.name', null);\n        if (kept) { out.name = kept; out.nameSource = 'remembered'; }\n      }\n      if (!out.login) {\n        var keptLogin = ls.get(learnedKey() + '.login', null);\n        if (keptLogin) out.login = keptLogin;\n      }\n      if (out.id) learnId(out.id, out.name, out.login);\n      return out;\n    }\n\n     \n    \n\n    function readIdFromHtml(text) {\n      var html = String(text || '');\n      var m = /M\\.cfg\\s*=\\s*(\\{[\\s\\S]{0,4000}?\\})\\s*;/.exec(html);\n      if (m) {\n        var cfg = null;\n        try { cfg = JSON.parse(m[1]); } catch (e) { cfg = null; }\n        if (cfg) {\n          var fromCfg = idFromValue(cfg.userid) || idFromValue(cfg.userId) || idFromValue(cfg.user && cfg.user.id);\n          if (fromCfg) return fromCfg;\n        } else {\n          var loose = /\"userid\"\\s*:\\s*\"?(\\d{1,12})/.exec(m[1]);\n          if (loose) return loose[1];\n        }\n      }\n      var userBlock = /\"user\"\\s*:\\s*\\{[^{}]{0,400}\"id\"\\s*:\\s*\"?(\\d{1,12})/.exec(html);\n      if (userBlock) return userBlock[1];\n      var profile = /(?:user\\x2Fprofile|user\\x2Fview)\\.php\\?(?:[^\"'\\s]*?&)?id=(\\d{1,12})/.exec(html)\n        || /\\x2Fuser\\x2F(?:profile|view)\\x2F(\\d{1,12})/.exec(html);\n      if (profile) return profile[1];\n      var dataAttr = /data-user-?id=[\"'](\\d{1,12})/.exec(html);\n      if (dataAttr) return dataAttr[1];\n      var last = /\\buserid\\s*[:=]\\s*\"?[\\\"']?(\\d{1,12})(?!\\d)/.exec(html);\n      return last ? last[1] : null;\n    }\n\n     \n    function readNameFromHtml(text) {\n      var html = String(text || '');\n      var m = /class=\"[^\"]*\\busertext\\b[^\"]*\"[^>]*>([^<]{2,120})</.exec(html);\n      if (m) return m[1].replace(/\\s+/g, ' ').trim();\n      var alt = /<img[^>]+class=\"[^\"]*userpicture[^\"]*\"[^>]*alt=\"([^\"]{2,120})\"/.exec(html);\n      if (alt) return alt[1].replace(/^picture of\\s{0,}/i, '').trim();\n      var title = /<a[^>]+href=\"[^\"]*user\\x2Fprofile\\.php[^\"]*\"[^>]*>([^<]{2,120})</.exec(html);\n      if (title) return title[1].replace(/\\s+/g, ' ').trim();\n      return null;\n    }\n\n    function learnFromCabinet() {\n      var started = Date.now();\n      return fetch('/my/', { method: 'GET', credentials: 'same-origin', headers: { accept: 'text/html' } })\n        .then(function (r) { return r.text(); })\n        .then(function (html) {\n          var id = readIdFromHtml(html);\n          var name = readNameFromHtml(html);\n          if (!id) {\n            logAdd('gateway', false, 'no id on /my/ either', { ms: Date.now() - started });\n            return { ok: false, message: 'no id on /my/ either' };\n          }\n          learnId(id, name, null);\n          logAdd('gateway', true, 'id taken from /my/: ' + id, { ms: Date.now() - started });\n          return { ok: true, id: id, name: name };\n        }, function (e) {\n          logAdd('gateway', false, '/my/ page did not open: ' + ((e && e.message) || 'network'), { ms: Date.now() - started });\n          return { ok: false, message: '/my/ page did not open' };\n        });\n    }\n\n     \n    var LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];\n\n     \n    function questionIdentity(text) {\n      var t = String(text || '').trim().toLowerCase().replace(/[\\s:.,!?*+\\x2F-]/g, '');\n      var n = 7;\n      for (var i = 0; i < t.length; i++) {\n        var c = t.charCodeAt(i);\n        n = n + (c << 5) - c;\n      }\n      return n;\n    }\n    function textOf(node) {\n      if (!node) return '';\n      return String(node.innerText || node.textContent || '').replace(/\\s+/g, ' ').trim();\n    }\n     \n    function answerText(input) {\n      var node = null;\n      var byRef = input.getAttribute('aria-labelledby');\n      if (byRef) {\n        byRef.split(/\\s+/).forEach(function (id) {\n          if (node || !id) return;\n          var n = doc.getElementById(id);\n          if (n) node = n;\n        });\n      }\n      if (!node && input.id) node = doc.querySelector('label[for=\"' + input.id + '\"]');\n      if (!node) {\n        var holder = input.closest('.answer, .r0, .r1, [class^=\"r\"]') || input.parentNode;\n        node = holder && holder.querySelector('[data-region=\"answer-label\"], label');\n      }\n      if (!node) return String(input.getAttribute('value') || '');\n      var flex = node.querySelector('.flex-fill');\n      if (flex) return textOf(flex);\n      var copy = node.cloneNode(true);\n      Array.prototype.forEach.call(copy.querySelectorAll('.answernumber, .accesshide'), function (x) {\n        if (x.parentNode) x.parentNode.removeChild(x);\n      });\n      return textOf(copy);\n    }\n    function typeOf(block) {\n      var cls = String(block.className || '').split(/\\s+/);\n      for (var i = 0; i < cls.length; i++) {\n        if (cls[i] === 'que' || !cls[i]) continue;\n        return cls[i];\n      }\n      return 'multichoice';\n    }\n    function qidOf(block) {\n      var post = block.querySelector('input.questionflagpostdata');\n      if (post) {\n        var v = String(post.getAttribute('value') || '');\n        var m = /(?:^|&)qid=(\\d+)/.exec(v);\n        if (m) return m[1];\n      }\n      var m2 = /^question-(\\d+)-/.exec(block.id || '');\n      return m2 ? null : null;\n    }\n\n    function readQuestion(block) {\n      var qtext = block.querySelector('.qtext');\n      if (!qtext) return null;\n      var clone = qtext.cloneNode(true);\n      Array.prototype.forEach.call(clone.querySelectorAll('.accesshide'), function (x) {\n        if (x.parentNode) x.parentNode.removeChild(x);\n      });\n      var text = textOf(clone);\n      var type = typeOf(block);\n      var q = {\n        node: block,\n        text: text,\n        type: type,\n        label: (TYPE_INFO[type] || {}).label || null,\n        kind: (TYPE_INFO[type] || {}).kind || null,\n        supported: !!TYPE_INFO[type],\n        unsupported: UNSUPPORTED[type] || null,\n        identity: questionIdentity(text),\n        questionId: qidOf(block),\n        answers: [],\n        controls: []\n      };\n       \n      var inputs = block.querySelectorAll('input[type=radio], input[type=checkbox]');\n      for (var i = 0; i < inputs.length; i++) {\n        var inp = inputs[i];\n        if (!/^q\\d+:\\d+_answer/.test(inp.name || '')) continue;\n        if (String(inp.getAttribute('value')) === '-1') continue;  \n        if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;\n        q.answers.push({ input: inp, kind: 'choice', text: answerText(inp), letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });\n      }\n       \n      var selects = block.querySelectorAll('select');\n      for (var s = 0; s < selects.length; s++) {\n        var sel = selects[s];\n        if (!/^q\\d+:\\d+_/.test(sel.name || '')) continue;\n        q.controls.push({ kind: 'select', node: sel });\n      }\n       \n      var texts = block.querySelectorAll('input[type=text][name], textarea[name]');\n      for (var t2 = 0; t2 < texts.length; t2++) {\n        var box = texts[t2];\n        if (!/^q\\d+:\\d+_/.test(box.name || '')) continue;\n        if (/_:flagged|_:sequencecheck/.test(box.name)) continue;\n        q.controls.push({ kind: 'text', node: box });\n      }\n       \n      var places = block.querySelectorAll('input.placeinput');\n      if (places.length) q.controls.push({ kind: 'places', count: places.length });\n      return q;\n    }\n\n    function readQuestions() {\n      var out = [];\n      var blocks = doc.querySelectorAll('.que');\n      for (var i = 0; i < blocks.length; i++) {\n        var q = readQuestion(blocks[i]);\n        if (q) out.push(q);\n      }\n      return out;\n    }\n\n    function currentQuestion(all) {\n      if (!all.length) return null;\n      var mid = win.innerHeight / 2;\n      var best = null, bestD = Infinity;\n      all.forEach(function (q) {\n        var r = q.node.getBoundingClientRect();\n        if (r.bottom < 0 || r.top > win.innerHeight) return;\n        var d = Math.abs((r.top + r.bottom) / 2 - mid);\n        if (d < bestD) { bestD = d; best = q; }\n      });\n      return best || all[0];\n    }\n\n     \n    \n\n    function attemptMeta() {\n      var meta = { host: String(win.location.host), courseId: null, quizId: null, attemptId: null, moodleId: null, missing: [] };\n      var id = identity();\n      meta.identity = { id: id.id, name: id.name, login: id.login, source: id.idSource };\n      if (id.id) meta.moodleId = id.id;\n      var bodyCls = (doc.body && doc.body.className) || '';\n      var bodyId = (doc.body && doc.body.id) || '';\n      var url = String(win.location.href);\n\n      var m;\n      if ((m = /[?&]attempt=(\\d+)/.exec(url))) meta.attemptId = m[1];\n      if (!meta.attemptId) {\n        var hi = doc.querySelector('form#responseform input[name=\"attempt\"], form input[name=\"attempt\"]');\n        if (hi && /^\\d+$/.test(hi.value || '')) meta.attemptId = hi.value;\n      }\n      if (!meta.attemptId) {\n        var form = doc.querySelector('form#responseform');\n        var action = form && (form.getAttribute('action') || '');\n        if ((m = /[?&]attempt=(\\d+)/.exec(action || ''))) meta.attemptId = m[1];\n      }\n\n      if ((m = /[?&]cmid=(\\d+)/.exec(url))) meta.quizId = m[1];\n      if (!meta.quizId) {\n        var link = doc.querySelector('a[href*=\"/mod/quiz/view.php?id=\"]');\n        if (link) {\n          var q = /[?&]id=(\\d+)/.exec(link.getAttribute('href') || '');\n          if (q) meta.quizId = q[1];\n        }\n      }\n      if (!meta.quizId) {\n        try { if (win.M && win.M.cfg && win.M.cfg.cmid != null) meta.quizId = String(win.M.cfg.cmid); } catch (e) {}\n      }\n      if (!meta.quizId && (m = /\\bcmid-(\\d+)\\b/.exec(bodyCls))) meta.quizId = m[1];\n      if (!meta.quizId && (m = /-(\\d+)$/.exec(bodyId)) && /quiz/.test(bodyId)) meta.quizId = m[1];\n\n      try { if (win.M && win.M.cfg && win.M.cfg.courseId != null) meta.courseId = String(win.M.cfg.courseId); } catch (e) {}\n      if (!meta.courseId && (m = /\\bcourse-(\\d+)\\b/.exec(bodyCls))) meta.courseId = m[1];\n      if (!meta.courseId) {\n        var cl = doc.querySelector('a[href*=\"/course/view.php?id=\"]');\n        if (cl && (m = /[?&]id=(\\d+)/.exec(cl.getAttribute('href') || ''))) meta.courseId = m[1];\n      }\n\n      ['courseId', 'quizId', 'attemptId', 'moodleId'].forEach(function (k) {\n        if (!meta[k]) meta.missing.push(k);\n      });\n      return meta;\n    }\n\n     \n    function serviceUrl(q, meta) {\n      var params = [\n        'client=' + encodeURIComponent(CONFIG.client),\n        'host=' + encodeURIComponent(meta.host),\n        'courseId=' + encodeURIComponent(meta.courseId),\n        'quizId=' + encodeURIComponent(meta.quizId),\n        'attemptId=' + encodeURIComponent(meta.attemptId),\n        'moodleId=' + encodeURIComponent(meta.moodleId),\n        'questionIdentity=' + encodeURIComponent(q.identity),\n        'questionType=' + encodeURIComponent(q.type)\n      ];\n      if (q.questionId) params.push('questionId=' + encodeURIComponent(q.questionId));\n      return CONFIG.apiBase.replace(/\\x2F$/, '') + '/v2/quiz/solution?' + params.join('&');\n    }\n\n     \n    function fetchSolution(q, meta) {\n      var started = Date.now();\n      if (meta.missing.length) {\n        var why = missingSentence(meta);\n        logAdd('answers', false, why + ' — request not sent');\n        return Promise.reject(new Error(why));\n      }\n      var url = serviceUrl(q, meta);\n      return fetch(url, { method: 'GET', headers: { accept: 'application/json' } }).then(function (r) {\n        var ms = Date.now() - started;\n        if (r.status === 400) {\n          return r.text().then(function (body) {\n            logAdd('answers', false, 'answer database: 400 (page data incomplete or the service rejected the request)', { ms: ms });\n            throw new Error('answer database: 400 — ' + String(body || '').slice(0, 120));\n          });\n        }\n        if (!r.ok) {\n          logAdd('answers', false, 'answer database: ' + r.status, { ms: ms });\n          throw new Error('answer database: ' + r.status);\n        }\n        return r.json().then(function (json) {\n          logAdd('answers', true, 'answer database: ' + (Array.isArray(json) ? json.length : 0) + ' records', { ms: ms });\n          return json;\n        });\n      }, function (e) {\n        logAdd('answers', false, 'answer database did not respond: ' + ((e && e.message) || 'network'), { ms: Date.now() - started });\n        throw new Error('no connection to the answer database');\n      });\n    }\n    function nameOfParam(k) {\n      return {\n        courseId: 'course',\n        quizId: 'quiz',\n        attemptId: 'attempt',\n        moodleId: 'user id'\n      }[k] || k;\n    }\n     \n    function missingSentence(meta) {\n      var names = meta.missing.map(nameOfParam).join(', ');\n      return 'page data missing: ' + names;\n    }\n\n     \n    function toRows(json) {\n      var rows = [];\n      var groups = Array.isArray(json) ? json : [json];\n      groups.forEach(function (g) {\n        if (!g || typeof g !== 'object') return;\n        var pool = (g.suggestions || []).concat(g.submissions || []);\n        pool.forEach(function (s) {\n          if (!s || s.label == null) return;\n          var label = String(s.label).trim();\n          if (!label) return;\n          var hit = rows.filter(function (r) { return r.label.toLowerCase() === label.toLowerCase(); })[0];\n          var correctness = typeof s.correctness === 'number' ? s.correctness : 0;\n          var count = typeof s.count === 'number' ? s.count : 0;\n          var confidence = typeof s.confidence === 'number' ? s.confidence : null;\n          if (!hit) rows.push({ label: label, correctness: correctness, count: count, confidence: confidence });\n          else {\n            hit.count = Math.max(hit.count, count);\n            hit.correctness = Math.max(hit.correctness, correctness);\n            if (confidence != null) hit.confidence = Math.max(hit.confidence || 0, confidence);\n          }\n        });\n      });\n      var total = rows.reduce(function (a, r) { return a + (r.count || 0); }, 0);\n      rows.forEach(function (r) { r.share = total ? Math.round(((r.count || 0) / total) * 100) : null; });\n      rows.sort(function (a, b) {\n        if (b.correctness !== a.correctness) return b.correctness - a.correctness;\n        return (b.count || 0) - (a.count || 0);\n      });\n      return rows.filter(function (r) { return r.correctness > -1; });\n    }\n\n     \n    function applyAnswer(q, row) {\n      var want = norm(row.label);\n      var done = false;\n       \n      var hit = null;\n      q.answers.forEach(function (a) {\n        if (hit) return;\n        var n = norm(a.text);\n        if (n === want || (want.length > 3 && (n.indexOf(want) >= 0 || want.indexOf(n) >= 0))) hit = a;\n      });\n      if (hit) {\n        if (hit.input.type === 'radio') hit.input.checked = true;\n        else hit.input.checked = row.checked === undefined ? true : !!row.checked;\n        try { hit.input.click(); } catch (e) {}\n        try { hit.input.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (e) {}\n        return { ok: true, how: 'choice' };\n      }\n       \n      var selDone = false;\n      q.controls.forEach(function (c) {\n        if (selDone || c.kind !== 'select') return;\n        var opts = c.node.options || [];\n        for (var i = 0; i < opts.length; i++) {\n          var n = norm(opts[i].textContent);\n          if (!n) continue;\n          if (n === want || (want.length > 3 && (n.indexOf(want) >= 0 || want.indexOf(n) >= 0))) {\n            c.node.selectedIndex = opts[i].index;\n            try { c.node.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (e) {}\n            selDone = true;\n            return;\n          }\n        }\n      });\n      if (selDone) return { ok: true, how: 'select' };\n       \n      var boxes = q.controls.filter(function (c) { return c.kind === 'text' && !c.node.value; });\n      if (!boxes.length) boxes = q.controls.filter(function (c) { return c.kind === 'text'; });\n      if (boxes.length) {\n        boxes[0].node.value = row.label;\n        try { boxes[0].node.dispatchEvent(new win.Event('input', { bubbles: true })); } catch (e) {}\n        try { boxes[0].node.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (e) {}\n        return { ok: true, how: 'text' };\n      }\n      return { ok: false, how: null, done: done };\n    }\n\n     \n    var host = doc.createElement('div');\n    host.setAttribute('style', 'all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483640;');\n    var root;\n    try { root = host.attachShadow({ mode: 'closed' }); } catch (e) { root = host; }\n    var style = doc.createElement('style');\n    style.textContent = CSS;\n    root.appendChild(style);\n    var wrap = el('div', 'mse');\n    root.appendChild(wrap);\n\n    var pill = el('button', 'pill');\n    pill.setAttribute('type', 'button');\n    pill.setAttribute('aria-label', CONFIG.brand);\n    pill.innerHTML = '<span>' + CONFIG.brand + '</span>';\n    pill.style.pointerEvents = 'auto';\n    wrap.appendChild(pill);\n\n    var badge = null;\n    function setBadge(n) {\n      if (!n) { if (badge && badge.parentNode) badge.parentNode.removeChild(badge); badge = null; return; }\n      if (!badge) { badge = el('span', 'num'); badge.setAttribute('data-mse-badge', '1'); pill.appendChild(badge); }\n      badge.textContent = String(n);\n    }\n     \n    function flash(node) {\n      if (!node) return;\n      node.classList.remove('hot');\n       \n      void node.offsetWidth;\n      node.classList.add('hot');\n      win.setTimeout(function () { node.classList.remove('hot'); }, 1500);\n    }\n\n    var pos = { x: null, y: null };\n    try { var saved = JSON.parse(ls.get(CONFIG.posKey, 'null') || 'null'); if (saved && typeof saved.x === 'number') { pos.x = saved.x; pos.y = saved.y; } } catch (e) {}\n\n    function place() {\n      var w = win.innerWidth, h = win.innerHeight;\n      var pw = pill.offsetWidth || 44, ph = pill.offsetHeight || 28;\n      var x = pos.x == null ? w - 12 - pw : pos.x;\n      var y = pos.y == null ? h - 76 : pos.y;\n      x = Math.max(6, Math.min(x, w - pw - 6));\n      y = Math.max(6, Math.min(y, h - ph - 6));\n      pos.x = x; pos.y = y;\n      pill.style.left = x + 'px';\n      pill.style.top = y + 'px';\n      if (pop) layout();\n    }\n\n     \n    var drag = null;\n    pill.addEventListener('pointerdown', function (ev) {\n      drag = { id: ev.pointerId, sx: ev.clientX, sy: ev.clientY, ox: pos.x, oy: pos.y, moved: false };\n      pill.classList.add('dragging');\n      try { pill.setPointerCapture(ev.pointerId); } catch (e) {}\n      ev.preventDefault();\n    });\n    pill.addEventListener('pointermove', function (ev) {\n      if (!drag) return;\n      var dx = ev.clientX - drag.sx, dy = ev.clientY - drag.sy;\n      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.moved = true;\n      if (!drag.moved) return;\n      pos.x = drag.ox + dx; pos.y = drag.oy + dy;\n      place();\n      ev.preventDefault();\n    });\n    pill.addEventListener('pointerup', function () {\n      if (!drag) return;\n      var moved = drag.moved;\n      try { pill.releasePointerCapture(drag.id); } catch (e) {}\n      drag = null;\n      pill.classList.remove('dragging');\n      if (moved) { ls.set(CONFIG.posKey, JSON.stringify({ x: pos.x, y: pos.y })); return; }\n      pill.classList.add('lit');\n      win.setTimeout(function () { pill.classList.remove('lit'); }, 900);\n      toggle();\n    });\n    pill.addEventListener('pointercancel', function () { drag = null; pill.classList.remove('dragging'); });\n    pill.addEventListener('contextmenu', function (e) { e.preventDefault(); });\n    win.addEventListener('resize', place);\n    win.addEventListener('orientationchange', function () { win.setTimeout(place, 120); });\n\n     \n    var pop = null;\n    var state = {\n      route: 'answers',         \n      question: null,\n      rows: null,\n      loading: false,\n      error: null,\n      meta: null,\n      agent: null,              \n      agentTimer: null,\n      gw: { busy: null, probe: null, models: null, check: null, reg: null },\n      ai: null,                 \n      tier: null,               \n      t0: 0\n    };\n\n    function closePop() {\n      if (!pop) return;\n      var p = pop;\n      pop = null;\n      state.t0 = 0;\n      if (state.agentTimer) { win.clearInterval(state.agentTimer); state.agentTimer = null; }\n      p.classList.remove('in');\n      p.classList.add('out');\n      win.setTimeout(function () { if (p.parentNode) p.parentNode.removeChild(p); }, 300);\n    }\n\n    function toggle() { if (pop) closePop(); else openPop(); }\n\n    function layout() {\n      if (!pop) return;\n      var w = Math.min(CONFIG.width, win.innerWidth - 16);\n      pop.style.width = w + 'px';\n      var r = pill.getBoundingClientRect();\n      var gap = 8;\n      var h = pop.offsetHeight || 180;\n      var left = Math.max(8, Math.min(r.right - w, win.innerWidth - w - 8));\n      pop.style.left = left + 'px';\n      var above = r.top - gap - 6, below = win.innerHeight - r.bottom - gap - 6;\n      var top;\n      if (above >= h || above >= below) {\n        top = Math.max(6, r.top - gap - h);\n        pop.style.setProperty('--oy', '100%');\n      } else {\n        top = r.bottom + gap;\n        pop.style.setProperty('--oy', '0%');\n      }\n      pop.style.top = top + 'px';\n      pop.style.setProperty('--ox', Math.max(0, Math.min(100, ((r.right - 24 - left) / w) * 100)) + '%');\n    }\n\n     \n    function press(node, action) {\n      node.classList.add('press');\n      node.addEventListener('click', function (ev) {\n        ev.preventDefault();\n        flash(node);\n        win.setTimeout(function () { try { action(ev); } catch (e) {} }, 70);\n      });\n      return node;\n    }\n\n    function openPop() {\n      closePop();\n      pop = el('div', 'pop');\n      wrap.appendChild(pop);\n      state.route = 'answers';\n      state.rows = null;\n      state.error = null;\n      state.agent = null;\n      state.t0 = Date.now();\n      var all = readQuestions();\n      state.question = currentQuestion(all);\n      state.meta = attemptMeta();\n      render();\n      win.requestAnimationFrame(function () { if (pop) pop.classList.add('in'); });\n      load();\n    }\n\n    var rise = 0;\n    function N(node, index) {\n       \n      node.classList.add('rise');\n      node.style.setProperty('--i', String(index === undefined ? rise++ : index));\n      return node;\n    }\n\n    function head(titleText, sub, leading) {\n      var h = el('div', 'ph');\n      var lead = leading === 'back'\n        ? press(el('button', 'ib back', '←'), function () { state.route = 'account'; render(); })\n        : press(el('button', 'ib', 'i'), function () { state.route = state.route === 'account' ? 'answers' : 'account'; render(); });\n      lead.setAttribute('aria-label', leading === 'back' ? 'back' : 'your id');\n      lead.style.fontFamily = leading === 'back' ? '' : 'Georgia,serif';\n      h.appendChild(lead);\n      var t = el('div', 't', titleText);\n      if (sub) t.appendChild(el('em', '', ' · ' + sub));\n      h.appendChild(t);\n      var x = press(el('button', 'ib x', '×'), closePop);\n      x.setAttribute('aria-label', 'close');\n      h.appendChild(x);\n      return h;\n    }\n\n    function statusLine() {\n       \n      var last = log[log.length - 1];\n      var okAll = true, worst = null;\n      ['answers', 'gateway'].forEach(function (k) {\n        var l = logLast(k);\n        if (l && !l.ok) { okAll = false; worst = l; }\n      });\n      var dotCls = !last ? '' : (okAll ? 'ok' : (worst && Date.now() - worst.t < 60000 ? 'bad' : 'warn'));\n      var text;\n      if (!last) text = 'network: no requests yet';\n      else if (okAll) text = last.kind === 'agent' ? 'agent answered' : 'network ok';\n      else {\n        var bad = logLast('agent') && !logLast('agent').ok && logLast('agent').t > (logLast('answers') || {}).t ? logLast('agent')\n          : (logLast('gateway') && !logLast('gateway').ok && logLast('gateway').t > (logLast('answers') || {}).t ? logLast('gateway') : logLast('answers'));\n        text = (bad && bad.text ? bad.text : 'network error');\n        if (bad && bad.ms) text += ' · ' + bad.ms + ' ms';\n      }\n      var row = el('div', 'row');\n      row.appendChild(el('span', 'dot ' + dotCls));\n      row.appendChild(el('span', 'txt', text));\n      row.appendChild(el('span', 'more', 'log'));\n      return press(row, function () { state.route = 'net'; render(); });\n    }\n\n    \n\n\n    function isActive(st) { return !!(st && st.state === 'active'); }\n\n     \n    function tierNow() {\n      if (state.tier === 'owner') return Promise.resolve('owner');\n      return Promise.resolve(state.tier || 'base');\n    }\n\n    function refreshTier() {\n      var br = win.MSEBridge;\n      \n\n      if (!br || !br.url() || !br.meta()) { state.tier = 'base'; return Promise.resolve('base'); }\n      if (state.tier === 'owner') return Promise.resolve('owner');\n      return br.check().then(function (res) {\n        state.gw.check = res;\n        state.tier = isActive(res) ? 'owner' : 'base';\n        return state.tier;\n      }, function () { state.tier = 'base'; return 'base'; });\n    }\n\n     \n    function aiPrompt(q) {\n      var lines = [String(q.text || '').slice(0, 2000)];\n      var opts = (q.answers || []).map(function (a) { return String(a.text || '').trim(); }).filter(Boolean);\n      if (opts.length) {\n        lines.push('');\n        lines.push('Options:');\n        opts.forEach(function (o, i) { lines.push((i + 1) + '. ' + o); });\n        lines.push('');\n        lines.push('Answer with exactly one line — the text of the correct option, no numbering and no explanation.');\n      } else {\n        lines.push('');\n        lines.push('Answer only with the short answer to the task, no explanation.');\n      }\n      return lines.join('\\n');\n    }\n\n    function aiRow(text, busy) {\n      return { label: String(text || '').trim(), correctness: 0, count: 0, agent: true, busy: !!busy };\n    }\n\n     \n    function runAi(q, why) {\n      var br = win.MSEBridge;\n      if (!br) return;\n      state.ai = { state: 'running', text: '' };\n      render();\n      var t0 = Date.now();\n      var buf = '';\n      var finish = function (ok, text, extra) {\n        var ms = Date.now() - t0;\n        if (ok) {\n          logAdd('agent', true, 'AI: ' + String(text).slice(0, 40), { ms: ms });\n          state.ai = { state: 'ok', text: String(text), model: (extra && extra.model) || null };\n        } else {\n          logAdd('agent', false, 'AI: ' + (text || 'no answer'), { ms: ms });\n          state.ai = { state: 'error', text: String(text || 'no answer') };\n        }\n        render();\n      };\n      br.chat(aiPrompt(q), function (chunk) {\n        buf += chunk;\n        state.ai = { state: 'running', text: buf };\n        if (pop && state.route === 'answers') render();\n      }).then(function (res) {\n         \n        var plain = res && res.choices && res.choices[0] && res.choices[0].message ? String(res.choices[0].message.content || '') : '';\n        var text = (buf || plain || '').trim();\n        if (!text) { finish(false, 'the model said nothing'); return; }\n        finish(true, text, { model: res && res.model });\n      }, function (e) {\n        var msg = (e && e.message) || 'network';\n        if (/40[13]/.test(msg)) finish(false, 'key not accepted');\n        else finish(false, msg.slice(0, 80));\n        state.tier = /40[13]/.test(msg) ? 'base' : state.tier;\n      });\n    }\n\n     \n    function aiAllowed() { return state.tier === 'owner'; }\n\n     \n    function viewAnswers() {\n      var q = state.question;\n      if (!q) {\n        body.appendChild(N(el('div', 'empty', 'no question on this page')));\n        body.appendChild(N(statusLine()));\n        return;\n      }\n      if (!q.supported) {\n        body.appendChild(N(el('div', 'empty', '«' + (q.unsupported || q.type) + '” — the answer database cannot parse this question type')));\n        if (aiAllowed()) appendAi(q);\n        body.appendChild(N(statusLine()));\n        return;\n      }\n      if (state.loading) {\n        body.appendChild(N(el('div', 'spin')));\n        body.appendChild(N(el('div', 'empty', 'asking the database…')));\n        return;\n      }\n      if (state.error) {\n        body.appendChild(N(el('div', 'empty', state.error)));\n        var missingId = state.meta && state.meta.missing && state.meta.missing.indexOf('moodleId') >= 0;\n        var again = press(el('button', 'btn', missingId ? 'take the id from /my/' : 'retry'), function () {\n          if (missingId) {\n            learnFromCabinet().then(function (r) {\n              if (r.ok) { toast('ID: ' + r.id); }\n              else toast(r.message);\n              state.error = null;\n              cabinetTried = false;\n              load();\n            });\n            return;\n          }\n          load();\n        });\n        body.appendChild(N(again, 1));\n        if (aiAllowed()) appendAi(q);\n        body.appendChild(N(statusLine(), 1));\n        return;\n      }\n      var rows = state.rows || [];\n      if (!rows.length) {\n        body.appendChild(N(el('div', 'empty', 'no answers yet')));\n        if (aiAllowed()) appendAi(q);\n      } else {\n        rows.slice(0, 6).forEach(function (r, i) {\n          var a = el('button', 'ans press' + (r.correctness > 0 ? ' best' : ''));\n          a.setAttribute('type', 'button');\n          a.appendChild(el('span', 'mark', r.correctness > 0 ? '✓' : ''));\n          a.appendChild(el('span', 'lbl', r.label));\n          if (r.share != null) a.appendChild(el('span', 'pct', r.share + '%'));\n          else if (r.count) a.appendChild(el('span', 'pct', r.count + '×'));\n          if (r.agent) a.appendChild(el('span', 'tag', 'agent'));\n          if (r.correctness > 0) a.classList.add('lit');\n          a.addEventListener('click', function () {\n            flash(a);\n            win.setTimeout(function () {\n              var res = applyAnswer(q, r);\n              if (res.ok) { toast('selected: ' + r.label); setBadge(0); win.setTimeout(closePop, 420); }\n              else toast('no such option in the form');\n            }, 70);\n          });\n          body.appendChild(N(a, i));\n        });\n      }\n      body.appendChild(N(statusLine(), 1));\n      if (aiAllowed()) body.appendChild(N(agentStrip(), 1));\n    }\n\n     \n    function appendAi(q) {\n      var ai = state.ai;\n      if (!ai || ai.state === 'idle') {\n         \n        var ask = el('button', 'ans press ai');\n        ask.setAttribute('type', 'button');\n        ask.appendChild(el('span', 'mark', '✦'));\n        ask.appendChild(el('span', 'lbl', 'ask AI'));\n        ask.appendChild(el('span', 'tag', 'AI'));\n        ask.addEventListener('click', function () { flash(ask); runAi(q, 'asked'); });\n        body.appendChild(N(ask, 1));\n        return;\n      }\n      if (ai.state === 'running') {\n        var run = el('div', 'ans ai busy');\n        run.appendChild(el('span', 'mark', '✦'));\n        run.appendChild(el('span', 'lbl', ai.text ? ai.text : 'AI is thinking…'));\n        run.appendChild(el('span', 'tag', 'AI'));\n        body.appendChild(N(run, 1));\n        return;\n      }\n      if (ai.state === 'error') {\n        var err = el('button', 'ans press ai');\n        err.setAttribute('type', 'button');\n        err.appendChild(el('span', 'mark', '✦'));\n        err.appendChild(el('span', 'lbl', 'AI: ' + (ai.text || 'no answer')));\n        err.appendChild(el('span', 'tag', 'AI'));\n        err.addEventListener('click', function () { flash(err); runAi(q, 'again'); });\n        body.appendChild(N(err, 1));\n        return;\n      }\n      var row = aiRow(ai.text);\n      row.ai = true;\n      row.label = ai.text;\n      var a = el('button', 'ans press ai best');\n      a.setAttribute('type', 'button');\n      a.appendChild(el('span', 'mark', '✦'));\n      a.appendChild(el('span', 'lbl', ai.text));\n      a.appendChild(el('span', 'tag', 'AI' + (ai.model ? ' · ' + ai.model : '')));\n      a.addEventListener('click', function () {\n        flash(a);\n        win.setTimeout(function () {\n          var res = applyAnswer(q, row);\n          if (res.ok) { toast(res.how === 'text' ? 'filled in' : 'selected: ' + ai.text.slice(0, 40)); setBadge(0); win.setTimeout(closePop, 420); }\n          else toast('the AI answered with something not in the form');\n        }, 70);\n      });\n      body.appendChild(N(a, 1));\n    }\n\n     \n    function agentStrip() {\n      var st = state.agent || { state: 'idle' };\n      var row = el('div', 'row');\n      row.appendChild(el('span', 'dot ' + (st.state === 'ok' ? 'ok' : st.state === 'error' ? 'bad' : st.state === 'retry' || st.state === 'running' ? 'warn' : '')));\n      var txt;\n      if (st.state === 'idle') txt = 'agent: ask';\n      else if (st.state === 'running') txt = 'agent is thinking…';\n      else if (st.state === 'ok') txt = 'agent: ' + (st.answer || '—') + (st.model ? ' · ' + st.model : '');\n      else if (st.state === 'retry') txt = 'agent is busy, retrying in ' + st.retryIn + ' s';\n      else txt = 'agent: ' + (st.text || 'error');\n      row.appendChild(el('span', 'txt', txt));\n      row.appendChild(el('span', 'more', st.state === 'ok' ? 'again' : st.state === 'running' ? '…' : 'run'));\n      return press(row, function () { runAgent(false); });\n    }\n\n    function runAgent(automatic) {\n      var q = state.question;\n      if (!q) return;\n      if (!win.MSEBridge || !win.MSEBridge.url()) {\n        state.agent = { state: 'error', text: 'AI gateway is not set' };\n        render();\n        return;\n      }\n      state.agent = { state: 'running' };\n      render();\n      var t0 = Date.now();\n      win.MSEBridge.agent({\n        host: state.meta.host,\n        question: q.text,\n        type: q.type,\n        options: q.answers.map(function (a) { return a.text; }),\n        multiple: q.type === 'multichoiceset'\n      }).then(function (res) {\n        var ms = Date.now() - t0;\n        if (res.ok && res.answer) {\n          logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });\n          state.agent = { state: 'ok', answer: res.answer, model: res.model };\n          var row = { label: res.answer, correctness: 0, count: 0, agent: true };\n          state.rows = [row].concat(state.rows || []);\n          render();\n          var applied = applyAnswer(q, row);\n          if (applied.ok) toast('agent picked: ' + String(res.answer).slice(0, 40));\n          return;\n        }\n        if (res.code === 'rate_limited') {\n          logAdd('agent', false, 'agent is busy (limit hit), retrying', { ms: ms });\n          startRetry(automatic);\n          return;\n        }\n        var text = res.code === 'network' || res.code === 'timeout' ? 'request did not go out · check the network'\n          : res.code === 'no_gateway' ? 'AI gateway is not set'\n          : res.code === 'unauthorized' || res.code === 'invalid_key' ? 'key not accepted'\n          : res.code === 'device_pending' ? 'waiting for approval by id'\n          : 'agent failed: ' + (res.message || 'error');\n        logAdd('agent', false, text, { ms: ms });\n        state.agent = { state: 'error', text: text };\n        render();\n      });\n    }\n    function startRetry(automatic) {\n      if (state.agentTimer) { win.clearInterval(state.agentTimer); state.agentTimer = null; }\n      var left = Math.round(CONFIG.agentRetryMs / 1000);\n      state.agent = { state: 'retry', retryIn: left };\n      render();\n      state.agentTimer = win.setInterval(function () {\n        left -= 1;\n        if (left <= 0) {\n          win.clearInterval(state.agentTimer);\n          state.agentTimer = null;\n          runAgent(true);\n          return;\n        }\n        if (state.agent) { state.agent.retryIn = left; if (pop && state.route === 'answers') render(); }\n      }, 1000);\n    }\n\n    function load() {\n      var q = state.question;\n      if (!q) { render(); return; }\n      state.loading = true;\n      state.ai = null;\n      render();\n       \n      var tier = refreshTier();\n      if (!q.supported) {\n         \n        state.loading = false;\n        state.rows = [];\n        state.error = null;\n        tier.then(function () { render(); });\n        return;\n      }\n       \n      var ready = state.meta && state.meta.moodleId ? Promise.resolve(state.meta) : withIdentity();\n      ready.then(function (meta) {\n        state.meta = meta;\n        return fetchSolution(q, meta);\n      }).then(function (json) {\n        state.rows = toRows(json);\n        state.loading = false;\n        state.error = null;\n        setBadge(state.rows.length);\n        return tier.then(function () {\n           \n          if (!state.rows.length && aiAllowed() && (!state.ai || state.ai.state === 'idle')) runAi(q, 'empty');\n          render();\n        });\n      }, function (e) {\n        state.loading = false;\n        state.error = e.message;\n        return tier.then(function () {\n          if (aiAllowed() && (!state.ai || state.ai.state === 'idle')) runAi(q, 'error');\n          render();\n        });\n      });\n    }\n\n     \n    var cabinetTried = false;\n    function withIdentity() {\n      var meta = attemptMeta();\n      if (meta.moodleId || cabinetTried || !meta.missing.length || meta.missing.indexOf('moodleId') < 0) return Promise.resolve(meta);\n      cabinetTried = true;\n      return learnFromCabinet().then(function () {\n        return attemptMeta();\n      });\n    }\n\n     \n    function valueRow(key, value, copyable, human) {\n      var row = el('button', 'val press' + (human ? ' human' : ''));\n      row.setAttribute('type', 'button');\n      row.appendChild(el('span', 'k', key));\n      row.appendChild(el('span', 'v', value == null || value === '' ? '—' : String(value)));\n      var hint = el('span', 'copy', '');\n      row.appendChild(hint);\n      if (!copyable) { row.classList.remove('press'); row.disabled = true; return row; }\n      row.addEventListener('click', function () {\n        flash(row);\n        win.MSEBridge.copy(value).then(function (ok) {\n          hint.textContent = ok ? 'copied' : 'failed';\n          win.setTimeout(function () { hint.textContent = ''; }, 1600);\n        });\n      });\n      return row;\n    }\n\n    function viewAccount() {\n      var id = identity();\n      var meta = win.MSEBridge ? win.MSEBridge.meta() : null;\n      body.appendChild(N(el('div', 'sec', 'MOODLE ACCOUNT')));\n      body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));\n      body.appendChild(N(valueRow('login', id.login, !!id.login), 1));\n      body.appendChild(N(valueRow('name', id.name, !!id.name, true), 1));\n      body.appendChild(N(el('div', 'sec', 'DEVICE'), 1));\n      body.appendChild(N(valueRow('key', win.MSEBridge ? win.MSEBridge.key() : null, !!(win.MSEBridge && win.MSEBridge.key())), 1));\n      var st = state.gw.check;\n      var line = el('div', 'row');\n      var good = st && st.state === 'active';\n      line.appendChild(el('span', 'dot ' + (good ? 'ok' : st ? 'warn' : '')));\n      line.appendChild(el('span', 'txt', good ? 'key accepted' : st ? (st.message || 'key not checked') : 'key not checked'));\n      line.appendChild(el('span', 'more', 'AI gateway'));\n      body.appendChild(N(press(line, function () { state.route = 'gateway'; render(); }), 1));\n      var net = el('div', 'row');\n      net.appendChild(el('span', 'dot'));\n      net.appendChild(el('span', 'txt', 'network log'));\n      net.appendChild(el('span', 'more', 'open'));\n      body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));\n    }\n\n     \n    function viewGateway() {\n      var gw = state.gw;\n      var br = win.MSEBridge;\n      if (!br) { body.appendChild(N(el('div', 'empty', 'the AI gateway layer did not load'))); return; }\n\n      body.appendChild(N(el('div', 'sec', 'AI GATEWAY'), 0));\n      var input = el('input', 'inp');\n      input.type = 'url';\n      input.inputMode = 'url';\n      input.autocapitalize = 'off';\n      input.spellcheck = false;\n      input.placeholder = 'https:/\\/…';\n      input.value = br.url() || '';\n      body.appendChild(N(input, 1));\n      var frow = el('div', 'frow');\n      body.appendChild(N(frow, 1));\n      var check = press(el('button', 'btn solid', gw.busy ? 'checking…' : 'check'), function () {\n        var url = String(input.value || '').trim();\n        gw.busy = 'check';\n        gw.probe = null;\n        gw.models = null;\n        render();\n        br.probe(url).then(function (r) {\n          gw.probe = r;\n          if (!r.ok) { gw.busy = null; logAdd('gateway', false, 'AI gateway: ' + r.message); render(); return; }\n          br.setUrl(url);\n           \n          return Promise.all([br.models(), br.check()]).then(function (out) {\n            gw.models = out[0];\n            gw.check = out[1];\n            gw.busy = null;\n            logAdd('gateway', true, 'AI gateway is up · ' + (out[0].models.length || 0) + ' models', { ms: r.ms });\n            render();\n          });\n        }, function (e) {\n          gw.busy = null;\n          gw.probe = { ok: false, message: (e && e.message) || 'error' };\n          render();\n        });\n      });\n      frow.appendChild(check);\n      if (gw.busy === 'check') check.textContent = 'checking…';\n\n      if (gw.probe) {\n        var p = el('div', 'row');\n        p.appendChild(el('span', 'dot ' + (gw.probe.ok ? 'ok' : 'bad')));\n        p.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered · ' + gw.probe.ms + ' ms' : gw.probe.message));\n        body.appendChild(N(p, 1));\n      }\n      if (gw.check) {\n        var c = el('div', 'row');\n        c.appendChild(el('span', 'dot ' + (gw.check.state === 'active' ? 'ok' : 'warn')));\n        c.appendChild(el('span', 'txt', gw.check.state === 'active' ? 'key accepted' : gw.check.message || 'key not accepted'));\n        body.appendChild(N(c, 1));\n        if (gw.check.state === 'unregistered') {\n          body.appendChild(N(press(el('button', 'btn', 'bind to my id'), function () {\n            gw.busy = 'reg';\n            render();\n            br.register(identity()).then(function () { return br.check(); }).then(function (res) {\n              gw.check = res;\n              gw.busy = null;\n              logAdd('gateway', res.state === 'active', 'binding: ' + res.state);\n              render();\n            }, function (e) {\n              gw.busy = null;\n              logAdd('gateway', false, 'binding: ' + e.message);\n              render();\n            });\n          }), 1));\n        }\n      }\n      if (gw.models && gw.models.models.length) {\n        body.appendChild(N(el('div', 'sec', 'MODELS · CHOSEN BY THE SERVER'), 1));\n        var list = el('div', 'models');\n        gw.models.models.forEach(function (m) { list.appendChild(el('span', 'chip', m)); });\n        body.appendChild(N(list, 1));\n      } else if (gw.models && !gw.models.ok) {\n        body.appendChild(N(el('div', 'empty', gw.models.message), 1));\n      }\n      body.appendChild(N(statusLine(), 1));\n    }\n\n     \n    function viewNet() {\n      body.appendChild(N(el('div', 'sec', 'NETWORK LOG'), 0));\n      if (!log.length) { body.appendChild(N(el('div', 'empty', 'empty so far'))); return; }\n      var box = el('div', 'log');\n      log.slice(-40).reverse().forEach(function (l, i) {\n        var ln = el('div', 'ln ' + (l.ok ? 'ok' : 'warn'));\n        ln.appendChild(el('span', 'g'));\n        ln.appendChild(el('span', 't', ago(l.t)));\n        ln.appendChild(el('span', 'm', l.text + (l.ms != null ? ' · ' + l.ms + ' ms' : '')));\n        box.appendChild(ln);\n      });\n      body.appendChild(N(box, 1));\n      body.appendChild(N(press(el('button', 'btn', 'clear'), function () {\n        log = [];\n        logAdd('answers', true, 'log cleared');\n        render();\n      }), 1));\n    }\n\n     \n    var body = null;\n    function render() {\n      if (!pop) return;\n      rise = 0;\n      pop.innerHTML = '';\n       \n      var sub = null;\n      var title = CONFIG.brand;\n      var leading = 'info';\n      if (state.route === 'answers' && state.question) {\n        var idx = Array.prototype.indexOf.call(doc.querySelectorAll('.que'), state.question.node) + 1;\n        sub = 'question ' + (idx || 1);\n      } else if (state.route === 'account') { sub = 'account'; }\n      else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }\n      else if (state.route === 'net') { sub = 'network'; leading = 'back'; }\n      pop.appendChild(head(title, sub, leading));\n      body = el('div', 'pb');\n      pop.appendChild(body);\n      if (state.route === 'account') viewAccount();\n      else if (state.route === 'gateway') viewGateway();\n      else if (state.route === 'net') viewNet();\n      else viewAnswers();\n      layout();\n    }\n\n     \n    function updateDot() {}\n\n    var toastTimer = null, toastEl = null;\n    function toast(text) {\n      if (!toastEl) { toastEl = el('div', 'toast'); wrap.appendChild(toastEl); }\n      toastEl.textContent = text;\n      toastEl.classList.add('on');\n      if (toastTimer) win.clearTimeout(toastTimer);\n      toastTimer = win.setTimeout(function () { toastEl.classList.remove('on'); }, 2000);\n    }\n\n     \n    doc.addEventListener('pointerdown', function (e) {\n      if (!pop) return;\n      var path = e.composedPath ? e.composedPath() : [];\n      if (path.indexOf(host) >= 0 || e.target === host) return;\n      closePop();\n    }, true);\n    doc.addEventListener('keydown', function (e) { if (e.key === 'Escape' && pop) closePop(); }, true);\n\n     \n    place();\n    (doc.body || doc.documentElement).appendChild(host);\n\n    win.__mse = {\n      open: function () { openPop(); return true; },\n      close: closePop,\n      identity: identity,\n      questions: readQuestions,\n      types: function () {\n         \n        var out = { supported: Object.keys(TYPE_INFO), unsupported: Object.keys(UNSUPPORTED) };\n        return out;\n      },\n      current: function () { return currentQuestion(readQuestions()); },\n      rows: function () { return state.rows; },\n      meta: function () { return attemptMeta(); },\n      learnId: function () { return learnFromCabinet(); },\n      apply: function (label) {\n        var q = state.question || currentQuestion(readQuestions());\n        if (!q) return false;\n        return applyAnswer(q, { label: label });\n      },\n      agent: function () { return state.agent; },\n      runAgent: function () { runAgent(false); return true; },\n      log: function () { return log.slice(-40); },\n      clearLog: function () { log = []; render(); return true; },\n      copy: function (t) { return win.MSEBridge ? win.MSEBridge.copy(t) : Promise.resolve(false); },\n      bridge: function () { return win.MSEBridge || null; },\n      settings: function (open) {\n        if (open) { if (!pop) openPop(); state.route = 'gateway'; render(); }\n        return win.MSEBridge ? win.MSEBridge.status() : null;\n      },\n      route: function (r) { if (r) { if (!pop) openPop(); state.route = r; render(); } return state.route; },\n      pos: function () { return { x: pos.x, y: pos.y }; },\n      move: function (x, y) { pos.x = x; pos.y = y; place(); ls.set(CONFIG.posKey, JSON.stringify({ x: pos.x, y: pos.y })); return { x: pos.x, y: pos.y }; },\n      toast: toast,\n      state: function () {\n        return {\n          visible: !!pop,\n          route: state.route,\n          pill: {\n            text: String((pill.querySelector('span:not([data-mse-badge])') || pill).textContent || '').trim(),\n            left: pill.style.left, top: pill.style.top, w: pill.offsetWidth, h: pill.offsetHeight,\n            badge: badge ? String(badge.textContent) : null\n          },\n          pop: pop ? {\n            left: pop.style.left, top: pop.style.top, w: pop.offsetWidth, h: pop.offsetHeight,\n            text: String(pop.textContent || '').replace(/\\s+/g, ' ').trim(),\n            controls: controls()\n          } : null,\n          rows: state.rows,\n          error: state.error,\n          agent: state.agent,\n          ai: state.ai,\n          tier: state.tier,\n          meta: state.meta,\n          identity: identity(),\n          bridge: win.MSEBridge ? win.MSEBridge.status() : null,\n          log: log.slice(-12),\n          question: state.question ? {\n            text: state.question.text.slice(0, 120),\n            type: state.question.type,\n            kind: state.question.kind,\n            supported: state.question.supported,\n            identity: state.question.identity,\n            questionId: state.question.questionId,\n            answers: state.question.answers.map(function (a) { return a.text; })\n          } : null\n        };\n      }\n    };\n\n    function controls() {\n      var out = {};\n      if (!pop) return out;\n      Array.prototype.forEach.call(pop.querySelectorAll('[data-mse]'), function (n) {\n        var r = n.getBoundingClientRect();\n        out[n.getAttribute('data-mse')] = { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };\n      });\n      Array.prototype.forEach.call(pop.querySelectorAll('.ans, .btn, .val, .row, .ib'), function (n, i) {\n        var r = n.getBoundingClientRect();\n        out['c' + i] = { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), text: String(n.textContent || '').trim().slice(0, 40) };\n      });\n      return out;\n    }\n  }\n\n  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);\n  else boot();\n})();\n";
-var __mseDebugSrc="var __ssW=window,__msePageWindow=window;\n'use strict';\n\n\n(function () {\n  'use strict';\n\n  var CONFIG = Object.assign({\n    hotkey: 'd',\n    bottomOffset: 96,\n    maxEntries: 400,\n    maxBody: 6000,\n    showFab: false  \n  }, (typeof __SS_DEBUG_CONFIG__ === 'object' && __SS_DEBUG_CONFIG__) || {});\n\n   \n  var EXPECTED_SHA = '__SS_EXPECT_SHA256__';\n\n  function boot() {\n    var win = window;\n    var doc = document;\n    if (win.__ssDebugPanel) return;\n    try { Object.defineProperty(win, '__ssDebugPanel', { value: true, enumerable: false }); } catch (e) { win.__ssDebugPanel = true; }\n\n     \n    var LS = 'ssdbg.';\n    function lsGet(k, dflt) {\n      try { var v = win.localStorage.getItem(LS + k); return v === null ? dflt : v; } catch (e) { return dflt; }\n    }\n    function lsSet(k, v) {\n      try { win.localStorage.setItem(LS + k, v); return true; } catch (e) { return false; }\n    }\n    function lsDel(k) {\n      try { win.localStorage.removeItem(LS + k); } catch (e) {}\n    }\n    function bytes(n) {\n      if (!n && n !== 0) return '—';\n      if (n < 1024) return n + ' B';\n      if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';\n      return (n / 1048576).toFixed(1) + ' MB';\n    }\n    function pad(n) { return n < 10 ? '0' + n : String(n); }\n    function hhmmss(t) {\n      var d = new Date(t);\n      return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());\n    }\n    function shortUrl(u) {\n      try {\n        var x = new URL(u, String(win.location.href));\n        return x.pathname + (x.search ? '?' + x.search.slice(1) : '');\n      } catch (e) { return String(u); }\n    }\n    function clip(s, n) {\n      s = String(s == null ? '' : s);\n      return s.length > n ? s.slice(0, n) + '…' : s;\n    }\n    function sha256Hex(text) {\n      var subtle = win.crypto && win.crypto.subtle;\n      if (subtle && win.TextEncoder) {\n        return subtle.digest('SHA-256', new win.TextEncoder().encode(text)).then(function (buf) {\n          var b = new Uint8Array(buf), h = '';\n          for (var i = 0; i < b.length; i++) h += (b[i] < 16 ? '0' : '') + b[i].toString(16);\n          return h;\n        });\n      }\n      return Promise.resolve(fnv(text));\n    }\n     \n    function fnv(s) {\n      var a = 2166136261, b = 2166136261;\n      for (var i = 0; i < s.length; i++) {\n        a = (a ^ s.charCodeAt(i)) * 16777619 >>> 0;\n        b = (b + s.charCodeAt(i) * (i + 7)) >>> 0;\n      }\n      var out = '';\n      for (var k = 0; k < 4; k++) out += ('0000000' + ((a >>> (k * 8)) & 255).toString(16)).slice(-2);\n      for (var j = 0; j < 4; j++) out += ('0000000' + ((b >>> (j * 8)) & 255).toString(16)).slice(-2);\n      return 'fnv-' + out;\n    }\n\n     \n    var state = {\n      net: [],\n      seq: 0,\n      enabled: lsGet('enabled', '1') === '1',\n      recordBodies: lsGet('bodies', '1') === '1',\n      identity: null,\n      key: null,\n      visits: []\n    };\n\n    var seen = new Set();\n\n    function addEntry(e) {\n      if (!state.enabled) return null;\n      var key = e.method + ' ' + e.url + ' ' + (e.status || '') + ' ' + (e.from || '');\n      if (seen.has(key)) return null;\n      seen.add(key);\n      e.id = ++state.seq;\n      e.t = e.t || Date.now();\n      state.net.push(e);\n      if (state.net.length > CONFIG.maxEntries) state.net.shift();\n      return e;\n    }\n\n    function bodyText(v) {\n      if (v == null) return '';\n      if (typeof v === 'string') return clip(v, CONFIG.maxBody);\n      try { return clip(JSON.stringify(v), CONFIG.maxBody); } catch (e) { return ''; }\n    }\n\n     \n    function sniffJson(text) {\n      if (!text) return null;\n      var s = String(text).trim();\n      if (!s || (s[0] !== '{' && s[0] !== '[')) return null;\n      try { return JSON.parse(s); } catch (e) { return null; }\n    }\n\n    function installSniffer() {\n       \n      try {\n        var origFetch = win.fetch;\n        if (typeof origFetch === 'function') {\n          win.fetch = function (input, init) {\n            var url = typeof input === 'string' ? input : (input && input.url) || String(input);\n            var method = (init && init.method) || (input && input.method) || 'GET';\n            var started = Date.now();\n            var p = origFetch.apply(this, arguments);\n            p.then(function (res) {\n              var e = addEntry({ from: 'fetch', method: String(method).toUpperCase(), url: url, status: res.status, type: res.headers && res.headers.get ? (res.headers.get('content-type') || '') : '', ms: Date.now() - started });\n              if (e && state.recordBodies) {\n                try {\n                  res.clone().text().then(function (t) {\n                    e.size = t.length;\n                    var j = sniffJson(t);\n                    if (j) e.json = j;\n                    renderIfOpen();\n                  }, function () {});\n                } catch (x) {}\n              } else if (e) renderIfOpen();\n            }, function () {\n              addEntry({ from: 'fetch', method: String(method).toUpperCase(), url: url, status: 0, error: 'failed', ms: Date.now() - started });\n              renderIfOpen();\n            });\n            return p;\n          };\n        }\n      } catch (e) {}\n\n       \n      try {\n        var XHR = win.XMLHttpRequest;\n        if (XHR && XHR.prototype) {\n          var open = XHR.prototype.open;\n          var send = XHR.prototype.send;\n          XHR.prototype.open = function (method, url) {\n            this.__ssm = String(method || 'GET').toUpperCase();\n            this.__ssu = String(url || '');\n            this.__sst = Date.now();\n            return open.apply(this, arguments);\n          };\n          XHR.prototype.send = function () {\n            var self = this;\n            self.addEventListener('loadend', function () {\n              var ct = '';\n              try { ct = self.getResponseHeader('content-type') || ''; } catch (e) {}\n              var e = addEntry({ from: 'xhr', method: self.__ssm, url: self.__ssu, status: self.status, type: ct, ms: Date.now() - (self.__sst || Date.now()) });\n              if (e && state.recordBodies) {\n                try {\n                  var t = self.responseType === '' || self.responseType === 'text' ? self.responseText : '';\n                  if (t) {\n                    e.size = t.length;\n                    var j = sniffJson(t);\n                    if (j) e.json = j;\n                  }\n                } catch (x) {}\n              }\n              renderIfOpen();\n            });\n            return send.apply(this, arguments);\n          };\n        }\n      } catch (e) {}\n\n       \n      try {\n        var collectPerf = function () {\n          var list = [];\n          try { list = win.performance.getEntriesByType('resource') || []; } catch (e) { list = []; }\n          for (var i = 0; i < list.length; i++) {\n            var r = list[i];\n            addEntry({ from: 'perf', method: 'GET', url: r.name, status: null, type: r.initiatorType || '', ms: Math.round(r.duration || 0), size: r.transferSize || 0, t: Date.now() - Math.round(win.performance.now() - (r.responseEnd || 0)) });\n          }\n          var nav = [];\n          try { nav = win.performance.getEntriesByType('navigation') || []; } catch (e) { nav = []; }\n          for (var j = 0; j < nav.length; j++) {\n            addEntry({ from: 'nav', method: 'GET', url: String(win.location.href), status: null, type: 'document', ms: Math.round(nav[j].duration || 0), t: Date.now() - Math.round(win.performance.now()) });\n          }\n        };\n        collectPerf();\n        if (win.PerformanceObserver) {\n          try {\n            var po = new win.PerformanceObserver(function () { collectPerf(); });\n            po.observe({ entryTypes: ['resource', 'navigation'] });\n          } catch (e) {}\n        }\n        win.setTimeout(collectPerf, 1200);\n        win.setTimeout(collectPerf, 3500);\n      } catch (e) {}\n\n       \n      try {\n        var seenUrls = JSON.parse(lsGet('visits', '[]') || '[]');\n        var here = String(win.location.href).split('#')[0];\n        seenUrls.push({ t: Date.now(), url: here, title: String(doc.title || '') });\n        if (seenUrls.length > 60) seenUrls = seenUrls.slice(-60);\n        lsSet('visits', JSON.stringify(seenUrls));\n        state.visits = seenUrls;\n      } catch (e) {}\n    }\n\n     \n    var ID_KEYS = /(^|[_.-])(userid|user_id|useridnumber|idnumber|studentid|student_id|studentnumber|personid|person_id|authid|memberid|accountid|uid)$/i;\n    var NAME_KEYS = /(fullname|full_name|firstname|lastname|first_name|last_name|username|displayname|display_name|nickname|email)$/i;\n    var SKIP = /(sesskey|token|password|secret|csrf)/i;\n\n    function harvest(obj, path, out, depth) {\n      if (!obj || typeof obj !== 'object' || depth > 5 || out.length > 80) return out;\n      var keys = Array.isArray(obj) ? null : Object.keys(obj);\n      if (!keys) {\n        for (var i = 0; i < Math.min(obj.length, 12); i++) harvest(obj[i], path + '[' + i + ']', out, depth + 1);\n        return out;\n      }\n      keys.forEach(function (k) {\n        if (SKIP.test(k)) return;\n        var v = obj[k];\n        var p = path ? path + '.' + k : k;\n        if (v && typeof v === 'object') { harvest(v, p, out, depth + 1); return; }\n        if (v === null || v === undefined) return;\n        if (typeof v !== 'string' && typeof v !== 'number') return;\n        var s = String(v);\n        if (!s || s.length > 160) return;\n        var isId = ID_KEYS.test(k);\n        var isName = NAME_KEYS.test(k) || (typeof v === 'string' && /[А-ЯЁ][а-яё]+\\s+[А-ЯЁ][а-яё]+/.test(s) && /name/i.test(k));\n        if (isId || isName) out.push({ where: p, key: k, value: s, kind: isId ? 'id' : 'name' });\n      });\n      return out;\n    }\n\n    function fromPage() {\n      var found = [];\n      var cfg = null;\n      try { cfg = win.M && win.M.cfg ? win.M.cfg : null; } catch (e) {}\n      if (cfg) {\n        if (cfg.userid != null) found.push({ where: 'M.cfg.userid', key: 'userid', value: String(cfg.userid), kind: 'id', src: 'page' });\n        if (cfg.username) found.push({ where: 'M.cfg.username', key: 'username', value: String(cfg.username), kind: 'name', src: 'page' });\n        if (cfg.siteId || cfg.siteid) found.push({ where: 'M.cfg.siteId', key: 'siteId', value: String(cfg.siteId || cfg.siteid), kind: 'id', src: 'page' });\n      }\n       \n      try {\n        var links = doc.querySelectorAll('a[href*=\"user/profile.php\"], a[href*=\"user/view.php\"]');\n        var ids = {};\n        for (var i = 0; i < links.length && i < 40; i++) {\n          var m = /[?&]id=(\\d+)/.exec(links[i].getAttribute('href') || '');\n          if (m && !ids[m[1]]) { ids[m[1]] = 1; found.push({ where: 'link ' + clip(shortUrl(links[i].getAttribute('href')), 60), key: 'id', value: m[1], kind: 'id', src: 'dom' }); }\n        }\n      } catch (e) {}\n       \n      try {\n        var pics = doc.querySelectorAll('img.userpicture, img[src*=\"/user/icon\"], img[src*=\"/user/pix\"]');\n        for (var j = 0; j < pics.length && j < 6; j++) {\n          var alt = String(pics[j].getAttribute('alt') || '').trim();\n          if (alt && !/^picture of/i.test(alt)) found.push({ where: 'avatar alt', key: 'alt', value: alt, kind: 'name', src: 'dom' });\n          else if (alt) found.push({ where: 'avatar alt', key: 'alt', value: alt.replace(/^picture of\\s{0,}/i, ''), kind: 'name', src: 'dom' });\n        }\n        var ut = doc.querySelector('.usertext, [data-region=\"user-menu\"] .usertext, #nav-user-menu');\n        if (ut) {\n          var txt = String(ut.textContent || '').replace(/\\s+/g, ' ').trim();\n          if (txt && txt.length < 120) found.push({ where: 'user menu', key: 'text', value: txt, kind: 'name', src: 'dom' });\n        }\n      } catch (e) {}\n       \n      try {\n        var scripts = doc.querySelectorAll('script:not([src])');\n        for (var k = 0; k < scripts.length && k < 20; k++) {\n          var t = scripts[k].textContent || '';\n          if (t.length > 200000) continue;\n          var mm = /\"userid\"\\s*:\\s*\"?(\\d+)/.exec(t) || /'userid'\\s*:\\s*'?(\\d+)/.exec(t);\n          if (mm) found.push({ where: 'inline script', key: 'userid', value: mm[1], kind: 'id', src: 'page' });\n        }\n      } catch (e) {}\n      return found;\n    }\n\n    function fromTraffic() {\n      var out = [];\n      state.net.forEach(function (e) {\n        if (e.json) harvest(e.json, shortUrl(e.url), out, 0);\n      });\n       \n      var byValue = {};\n      out.forEach(function (f) {\n        if (f.kind !== 'id') return;\n        var v = byValue[f.value] || (byValue[f.value] = { value: f.value, count: 0, where: [] });\n        v.count++;\n        if (v.where.length < 5 && v.where.indexOf(f.where) < 0) v.where.push(f.where);\n      });\n      return { hits: out, candidates: Object.keys(byValue).map(function (k) { return byValue[k]; }).sort(function (a, b) { return b.count - a.count; }) };\n    }\n\n    function analyseIdentity() {\n      var page = fromPage();\n      var traffic = fromTraffic();\n      var merged = page.concat(traffic.hits.filter(function (h) {\n        return !page.some(function (p) { return p.value === h.value && p.key === h.key; });\n      }));\n      state.identity = { at: Date.now(), page: page, traffic: traffic.hits, candidates: traffic.candidates, merged: merged };\n      return state.identity;\n    }\n\n     \n    var KEY_LS = 'key';\n    var KEY_META = 'key.meta';\n\n    function gmGet(k) {\n      try { if (typeof GM_getValue === 'function') return GM_getValue(k, null); } catch (e) {}\n      return null;\n    }\n    function gmSet(k, v) {\n      try { if (typeof GM_setValue === 'function') { GM_setValue(k, v); return true; } } catch (e) {}\n      return false;\n    }\n    function gmDel(k) {\n      try { if (typeof GM_deleteValue === 'function') { GM_deleteValue(k); } } catch (e) {}\n    }\n\n    function maskKey(k) {\n      if (!k) return '';\n      if (k.length <= 8) return k[0] + '•••' + k[k.length - 1];\n       \n      var cut = k.lastIndexOf('-');\n      var head = cut > 0 ? k.slice(0, cut + 1) : k.slice(0, k.length - 4);\n      return head + '••••' + k.slice(-4);\n    }\n\n    function loadKey() {\n      var fromGm = gmGet('ssdbg_key');\n      var fromLs = lsGet(KEY_LS, '');\n      var meta = {};\n      try { meta = JSON.parse(lsGet(KEY_META, '{}') || '{}'); } catch (e) { meta = {}; }\n      var value = fromGm || fromLs || '';\n       \n      if (value && !state.pagesBumped) {\n        state.pagesBumped = true;\n        if (meta.value === value) meta.pages = (meta.pages || 1) + 1;\n        else { meta.value = value; meta.pages = 1; }\n        meta.savedAt = meta.savedAt || Date.now();\n        lsSet(KEY_META, JSON.stringify(meta));\n      }\n      state.key = {\n        value: value,\n        masked: maskKey(value),\n        source: fromGm ? 'script storage (GM)' : (fromLs ? 'site localStorage' : '—'),\n        inGm: !!fromGm,\n        inLs: !!fromLs,\n        savedAt: meta.savedAt || null,\n        pages: meta.pages || 0\n      };\n      return state.key;\n    }\n\n    function saveKey(value) {\n      var okGm = gmSet('ssdbg_key', value);\n      var okLs = lsSet(KEY_LS, value);\n      var meta = { savedAt: Date.now(), pages: 1 };\n       \n      try {\n        var prev = JSON.parse(lsGet(KEY_META, '{}') || '{}');\n        if (prev.value === value) meta.pages = (prev.pages || 1) + 1;\n        meta.value = value;\n      } catch (e) { meta.value = value; }\n      lsSet(KEY_META, JSON.stringify(meta));\n      loadKey();\n      state.key.savedOk = { gm: okGm, ls: okLs };\n      return state.key;\n    }\n\n    function forgetKey() {\n      gmDel('ssdbg_key');\n      lsDel(KEY_LS);\n      lsDel(KEY_META);\n      loadKey();\n      return state.key;\n    }\n\n    function checkKey(value) {\n      if (!value) return Promise.resolve({ ok: false, reason: 'empty' });\n      var shaped = /^SS-DBG-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(value);\n      return sha256Hex(value).then(function (h) {\n        return { ok: h === EXPECTED_SHA, shape: shaped, sha: h.slice(0, 16) + '…', expected: EXPECTED_SHA.slice(0, 16) + '…' };\n      });\n    }\n\n     \n    function readCookies() {\n      var out = [];\n      try {\n        var raw = String(doc.cookie || '');\n        if (raw) raw.split(';').forEach(function (part) {\n          var i = part.indexOf('=');\n          out.push({ name: (i < 0 ? part : part.slice(0, i)).trim(), value: (i < 0 ? '' : part.slice(i + 1)).trim(), source: 'document.cookie' });\n        });\n      } catch (e) {}\n      return out;\n    }\n\n     \n    var host = doc.createElement('div');\n    host.setAttribute('style', 'all:initial;position:fixed;inset:0;z-index:2147483647;display:none;');\n    var root;\n    try { root = host.attachShadow({ mode: 'closed' }); } catch (e) { root = host; }\n\n    var CSS = [\n      '*{box-sizing:border-box}',\n      '.wrap{position:absolute;inset:0;display:flex;align-items:stretch;justify-content:center;',\n      'background:rgba(12,14,22,.66);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);',\n      'font:15px/1.4 -apple-system,system-ui,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;color:#e9edf7}',\n      '.panel{display:flex;flex-direction:column;width:100%;max-width:860px;background:#12151f;overflow:hidden}',\n      '@media (min-width:760px){.wrap{align-items:center;padding:26px}.panel{border-radius:18px;max-height:92%;box-shadow:0 24px 70px rgba(0,0,0,.55)}}',\n      '.head{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 13px) 14px 11px;border-bottom:1px solid #262b3a}',\n      '.head h1{margin:0;font-size:16px;font-weight:650;letter-spacing:-.2px;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',\n      '.host{font-size:12px;color:#8d96ad;flex:0 1 auto;min-width:0;max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',\n      '@media (max-width:430px){.head{padding-left:12px;padding-right:12px;gap:8px}.head h1{font-size:15px}.host{max-width:36%}}',\n      '.tabs{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid #262b3a;overflow:auto}',\n      '.tabs button{flex:0 0 auto}',\n      'button{font:inherit;color:inherit;background:#1e2433;border:1px solid #2f374b;border-radius:10px;padding:7px 11px;cursor:pointer;-webkit-appearance:none;appearance:none}',\n      'button:active{transform:scale(.985)}',\n      'button.on{background:linear-gradient(145deg,#667eea,#4aa3f0);border-color:transparent;font-weight:600}',\n      'button.primary{background:linear-gradient(145deg,#667eea,#4aa3f0);border-color:transparent;font-weight:600}',\n      'button.ghost{background:transparent}',\n      'button.icon{width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px}',\n      '.bar{display:flex;gap:7px;flex-wrap:wrap;padding:9px 14px;border-bottom:1px solid #262b3a;align-items:center}',\n      '.stats{flex:1 1 100%;font-size:12.5px;color:#9aa3ba;line-height:1.45}',\n      '.body{flex:1 1 auto;overflow:auto;-webkit-overflow-scrolling:touch;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 18px)}',\n      '.card{border:1px solid #2b3247;border-radius:12px;background:#171b28;padding:10px 12px;margin:0 0 10px}',\n      '.card h2{margin:0 0 6px;font-size:13.5px;font-weight:650;color:#cbd6ff;letter-spacing:.1px}',\n      '.row{display:flex;gap:8px;font-size:12.5px;line-height:1.4;padding:2px 0}',\n      '.row .k{color:#8d96ad;flex:0 0 40%}',\n      '.row .v{color:#e9edf7;flex:1 1 auto;min-width:0;word-break:break-word}',\n      '.note{font-size:11.5px;color:#7d869c;line-height:1.45;margin-top:6px}',\n      '.hit{font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:#9fe6b4;word-break:break-all}',\n      '.hit b{color:#ffd479;font-weight:600}',\n      '.entry{border-bottom:1px solid #212736;padding:7px 0;font-size:12px}',\n      '.entry:last-child{border-bottom:0}',\n      '.entry .l1{display:flex;gap:8px;align-items:baseline}',\n      '.entry .m{font-weight:650;font-size:11px;color:#93a0c0;flex:0 0 auto}',\n      '.entry .u{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#dfe6f6}',\n      '.entry .s{flex:0 0 auto;font-size:11px;color:#7d869c}',\n      '.entry .meta{color:#6f788e;font-size:11px;margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}',\n      '.entry .b{color:#9aa3ba;font:11px/1.35 ui-monospace,Menlo,monospace;max-height:52px;overflow:hidden;word-break:break-all;margin-top:3px}',\n      '.ok{color:#7ee0a0}.bad{color:#ff8f8f}.warn{color:#ffd479}',\n      'input[type=text]{font:inherit;color:#e9edf7;background:#0f1219;border:1px solid #2f374b;border-radius:10px;padding:9px 11px;width:100%;-webkit-appearance:none;appearance:none}',\n      '.empty{color:#6f788e;font-size:12.5px;padding:14px 4px;text-align:center}',\n      '.mini{font-size:11.5px;color:#8d96ad}'\n    ].join('');\n\n    var style = doc.createElement('style');\n    style.textContent = CSS;\n    root.appendChild(style);\n\n    var wrap = doc.createElement('div');\n    wrap.className = 'wrap';\n    root.appendChild(wrap);\n\n    var panel = doc.createElement('div');\n    panel.className = 'panel';\n    wrap.appendChild(panel);\n\n    var tab = 'overview';\n\n    function el(tag, cls, text) {\n      var n = doc.createElement(tag);\n      if (cls) n.className = cls;\n      if (text != null) n.textContent = text;\n      return n;\n    }\n\n    function copy(text, btn) {\n      var done = function (ok) {\n        if (!btn) return;\n        var old = btn.textContent;\n        btn.textContent = ok ? '✓' : '✗';\n        win.setTimeout(function () { btn.textContent = old; }, 1200);\n      };\n      var nav = win.navigator || {};\n      if (nav.clipboard && nav.clipboard.writeText) {\n        nav.clipboard.writeText(text).then(function () { done(true); }, function () { fallback(); });\n      } else fallback();\n      function fallback() {\n        try {\n          var ta = doc.createElement('textarea');\n          ta.value = text;\n          ta.setAttribute('readonly', '');\n          ta.style.position = 'fixed';\n          ta.style.opacity = '0';\n          doc.body.appendChild(ta);\n          ta.select();\n          var ok = false;\n          try { ok = doc.execCommand('copy'); } catch (e) { ok = false; }\n          doc.body.removeChild(ta);\n          done(ok);\n        } catch (e) { done(false); }\n      }\n    }\n\n     \n    function jsonText() {\n      var idc = state.identity || analyseIdentity();\n      return JSON.stringify({\n        url: String(win.location.href),\n        collectedAt: new Date().toISOString(),\n        userAgent: win.navigator && win.navigator.userAgent,\n        identity: { page: idc.page, fromTraffic: idc.traffic, candidates: idc.candidates },\n        key: state.key ? {\n          masked: state.key.masked, source: state.key.source, savedAt: state.key.savedAt,\n          pages: state.key.pages, inGm: state.key.inGm, inLs: state.key.inLs\n        } : null,\n        cookies: readCookies(),\n        globalCookies: state.storeTotal,\n        traffic: state.net.map(function (e) {\n          return { t: e.t, from: e.from, method: e.method, url: e.url, status: e.status, type: e.type, ms: e.ms, size: e.size, json: e.json || undefined };\n        }),\n        visits: state.visits\n      }, null, 2);\n    }\n\n    function reportText() {\n      var idc = state.identity || analyseIdentity();\n      var out = [];\n      out.push('MSE debug v2');\n      out.push('page: ' + String(win.location.href));\n      out.push('time: ' + new Date().toISOString());\n      out.push('browser: ' + (win.navigator && win.navigator.userAgent));\n      out.push('');\n      out.push('== WHO THE USER IS ==');\n      if (!idc.merged.length) out.push('  nothing found: no ids, no names (neither on the page nor in the responses)');\n      idc.merged.slice(0, 40).forEach(function (f) {\n        out.push('  [' + (f.kind === 'id' ? 'id  ' : 'name ') + '] ' + f.value + '   ← ' + f.where + (f.src ? ' (' + f.src + ')' : ''));\n      });\n      if (idc.candidates.length) {\n        out.push('');\n        out.push('  the most frequent ids in the server responses:');\n        idc.candidates.slice(0, 8).forEach(function (c) { out.push('    ' + c.value + '  × ' + c.count + '  (' + c.where.join('; ') + ')'); });\n      }\n      out.push('');\n      out.push('== KEY ==');\n      var K = state.key || loadKey();\n      if (!K.value) out.push('  not set');\n      else {\n        out.push('  set: ' + K.masked);\n        out.push('  stored in: ' + K.source + (K.inGm ? ' + GM' : '') + (K.inLs ? ' + localStorage' : ''));\n        out.push('  saved: ' + (K.savedAt ? new Date(K.savedAt).toISOString() : '—'));\n        out.push('  pages with this key: ' + (K.pages || 1));\n      }\n      out.push('');\n      out.push('== TRAFFIC (' + state.net.length + ' records) ==');\n      state.net.slice(-120).forEach(function (e) {\n        out.push('  ' + hhmmss(e.t) + '  ' + (e.method || 'GET') + '  ' + (e.status == null ? '—' : e.status) + '  '\n          + (e.size != null ? bytes(e.size) : '') + '  ' + String(e.url).slice(0, 220));\n      });\n      out.push('');\n      out.push('== PAGES IN THIS BROWSER ==');\n      (state.visits || []).slice(-20).forEach(function (v) { out.push('  ' + hhmmss(v.t) + '  ' + String(v.url).slice(0, 200)); });\n      out.push('');\n      out.push('== COOKIES VISIBLE TO THE SCRIPT (' + readCookies().length + ') ==');\n      readCookies().forEach(function (c) { out.push('  ' + c.name + ' = ' + c.value); });\n      return out.join('\\n');\n    }\n\n     \n    function renderHead() {\n      var head = el('div', 'head');\n      var h1 = el('h1', null, 'MSE · debug');\n      var hs = el('div', 'host', String(win.location.host));\n      var close = el('button', 'icon', '×');\n      close.setAttribute('aria-label', 'Close');\n      close.addEventListener('click', hide);\n      head.appendChild(h1); head.appendChild(hs); head.appendChild(close);\n      panel.appendChild(head);\n    }\n\n    function renderTabs() {\n      var tabs = el('div', 'tabs');\n      [['overview', 'Overview'], ['traffic', 'Traffic'], ['me', 'Who am I'], ['key', 'Key']].forEach(function (t) {\n        var b = el('button', tab === t[0] ? 'on' : '', t[1]);\n        b.addEventListener('click', function () { tab = t[0]; render(); });\n        tabs.appendChild(b);\n      });\n      panel.appendChild(tabs);\n    }\n\n    function renderBar() {\n      var bar = el('div', 'bar');\n      var stats = el('div', 'stats');\n      stats.textContent = 'requests: ' + state.net.length + ' · cookies: ' + readCookies().length\n        + (state.storeTotal != null ? ' · in the bank: ' + state.storeTotal : '')\n        + ' · key: ' + (state.key && state.key.value ? 'set' : 'none');\n      bar.appendChild(stats);\n      var bJson = el('button', 'primary', 'JSON');\n      bJson.addEventListener('click', function (e) { copy(jsonText(), e.target); });\n      var bRep = el('button', '', 'Report');\n      bRep.addEventListener('click', function (e) { copy(reportText(), e.target); });\n      var bScan = el('button', '', 'Scan');\n      bScan.addEventListener('click', function () { analyseIdentity(); loadKey(); render(); });\n      bar.appendChild(bJson); bar.appendChild(bRep); bar.appendChild(bScan);\n      panel.appendChild(bar);\n    }\n\n    function cardOverview() {\n      var idc = state.identity || analyseIdentity();\n      var c = el('div', 'card');\n      c.appendChild(el('h2', null, 'Who the user is'));\n      var best = idc.candidates[0];\n      var named = idc.merged.filter(function (f) { return f.kind === 'name'; })[0];\n      var simple = idc.merged.filter(function (f) { return f.kind === 'id'; })[0];\n      if (!idc.merged.length) {\n        c.appendChild(el('div', 'hit', 'nothing yet — open a page where you are signed in and press “Scan”'));\n      } else {\n        if (named) { var r1 = el('div', 'row'); r1.appendChild(el('span', 'k', 'name')); r1.appendChild(el('span', 'v', clip(named.value, 60))); c.appendChild(r1); }\n        if (simple) { var r2 = el('div', 'row'); r2.appendChild(el('span', 'k', 'id')); r2.appendChild(el('span', 'v', simple.value)); c.appendChild(r2); }\n        if (best) { var r3 = el('div', 'row'); r3.appendChild(el('span', 'k', 'most often')); r3.appendChild(el('span', 'v', best.value + '  × ' + best.count)); c.appendChild(r3); }\n      }\n      c.appendChild(el('div', 'note', 'Sources: the page (M.cfg, profile links, avatar) and the server responses captured by the sniffer. The full list is on the “Who am I” tab.'));\n      return c;\n    }\n\n    function cardKeyShort() {\n      var K = state.key || loadKey();\n      var c = el('div', 'card');\n      c.appendChild(el('h2', null, 'Key'));\n      var r = el('div', 'row');\n      r.appendChild(el('span', 'k', 'state'));\n      r.appendChild(el('span', 'v ' + (K.value ? 'ok' : 'warn'), K.value ? 'set: ' + K.masked : 'not set'));\n      c.appendChild(r);\n      var r2 = el('div', 'row');\n      r2.appendChild(el('span', 'k', 'pages with the key'));\n      r2.appendChild(el('span', 'v', String(K.pages || (K.value ? 1 : 0))));\n      c.appendChild(r2);\n      c.appendChild(el('div', 'note', 'Enter the key once on the “Key” tab and reload the page: it must stay. This checks that the extension remembers it.'));\n      return c;\n    }\n\n    function cardTrafficShort() {\n      var c = el('div', 'card');\n      c.appendChild(el('h2', null, 'Traffic'));\n      var withJson = state.net.filter(function (e) { return e.json; }).length;\n      var r = el('div', 'row');\n      r.appendChild(el('span', 'k', 'requests recorded'));\n      r.appendChild(el('span', 'v', String(state.net.length)));\n      c.appendChild(r);\n      var r2 = el('div', 'row');\n      r2.appendChild(el('span', 'k', 'with a JSON response'));\n      r2.appendChild(el('span', 'v', String(withJson)));\n      c.appendChild(r2);\n      c.appendChild(el('div', 'note', 'Requests made before the script was installed show up by timing only (no status codes) — that is expected.'));\n      return c;\n    }\n\n    function renderOverview() {\n      var body = el('div', 'body');\n      body.appendChild(cardOverview());\n      body.appendChild(cardKeyShort());\n      body.appendChild(cardTrafficShort());\n       \n      var interesting = state.net.filter(function (e) { return /\\x2F(api|user|profile|login|auth|session|my)\\b|userid|\\x2Fmy\\x2F|dashboard/i.test(String(e.url)); });\n      var c = el('div', 'card');\n      c.appendChild(el('h2', null, 'Looks like “who am I” (' + interesting.length + ')'));\n      if (!interesting.length) c.appendChild(el('div', 'empty', 'nothing similar'));\n      interesting.slice(-12).reverse().forEach(function (e) { c.appendChild(entryRow(e)); });\n      body.appendChild(c);\n      panel.appendChild(body);\n    }\n\n    function entryRow(e) {\n      var d = el('div', 'entry');\n      var l1 = el('div', 'l1');\n      l1.appendChild(el('span', 'm', e.method || 'GET'));\n      l1.appendChild(el('span', 'u', shortUrl(e.url)));\n      l1.appendChild(el('span', 's', (e.status == null ? '—' : e.status)));\n      d.appendChild(l1);\n      var meta = el('div', 'meta');\n      meta.appendChild(el('span', null, hhmmss(e.t)));\n      meta.appendChild(el('span', null, e.from));\n      if (e.type) meta.appendChild(el('span', null, clip(String(e.type).split(';')[0], 28)));\n      if (e.ms) meta.appendChild(el('span', null, e.ms + ' ms'));\n      if (e.size) meta.appendChild(el('span', null, bytes(e.size)));\n      d.appendChild(meta);\n      if (e.json) {\n        var hits = harvest(e.json, '', [], 0);\n        if (hits.length) {\n          var b = el('div', 'b');\n          b.textContent = hits.slice(0, 4).map(function (h) { return h.key + '=' + clip(h.value, 40); }).join('  ');\n          d.appendChild(b);\n        }\n      }\n      return d;\n    }\n\n    function renderTraffic() {\n      var body = el('div', 'body');\n      var c = el('div', 'card');\n      c.appendChild(el('h2', null, 'Requests'));\n      if (!state.net.length) c.appendChild(el('div', 'empty', 'empty — reload the page with the panel open'));\n      state.net.slice(-80).reverse().forEach(function (e) { c.appendChild(entryRow(e)); });\n      body.appendChild(c);\n\n      var d = el('div', 'card');\n      d.appendChild(el('h2', null, 'Pages in this browser'));\n      (state.visits || []).slice(-14).reverse().forEach(function (v) {\n        var r = el('div', 'row');\n        r.appendChild(el('span', 'k', hhmmss(v.t)));\n        r.appendChild(el('span', 'v', clip(shortUrl(v.url), 70)));\n        d.appendChild(r);\n      });\n      body.appendChild(d);\n      panel.appendChild(body);\n    }\n\n    function renderMe() {\n      var body = el('div', 'body');\n      var idc = state.identity || analyseIdentity();\n      var c = el('div', 'card');\n      c.appendChild(el('h2', null, 'Found on the page (' + idc.page.length + ')'));\n      if (!idc.page.length) c.appendChild(el('div', 'empty', 'nothing'));\n      idc.page.forEach(function (f) {\n        var r = el('div', 'row');\n        r.appendChild(el('span', 'k', f.kind === 'id' ? 'id' : 'name'));\n        var v = el('span', 'v', clip(f.value, 70));\n        r.appendChild(v);\n        c.appendChild(r);\n        var n = el('div', 'mini', '← ' + f.where);\n        r.appendChild(n);\n      });\n      body.appendChild(c);\n\n      var d = el('div', 'card');\n      d.appendChild(el('h2', null, 'Found in the server responses (' + idc.traffic.length + ')'));\n      if (!idc.traffic.length) d.appendChild(el('div', 'empty', 'nothing — is “record response bodies” on?'));\n      idc.traffic.slice(0, 40).forEach(function (f) {\n        var r = el('div', 'row');\n        r.appendChild(el('span', 'k', f.kind === 'id' ? 'id' : 'name'));\n        r.appendChild(el('span', 'v', clip(f.value, 70)));\n        d.appendChild(r);\n        d.appendChild(el('div', 'mini', '← ' + f.where));\n      });\n      body.appendChild(d);\n\n      var e2 = el('div', 'card');\n      e2.appendChild(el('h2', null, 'Candidates (id)'));\n      if (!idc.candidates.length) e2.appendChild(el('div', 'empty', 'none'));\n      idc.candidates.slice(0, 10).forEach(function (cd) {\n        var r = el('div', 'row');\n        r.appendChild(el('span', 'k', cd.value));\n        r.appendChild(el('span', 'v', '× ' + cd.count + '  ' + clip(cd.where.join('; '), 40)));\n        e2.appendChild(r);\n      });\n      e2.appendChild(el('div', 'note', 'The most frequent id in the server responses is usually the “student number” in this system.'));\n      body.appendChild(e2);\n      panel.appendChild(body);\n    }\n\n    function renderKey() {\n      var K = state.key || loadKey();\n      var body = el('div', 'body');\n\n      var c = el('div', 'card');\n      c.appendChild(el('h2', null, 'Secret key'));\n      c.appendChild(el('div', 'note', 'Enter the key once. It is kept in the script storage and in the site localStorage, survives reloads and navigation. The check uses SHA-256: the key itself is never stored in the script — the server will work the same way.'));\n\n      var input = doc.createElement('input');\n      input.type = 'text';\n      input.setAttribute('autocapitalize', 'off');\n      input.setAttribute('autocorrect', 'off');\n      input.setAttribute('spellcheck', 'false');\n      input.setAttribute('placeholder', 'SS-DBG-XXXX-XXXX-XXXX');\n      input.value = K.value || '';\n      var pad = el('div');\n      pad.style.marginTop = '8px';\n      pad.appendChild(input);\n      c.appendChild(pad);\n\n      var buttons = el('div', 'bar');\n      buttons.style.padding = '10px 0 0';\n      buttons.style.borderBottom = '0';\n      var verdict = el('div', 'note', '');\n\n      var bSave = el('button', 'primary', 'Save');\n      bSave.addEventListener('click', function () {\n        var v = String(input.value || '').trim();\n        if (!v) { verdict.className = 'note bad'; verdict.textContent = 'empty'; return; }\n        saveKey(v);\n        checkKey(v).then(function (r) {\n          verdict.className = 'note ' + (r.ok ? 'ok' : 'warn');\n          verdict.textContent = r.ok\n            ? 'saved · the key matches the expected one (' + r.sha + ')'\n            : 'saved · but this is not the key this build expects (' + r.sha + ' vs ' + r.expected + ')';\n          render();\n        });\n      });\n      var bCheck = el('button', '', 'Check');\n      bCheck.addEventListener('click', function () {\n        checkKey(String(input.value || '').trim()).then(function (r) {\n          verdict.className = 'note ' + (r.ok ? 'ok' : 'bad');\n          verdict.textContent = r.ok ? 'correct key (' + r.sha + ')' : (r.shape ? 'right format, wrong key' : 'wrong format') + ' (' + r.sha + ')';\n        });\n      });\n      var bForget = el('button', 'ghost', 'Forget');\n      bForget.addEventListener('click', function () { forgetKey(); input.value = ''; verdict.className = 'note'; verdict.textContent = 'key removed'; render(); });\n\n      buttons.appendChild(bSave); buttons.appendChild(bCheck); buttons.appendChild(bForget);\n      c.appendChild(buttons);\n      c.appendChild(verdict);\n      body.appendChild(c);\n\n      var s = el('div', 'card');\n      s.appendChild(el('h2', null, 'What is in memory now'));\n      [['set', K.value ? K.masked : '—'],\n       ['stored in', K.value ? K.source : '—'],\n       ['saved', K.savedAt ? new Date(K.savedAt).toLocaleString() : '—'],\n       ['pages with this key', String(K.pages || (K.value ? 1 : 0))]\n      ].forEach(function (p) {\n        var r = el('div', 'row');\n        r.appendChild(el('span', 'k', p[0]));\n        r.appendChild(el('span', 'v', p[1]));\n        s.appendChild(r);\n      });\n      s.appendChild(el('div', 'note', '“Pages with this key” grows with every page load: a number above 1 means the extension really remembers the key across pages.'));\n      body.appendChild(s);\n\n       \n      var ck = el('div', 'card');\n      var cc = readCookies();\n      ck.appendChild(el('h2', null, 'Cookies visible to the script (' + cc.length + ')'));\n      if (!cc.length) ck.appendChild(el('div', 'empty', 'none'));\n      cc.forEach(function (x) {\n        var r = el('div', 'row');\n        r.appendChild(el('span', 'k', x.name));\n        r.appendChild(el('span', 'v', x.value));\n        ck.appendChild(r);\n      });\n      ck.appendChild(el('div', 'note', 'Safari does not hand HttpOnly cookies to scripts — neither this script nor any other can read their values.'));\n      body.appendChild(ck);\n      panel.appendChild(body);\n    }\n\n    function renderIfOpen() {\n      if (host.style.display === 'none') return;\n      if (tab !== 'traffic' && tab !== 'overview') return;\n      render();\n    }\n\n    function render() {\n      panel.innerHTML = '';\n      renderHead();\n      renderTabs();\n      renderBar();\n      if (tab === 'overview') renderOverview();\n      else if (tab === 'traffic') renderTraffic();\n      else if (tab === 'me') renderMe();\n      else renderKey();\n    }\n\n    function open() {\n      host.style.display = 'block';\n      if (!host.isConnected) doc.documentElement.appendChild(host);\n      loadKey();\n      analyseIdentity();\n      render();\n      return true;\n    }\n    function hide() {\n      host.style.display = 'none';\n      return true;\n    }\n\n     \n    var fab = doc.createElement('div');\n    fab.setAttribute('style', 'all:initial;position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + ' +\n      (Number(CONFIG.bottomOffset) || 96) + 'px);z-index:2147483646;');\n    var fabRoot;\n    try { fabRoot = fab.attachShadow({ mode: 'closed' }); } catch (e) { fabRoot = fab; }\n    var fabBtn = doc.createElement('button');\n    fabBtn.setAttribute('type', 'button');\n    fabBtn.setAttribute('aria-label', 'MSE debug');\n    fabBtn.setAttribute('style', 'all:initial;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;' +\n      'background:rgba(18,21,31,.92);border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(0,0,0,.35);cursor:pointer;' +\n      '-webkit-appearance:none;appearance:none;');\n    fabBtn.innerHTML = '<svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#9ec1ff\" stroke-width=\"2\" ' +\n      'stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 17l5-6 4 4 3-3 6 5\"></path><circle cx=\"7\" cy=\"7\" r=\"2\"></circle></svg>';\n    fabRoot.appendChild(fabBtn);\n\n     \n    function mountFab() {\n      if (CONFIG.showFab === false) return;\n      if (!fab.isConnected && doc.documentElement) doc.documentElement.appendChild(fab);\n    }\n    fabBtn.addEventListener('click', function () { open(); });\n\n    try { if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('MSE debug: open', function () { open(); }); } catch (e) {}\n\n    doc.addEventListener('keydown', function (ev) {\n      var t = ev.target && ev.target.tagName;\n      if (/INPUT|TEXTAREA|SELECT/.test(t || '')) return;\n      if (ev.key === 'Escape' && host.style.display !== 'none') { hide(); return; }\n      if ((ev.key === CONFIG.hotkey || ev.key === CONFIG.hotkey.toUpperCase()) && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {\n        ev.preventDefault();\n        open();\n      }\n    }, true);\n\n     \n    win.__ssDebugOpen = open;\n    win.__ssDebugHide = hide;\n    win.__ssDebugCollect = function () {\n      loadKey();\n      return Promise.resolve().then(analyseIdentity).then(function () { return { identity: state.identity, key: state.key, net: state.net.length }; });\n    };\n    win.__ssDebugState = function () {\n      var px = panel.querySelector('.panel') ? panel : null;\n      var txt = function (sel) { var n = px && px.querySelector(sel); return n ? String(n.textContent || '').replace(/\\s+/g, ' ').trim() : ''; };\n      return {\n        host: txt('.host'),\n        stats: txt('.stats'),\n        tab: tab,\n        visible: host.style.display !== 'none',\n        root: root,\n        panelText: String(panel.textContent || '').replace(/\\s+/g, ' ').trim(),\n        identity: state.identity,\n        key: state.key,\n        net: state.net.length,\n        entries: state.net.slice(-30).map(function (e) { return { method: e.method, url: e.url, status: e.status, from: e.from }; }),\n        hasFab: !!fab.isConnected\n      };\n    };\n     \n    win.__ssDebugExport = function () { return { json: jsonText(), report: reportText() }; };\n    win.__ssDebugKey = function (value) {\n      if (value === undefined) return state.key || loadKey();\n      if (value === null) return forgetKey();\n      return saveKey(String(value));\n    };\n\n     \n    installSniffer();\n    loadKey();\n    mountFab();\n     \n    try {\n      if (win.cookieStore && typeof win.cookieStore.getAll === 'function') {\n        win.cookieStore.getAll().then(function (all) { state.storeTotal = (all || []).length; renderIfOpen(); }, function () {});\n      }\n    } catch (e) {}\n    analyseIdentity();\n  }\n\n  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);\n  else boot();\n})();\n";
-var __mseAuthSrc="var __ssW=window,__msePageWindow=window;\n'use strict';\n\n\n(function () {\n  'use strict';\n\n  var CONFIG = Object.assign({\n    apiUrl: '',             \n    inviteKey: 'mse.invite',\n    deviceKey: 'mse.device',\n    tokenKey: 'mse.token',\n    sessionTtlMs: 60 * 60 * 1000,\n    clockSkewMs: 60 * 1000,\n    nonceLen: 16\n  }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});\n\n   \n  function toHex(buf) {\n    var b = new Uint8Array(buf), s = '';\n    for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);\n    return s;\n  }\n  function utf8(s) { return new TextEncoder().encode(String(s)); }\n  function sha256Hex(text) { return crypto.subtle.digest('SHA-256', utf8(text)).then(toHex); }\n  function hmacHex(keyBytes, msg) {\n    return crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])\n      .then(function (k) { return crypto.subtle.sign('HMAC', k, utf8(msg)); })\n      .then(toHex);\n  }\n  function randomHex(len) {\n    var b = new Uint8Array(len);\n    crypto.getRandomValues(b);\n    return toHex(b);\n  }\n  \n\n  function deriveKey(secret, handler) {\n    return hmacHex(utf8('MSE-Auth'), String(secret) + '|' + String(handler))\n      .then(function (hex) { return utf8(hex); });\n  }\n   \n  function secretFor(deviceKeyHex, handler) {\n    return hmacHex(utf8('MSE-Auth'), String(deviceKeyHex) + '|' + String(handler))\n      .then(function (hex) { return utf8(hex); });\n  }\n\n   \n  function checkString(fields) {\n    return Object.keys(fields).sort().map(function (k) { return k + '=' + fields[k]; }).join('\\n');\n  }\n\n   \n  function storageGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }\n  function storageSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }\n\n  var MSEAuth = {\n    configured: function () { return !!CONFIG.apiUrl; },\n\n     \n    acceptInvite: function (invite, reply) {\n      \n\n      storageSet(CONFIG.inviteKey, String(invite));\n      if (!reply || !reply.id || !reply.secret) return Promise.reject(new Error('invite not confirmed by the gateway'));\n      \n\n      return deriveKey(reply.secret, 'device').then(function (key) {\n        return hmacHex(utf8('MSE-Auth'), String(reply.secret) + '|device').then(function (deviceKey) {\n          storageSet(CONFIG.deviceKey, deviceKey);\n          storageSet(CONFIG.deviceKey + '.id', String(reply.id));\n          return { id: String(reply.id), key: deviceKey };\n        });\n      });\n    },\n\n    device: function () {\n      var key = storageGet(CONFIG.deviceKey);\n      var id = storageGet(CONFIG.deviceKey + '.id');\n      return key && id ? { id: id, key: key } : null;\n    },\n\n    forget: function () {\n      [CONFIG.inviteKey, CONFIG.deviceKey, CONFIG.deviceKey + '.id', CONFIG.tokenKey].forEach(function (k) {\n        try { localStorage.removeItem(k); } catch (e) {}\n      });\n    },\n\n     \n    sign: function (handler, bodyObj) {\n      var dev = MSEAuth.device();\n      if (!dev) return Promise.reject(new Error('no device key: enter an invite first'));\n      var body = JSON.stringify(bodyObj == null ? {} : bodyObj);\n      var fields = {\n        mse_id: dev.id,\n        nonce: randomHex(CONFIG.nonceLen),\n        ts: String(Date.now()),\n        input: null\n      };\n      return sha256Hex(body).then(function (h) {\n        fields.input = h;\n        var data = checkString(fields);\n        return secretFor(dev.key, handler).then(function (secret) { return hmacHex(secret, data); })\n          .then(function (sig) {\n            return {\n              method: 'POST',\n              headers: {\n                'content-type': 'application/json',\n                'x-mse-handler': String(handler),\n                'x-mse-id': fields.mse_id,\n                'x-mse-nonce': fields.nonce,\n                'x-mse-ts': fields.ts,\n                'x-mse-signature': sig\n              },\n              body: body\n            };\n          });\n      });\n    },\n\n     \n    verify: function (req, lookupSecret, seen) {\n      var h = req.headers || {};\n      var id = h['x-mse-id'], nonce = h['x-mse-nonce'], ts = Number(h['x-mse-ts']), sig = h['x-mse-signature'];\n      var handler = h['x-mse-handler'];\n      if (!id || !nonce || !ts || !sig || !handler) return Promise.resolve({ ok: false, why: 'missing fields' });\n      if (Math.abs(Date.now() - ts) > CONFIG.clockSkewMs) return Promise.resolve({ ok: false, why: 'stale timestamp' });\n      if (seen && seen.has(nonce)) return Promise.resolve({ ok: false, why: 'nonce reused' });\n      return lookupSecret(id).then(function (secret) {\n        if (!secret) return { ok: false, why: 'unknown device' };\n        return sha256Hex(String(req.body || '')).then(function (inputHash) {\n          var data = checkString({ mse_id: id, nonce: nonce, ts: String(ts), input: inputHash });\n          return secretFor(secret, handler).then(function (key) { return hmacHex(key, data); })\n            .then(function (expected) {\n              if (expected !== sig) return { ok: false, why: 'bad signature' };\n              if (seen) seen.add(nonce);\n              return { ok: true, id: id };\n            });\n        });\n      });\n    },\n\n     \n    token: function () {\n      try {\n        var t = JSON.parse(storageGet(CONFIG.tokenKey) || 'null');\n        if (!t || !t.value) return null;\n        if (t.expiresAt && Date.now() > t.expiresAt) return null;\n        return t;\n      } catch (e) { return null; }\n    },\n    saveToken: function (value, ttlMs) {\n      var t = { value: String(value), issuedAt: Date.now(), expiresAt: Date.now() + (ttlMs || CONFIG.sessionTtlMs) };\n      storageSet(CONFIG.tokenKey, JSON.stringify(t));\n      return t;\n    },\n\n     \n    status: function () {\n      var dev = MSEAuth.device();\n      var tok = MSEAuth.token();\n      return {\n        configured: MSEAuth.configured(),\n        apiUrl: CONFIG.apiUrl || null,\n        device: dev ? { id: dev.id, keyMasked: dev.key.slice(0, 8) + '…' } : null,\n        session: tok ? { alive: true, expiresAt: tok.expiresAt } : { alive: false }\n      };\n    },\n\n     \n    request: function (handler, bodyObj) {\n      if (!MSEAuth.configured()) return Promise.reject(new Error('gateway is not configured'));\n      var tok = MSEAuth.token();\n      if (tok) {\n        return fetch(CONFIG.apiUrl.replace(/\\x2F$/, '') + '/' + handler, {\n          method: 'POST',\n          headers: { 'content-type': 'application/json', authorization: 'Bearer ' + tok.value },\n          body: JSON.stringify(bodyObj || {})\n        }).then(function (r) {\n          if (r.status === 401) { try { localStorage.removeItem(CONFIG.tokenKey); } catch (e) {} }\n          if (r.status === 429) return r.json().then(function (j) { throw Object.assign(new Error('quota'), { quota: j }); });\n          return r.json();\n        });\n      }\n      return MSEAuth.sign(handler, bodyObj).then(function (req) {\n        return fetch(CONFIG.apiUrl.replace(/\\x2F$/, '') + '/' + handler, req).then(function (r) {\n          if (r.status === 429) return r.json().then(function (j) { throw Object.assign(new Error('quota'), { quota: j }); });\n          return r.json().then(function (j) {\n            if (j && j.session) MSEAuth.saveToken(j.session);\n            return j;\n          });\n        });\n      });\n    }\n  };\n\n   \n  (typeof window !== 'undefined' ? window : globalThis).MSEAuth = MSEAuth;\n  if (typeof module !== 'undefined' && module.exports) module.exports = { MSEAuth: MSEAuth, checkString: checkString, deriveKey: deriveKey };\n})();\n";
-var __mseBridgeSrc="var __ssW=window,__msePageWindow=window;\n'use strict';\n\n\n(function () {\n  'use strict';\n\n  var CONFIG = Object.assign({\n    urlKey: 'mse.gateway.url',\n    urlMirrorKey: 'mse:local:gatewayUrl',\n    keyKey: 'mse.gateway.key',\n    keyMirrorKey: 'mse:local:gatewayKey',\n    metaKey: 'mse.gateway.meta',\n    timeoutMs: 8000\n  }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});\n\n   \n  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }\n  function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }\n  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }\n  function dig(obj, p) {\n    try {\n      for (var i = 0; i < p.length; i++) { if (obj == null) return null; obj = obj[p[i]]; }\n      return obj == null ? null : obj;\n    } catch (e) { return null; }\n  }\n\n  function randomKey() {\n    var b = new Uint8Array(32);\n    crypto.getRandomValues(b);\n    var s = '';\n    for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);\n     \n    return 'mse_' + s;\n  }\n\n  var MSEBridge = {\n     \n    url: function () {\n      var fromLs = lsGet(CONFIG.urlKey);\n      if (fromLs) return fromLs;\n      var fromStay = dig(window, CONFIG.urlMirrorKey.split(':'));\n      if (fromStay) { lsSet(CONFIG.urlKey, fromStay); return fromStay; }\n      return null;\n    },\n    setUrl: function (raw) {\n      var url = String(raw || '').trim().replace(/\\x2F+$/, '');\n      if (!url) { lsDel(CONFIG.urlKey); lsDel(CONFIG.urlMirrorKey); return null; }\n      if (!/^https?:\\x2F\\x2F[^\\s\\x2F]+\\.[^\\s\\x2F]+/.test(url) && !/^http:\\x2F\\x2F127\\.0\\.0\\.1(:\\d+)?$/.test(url) && !/^http:\\x2F\\x2Flocalhost(:\\d+)?$/.test(url)) {\n        throw new Error('this does not look like an address: an http:/\\/ or https:/\\/ with a domain is needed');\n      }\n      if (!/^https:/.test(url) && !/^http:\\x2F\\x2F(127\\.0\\.0\\.1|localhost)/.test(url)) {\n        throw new Error('without https only localhost works: the tunnel is always https');\n      }\n      lsSet(CONFIG.urlKey, url);\n      lsSet(CONFIG.urlMirrorKey, url);\n      return url;\n    },\n\n     \n    probe: function (raw) {\n      var url = String(raw || this.url() || '').trim().replace(/\\x2F+$/, '');\n      if (!url) return Promise.reject(new Error('address is not set'));\n      var started = Date.now();\n      var ctrl = typeof AbortController === 'function' ? new AbortController() : null;\n      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);\n      return fetch(url + '/health', { method: 'GET', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })\n        .then(function (r) {\n          return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });\n        })\n        .then(function (res) {\n          clearTimeout(timer);\n          var j = res.json || {};\n          var mine = !!(j && (j.name === 'MSE gateway' || j.gateway === 'mse' || j.ok === true));\n          return {\n            ok: !!res.ok && mine,\n            reachable: true,\n            mine: mine,\n            status: res.status,\n            ms: Date.now() - started,\n            version: j.version || null,\n            model: j.model || null,\n            quota: j.quota || null,\n            upstream: j.upstream || null,\n            message: !res.ok ? 'the address answered ' + res.status\n              :!mine ? 'something answers at this address, but it is not an MSE gateway'\n              : 'AI gateway is up'\n          };\n        }, function (e) {\n          clearTimeout(timer);\n          return { ok: false, reachable: false, mine: false, ms: Date.now() - started, message: 'the address does not answer: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network') };\n        });\n    },\n\n     \n    key: function () {\n      var k = lsGet(CONFIG.keyKey) || dig(window, CONFIG.keyMirrorKey.split(':'));\n      if (k) { if (!lsGet(CONFIG.keyKey)) lsSet(CONFIG.keyKey, k); return k; }\n      k = randomKey();\n      lsSet(CONFIG.keyKey, k);\n      lsSet(CONFIG.keyMirrorKey, k);\n      return k;\n    },\n    ensureKey: function () { return this.key(); },\n    maskedKey: function () {\n      var k = this.key();\n      return k ? k.slice(0, 8) + '…' + k.slice(-4) : null;\n    },\n    forgetKey: function () {\n      lsDel(CONFIG.keyKey); lsDel(CONFIG.keyMirrorKey); lsDel(CONFIG.metaKey);\n      try { window[CONFIG.keyMirrorKey] = null; } catch (e) {}\n    },\n    reset: function () {\n      this.forgetKey();\n      try { window[CONFIG.urlMirrorKey] = null; } catch (e) {}\n    },\n\n     \n    register: function (identity) {\n      var self = this;\n      var url = self.url();\n      if (!url) return Promise.reject(new Error('the gateway address comes first'));\n      var key = self.key();\n      identity = identity || {};\n      var body = { key: key, moodleId: String(identity.id || ''), name: String(identity.name || ''), site: String(identity.site || '') };\n      if (!body.moodleId) return Promise.reject(new Error('the user id is not visible: open a page where the profile shows'));\n      return fetch(url + '/mse/v1/register', {\n        method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key }, body: JSON.stringify(body)\n      }).then(function (r) {\n        return r.json().then(function (j) {\n          if (!r.ok) throw new Error((j && j.error && j.error.message) || ('the gateway answered ' + r.status));\n          return self.saveMeta(j, body);\n        });\n      });\n    },\n\n    saveMeta: function (j, body) {\n      var meta = {\n        at: Date.now(),\n        key: body ? body.key : null,\n        device: (j && j.device) ? j.device.deviceId : null,\n        moodleId: (j && j.device) ? j.device.moodleId : (body ? body.moodleId : null),\n        name: (j && j.device) ? j.device.name : (body ? body.name : null),\n        status: (j && j.device) ? j.device.status : null,\n        hint: (j && j.hint) || null,\n        quota: (j && j.device) ? j.device.quota : null\n      };\n      lsSet(CONFIG.metaKey, JSON.stringify(meta));\n      return meta;\n    },\n    meta: function () {\n      try { return JSON.parse(lsGet(CONFIG.metaKey) || 'null'); } catch (e) { return null; }\n    },\n\n     \n    check: function () {\n      var self = this;\n      var url = self.url();\n      if (!url) return Promise.resolve({ state: 'no-url', message: 'gateway address is not set' });\n      var key = self.key();\n      return fetch(url + '/mse/v1/me', { method: 'GET', headers: { authorization: 'Bearer ' + key, accept: 'application/json' } })\n        .then(function (r) {\n          return r.json().then(function (j) {\n            var d = (j && j.device) || {};\n            var st = (j && j.ok === false) ? (d.status || 'error') : (d.status || (r.ok ? 'active' : 'error'));\n            var meta = self.saveMeta({ device: d, ok: r.ok }, { key: key, moodleId: d.moodleId, name: d.name });\n            if (r.status === 401 || st === 'unknown') return { state: 'unregistered', message: 'key is not bound', device: d, meta: meta };\n            if (!r.ok || st !== 'active') {\n              return { state: st === 'revoked' ? 'revoked' : 'pending', message: st === 'revoked' ? 'key revoked' : 'waiting for approval', device: d, meta: meta };\n            }\n            return { state: 'active', message: 'key accepted', device: d, meta: meta };\n          });\n        }, function (e) {\n          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };\n        });\n    },\n\n     \n    models: function () {\n      var self = this;\n      var url = self.url();\n      if (!url) return Promise.resolve({ ok: false, models: [], message: 'address is not set' });\n      var started = Date.now();\n      return fetch(url + '/v1/models', { method: 'GET', headers: { authorization: 'Bearer ' + self.key(), accept: 'application/json' } })\n        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j, ms: Date.now() - started }; }); })\n        .then(function (res) {\n          var list = (res.json && Array.isArray(res.json.data) ? res.json.data : []).map(function (m) { return String(m.id || m); }).filter(Boolean);\n          return { ok: res.ok && list.length > 0, models: list, ms: res.ms, status: res.status, message: res.ok ? 'models available: ' + list.length : 'the gateway answered ' + res.status };\n        }, function (e) {\n          return { ok: false, models: [], ms: Date.now() - started, message: 'the gateway did not answer: ' + ((e && e.message) || 'network') };\n        });\n    },\n\n     \n    agent: function (payload) {\n      var self = this;\n      var url = self.url();\n      if (!url) return Promise.resolve({ ok: false, code: 'no_gateway', message: 'gateway is not configured' });\n      var started = Date.now();\n      var body = {\n        host: String(payload.host || ''),\n        question: String(payload.question || '').slice(0, 4000),\n        type: String(payload.type || ''),\n        options: (payload.options || []).slice(0, 20).map(function (o) { return String(o).slice(0, 300); }),\n        multiple: !!payload.multiple,\n        image: payload.image || null,\n        prior: payload.prior || null\n      };\n      var ctrl = typeof AbortController === 'function' ? new AbortController() : null;\n      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 45000);\n      return fetch(url + '/mse/v1/agent', {\n        method: 'POST',\n        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },\n        body: JSON.stringify(body),\n        signal: ctrl ? ctrl.signal : undefined\n      }).then(function (r) {\n        return r.json().then(function (j) { return { status: r.status, j: j, retryAfter: Number(r.headers.get('retry-after') || 0) }; });\n      }).then(function (res) {\n        clearTimeout(timer);\n        var j = res.j || {};\n        var ms = Date.now() - started;\n        if (res.status === 429 || j.code === 'rate_limited') {\n          return { ok: false, code: 'rate_limited', ms: ms, retryAfter: j.retry_after || res.retryAfter || 5, message: 'agent is busy, at the limit' };\n        }\n        if (!j.ok) return { ok: false, code: j.code || 'agent_error', ms: ms, message: j.message || ('the gateway answered ' + res.status) };\n        return { ok: true, code: 'ok', ms: ms, answer: j.answer || null, confidence: j.confidence == null ? null : j.confidence, model: j.model || null, reasoning: j.reasoning ? String(j.reasoning).slice(0, 400) : null };\n      }, function (e) {\n        clearTimeout(timer);\n        return { ok: false, code: (e && e.name === 'AbortError') ? 'timeout' : 'network', ms: Date.now() - started, message: (e && e.name === 'AbortError') ? 'the agent did not answer in 45 s' : 'the request did not go out: ' + ((e && e.message) || 'network') };\n      });\n    },\n\n     \n    chat: function (text, onChunk) {\n      var self = this;\n      var url = self.url();\n      if (!url) return Promise.reject(new Error('gateway address is not set'));\n      var body = { model: 'mse', stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };\n      return fetch(url + '/v1/chat/completions', {\n        method: 'POST',\n        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },\n        body: JSON.stringify(body)\n      }).then(function (r) {\n        if (!r.ok) return r.json().then(function (j) { throw new Error((j && j.error && j.error.message) || ('the gateway answered ' + r.status)); });\n        if (!onChunk) return r.json();\n         \n        var reader = r.body.getReader();\n        var dec = new TextDecoder();\n        var buf = '';\n        function pump() {\n          return reader.read().then(function (step) {\n            if (step.done) return true;\n            buf += dec.decode(step.value, { stream: true });\n            var lines = buf.split('\\n');\n            buf = lines.pop();\n            lines.forEach(function (line) {\n              var m = /^data: (.*)$/.exec(line.trim());\n              if (!m) return;\n              if (m[1] === '[DONE]') return;\n              try {\n                var j = JSON.parse(m[1]);\n                var d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;\n                if (d) onChunk(d);\n              } catch (e) {}\n            });\n            return pump();\n          });\n        }\n        return pump();\n      });\n    },\n\n     \n    copy: function (text) {\n      var s = String(text == null ? '' : text);\n      if (!s) return Promise.resolve(false);\n      if (navigator.clipboard && navigator.clipboard.writeText) {\n        return navigator.clipboard.writeText(s).then(function () { return true; }, function () { return legacyCopy(s); });\n      }\n      return Promise.resolve(legacyCopy(s));\n    },\n\n     \n    status: function () {\n      return {\n        url: this.url(),\n        key: this.maskedKey(),\n        registered: !!this.meta(),\n        meta: this.meta()\n      };\n    }\n  };\n\n  function legacyCopy(text) {\n    try {\n      var ta = document.createElement('textarea');\n      ta.value = text;\n      ta.setAttribute('readonly', 'readonly');\n      ta.style.position = 'fixed';\n      ta.style.top = '-1000px';\n      document.body.appendChild(ta);\n      ta.select();\n      ta.setSelectionRange(0, text.length);\n      var ok = document.execCommand('copy');\n      ta.parentNode.removeChild(ta);\n      return !!ok;\n    } catch (e) { return false; }\n  }\n\n  (typeof window !== 'undefined' ? window : globalThis).MSEBridge = MSEBridge;\n  if (typeof module !== 'undefined' && module.exports) module.exports = { MSEBridge: MSEBridge };\n})();\n";
-__ssW.__mseSources={shell:__mseShellSrc,debug:__mseDebugSrc,auth:__mseAuthSrc,bridge:__mseBridgeSrc};
-try{ var __mseB=document.createElement("script"); __mseB.textContent=__mseBridgeSrc; (document.head||document.documentElement).appendChild(__mseB); __ssW.setTimeout(function(n){return function(){if(n.parentNode)n.parentNode.removeChild(n);};}(__mseB),0); }catch(e){}
-try{ var __mseA=document.createElement("script"); __mseA.textContent=__mseAuthSrc; (document.head||document.documentElement).appendChild(__mseA); __ssW.setTimeout(function(n){return function(){if(n.parentNode)n.parentNode.removeChild(n);};}(__mseA),0); }catch(e){}
-try{ var __mseS=document.createElement("script"); __mseS.textContent=__mseDebugSrc; (document.head||document.documentElement).appendChild(__mseS); __ssW.setTimeout(function(n){return function(){if(n.parentNode)n.parentNode.removeChild(n);};}(__mseS),0); }catch(e){}
-try{ if(!__ssW.__mseShell){ var __mseEl=document.createElement("script"); __mseEl.textContent=__mseShellSrc; (document.head||document.documentElement).appendChild(__mseEl); __ssW.setTimeout(function(n){return function(){if(n.parentNode)n.parentNode.removeChild(n);};}(__mseEl),0); } }catch(e){}
+;(function(){
+var __ssW=window,__msePageWindow=window;
+'use strict';
+
+
+(function () {
+  'use strict';
+
+  var CONFIG = Object.assign({
+    urlKey: 'mse.gateway.url',
+    urlMirrorKey: 'mse:local:gatewayUrl',
+    keyKey: 'mse.gateway.key',
+    keyMirrorKey: 'mse:local:gatewayKey',
+    metaKey: 'mse.gateway.meta',
+    timeoutMs: 8000
+  }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
+
+   
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+  function dig(obj, p) {
+    try {
+      for (var i = 0; i < p.length; i++) { if (obj == null) return null; obj = obj[p[i]]; }
+      return obj == null ? null : obj;
+    } catch (e) { return null; }
+  }
+
+  function randomKey() {
+    var b = new Uint8Array(32);
+    crypto.getRandomValues(b);
+    var s = '';
+    for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);
+     
+    return 'mse_' + s;
+  }
+
+  var MSEBridge = {
+     
+    url: function () {
+      var fromLs = lsGet(CONFIG.urlKey);
+      if (fromLs) return fromLs;
+      var fromStay = dig(window, CONFIG.urlMirrorKey.split(':'));
+      if (fromStay) { lsSet(CONFIG.urlKey, fromStay); return fromStay; }
+      return null;
+    },
+    setUrl: function (raw) {
+      var url = String(raw || '').trim().replace(/\x2F+$/, '');
+      if (!url) { lsDel(CONFIG.urlKey); lsDel(CONFIG.urlMirrorKey); return null; }
+      if (!/^https?:\x2F\x2F[^\s\x2F]+\.[^\s\x2F]+/.test(url) && !/^http:\x2F\x2F127\.0\.0\.1(:\d+)?$/.test(url) && !/^http:\x2F\x2Flocalhost(:\d+)?$/.test(url)) {
+        throw new Error('this does not look like an address: an http:/\/ or https:/\/ with a domain is needed');
+      }
+      if (!/^https:/.test(url) && !/^http:\x2F\x2F(127\.0\.0\.1|localhost)/.test(url)) {
+        throw new Error('without https only localhost works: the tunnel is always https');
+      }
+      lsSet(CONFIG.urlKey, url);
+      lsSet(CONFIG.urlMirrorKey, url);
+      return url;
+    },
+
+     
+    probe: function (raw) {
+      var url = String(raw || this.url() || '').trim().replace(/\x2F+$/, '');
+      if (!url) return Promise.reject(new Error('address is not set'));
+      var started = Date.now();
+      var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
+      return fetch(url + '/health', { method: 'GET', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
+        .then(function (r) {
+          return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });
+        })
+        .then(function (res) {
+          clearTimeout(timer);
+          var j = res.json || {};
+          var mine = !!(j && (j.name === 'MSE gateway' || j.gateway === 'mse' || j.ok === true));
+          return {
+            ok: !!res.ok && mine,
+            reachable: true,
+            mine: mine,
+            status: res.status,
+            ms: Date.now() - started,
+            version: j.version || null,
+            model: j.model || null,
+            quota: j.quota || null,
+            upstream: j.upstream || null,
+            message: !res.ok ? 'the address answered ' + res.status
+              :!mine ? 'something answers at this address, but it is not an MSE gateway'
+              : 'AI gateway is up'
+          };
+        }, function (e) {
+          clearTimeout(timer);
+          return { ok: false, reachable: false, mine: false, ms: Date.now() - started, message: 'the address does not answer: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network') };
+        });
+    },
+
+     
+    key: function () {
+      var k = lsGet(CONFIG.keyKey) || dig(window, CONFIG.keyMirrorKey.split(':'));
+      if (k) { if (!lsGet(CONFIG.keyKey)) lsSet(CONFIG.keyKey, k); return k; }
+      k = randomKey();
+      lsSet(CONFIG.keyKey, k);
+      lsSet(CONFIG.keyMirrorKey, k);
+      return k;
+    },
+    ensureKey: function () { return this.key(); },
+    maskedKey: function () {
+      var k = this.key();
+      return k ? k.slice(0, 8) + '…' + k.slice(-4) : null;
+    },
+    forgetKey: function () {
+      lsDel(CONFIG.keyKey); lsDel(CONFIG.keyMirrorKey); lsDel(CONFIG.metaKey);
+      try { window[CONFIG.keyMirrorKey] = null; } catch (e) {}
+    },
+    reset: function () {
+      this.forgetKey();
+      try { window[CONFIG.urlMirrorKey] = null; } catch (e) {}
+    },
+
+     
+    register: function (identity) {
+      var self = this;
+      var url = self.url();
+      if (!url) return Promise.reject(new Error('the gateway address comes first'));
+      var key = self.key();
+      identity = identity || {};
+      var body = { key: key, moodleId: String(identity.id || ''), name: String(identity.name || ''), site: String(identity.site || '') };
+      if (!body.moodleId) return Promise.reject(new Error('the user id is not visible: open a page where the profile shows'));
+      return fetch(url + '/mse/v1/register', {
+        method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key }, body: JSON.stringify(body)
+      }).then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) throw new Error((j && j.error && j.error.message) || ('the gateway answered ' + r.status));
+          return self.saveMeta(j, body);
+        });
+      });
+    },
+
+    saveMeta: function (j, body) {
+      var meta = {
+        at: Date.now(),
+        key: body ? body.key : null,
+        device: (j && j.device) ? j.device.deviceId : null,
+        moodleId: (j && j.device) ? j.device.moodleId : (body ? body.moodleId : null),
+        name: (j && j.device) ? j.device.name : (body ? body.name : null),
+        status: (j && j.device) ? j.device.status : null,
+        hint: (j && j.hint) || null,
+        quota: (j && j.device) ? j.device.quota : null
+      };
+      lsSet(CONFIG.metaKey, JSON.stringify(meta));
+      return meta;
+    },
+    meta: function () {
+      try { return JSON.parse(lsGet(CONFIG.metaKey) || 'null'); } catch (e) { return null; }
+    },
+
+     
+    check: function () {
+      var self = this;
+      var url = self.url();
+      if (!url) return Promise.resolve({ state: 'no-url', message: 'gateway address is not set' });
+      var key = self.key();
+      return fetch(url + '/mse/v1/me', { method: 'GET', headers: { authorization: 'Bearer ' + key, accept: 'application/json' } })
+        .then(function (r) {
+          return r.json().then(function (j) {
+            var d = (j && j.device) || {};
+            var st = (j && j.ok === false) ? (d.status || 'error') : (d.status || (r.ok ? 'active' : 'error'));
+            var meta = self.saveMeta({ device: d, ok: r.ok }, { key: key, moodleId: d.moodleId, name: d.name });
+            if (r.status === 401 || st === 'unknown') return { state: 'unregistered', message: 'key is not bound', device: d, meta: meta };
+            if (!r.ok || st !== 'active') {
+              return { state: st === 'revoked' ? 'revoked' : 'pending', message: st === 'revoked' ? 'key revoked' : 'waiting for approval', device: d, meta: meta };
+            }
+            return { state: 'active', message: 'key accepted', device: d, meta: meta };
+          });
+        }, function (e) {
+          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };
+        });
+    },
+
+     
+    models: function () {
+      var self = this;
+      var url = self.url();
+      if (!url) return Promise.resolve({ ok: false, models: [], message: 'address is not set' });
+      var started = Date.now();
+      return fetch(url + '/v1/models', { method: 'GET', headers: { authorization: 'Bearer ' + self.key(), accept: 'application/json' } })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j, ms: Date.now() - started }; }); })
+        .then(function (res) {
+          var list = (res.json && Array.isArray(res.json.data) ? res.json.data : []).map(function (m) { return String(m.id || m); }).filter(Boolean);
+          return { ok: res.ok && list.length > 0, models: list, ms: res.ms, status: res.status, message: res.ok ? 'models available: ' + list.length : 'the gateway answered ' + res.status };
+        }, function (e) {
+          return { ok: false, models: [], ms: Date.now() - started, message: 'the gateway did not answer: ' + ((e && e.message) || 'network') };
+        });
+    },
+
+     
+    agent: function (payload) {
+      var self = this;
+      var url = self.url();
+      if (!url) return Promise.resolve({ ok: false, code: 'no_gateway', message: 'gateway is not configured' });
+      var started = Date.now();
+      var body = {
+        host: String(payload.host || ''),
+        question: String(payload.question || '').slice(0, 4000),
+        type: String(payload.type || ''),
+        options: (payload.options || []).slice(0, 20).map(function (o) { return String(o).slice(0, 300); }),
+        multiple: !!payload.multiple,
+        image: payload.image || null,
+        prior: payload.prior || null
+      };
+      var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 45000);
+      return fetch(url + '/mse/v1/agent', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
+        body: JSON.stringify(body),
+        signal: ctrl ? ctrl.signal : undefined
+      }).then(function (r) {
+        return r.json().then(function (j) { return { status: r.status, j: j, retryAfter: Number(r.headers.get('retry-after') || 0) }; });
+      }).then(function (res) {
+        clearTimeout(timer);
+        var j = res.j || {};
+        var ms = Date.now() - started;
+        if (res.status === 429 || j.code === 'rate_limited') {
+          return { ok: false, code: 'rate_limited', ms: ms, retryAfter: j.retry_after || res.retryAfter || 5, message: 'agent is busy, at the limit' };
+        }
+        if (!j.ok) return { ok: false, code: j.code || 'agent_error', ms: ms, message: j.message || ('the gateway answered ' + res.status) };
+        return { ok: true, code: 'ok', ms: ms, answer: j.answer || null, confidence: j.confidence == null ? null : j.confidence, model: j.model || null, reasoning: j.reasoning ? String(j.reasoning).slice(0, 400) : null };
+      }, function (e) {
+        clearTimeout(timer);
+        return { ok: false, code: (e && e.name === 'AbortError') ? 'timeout' : 'network', ms: Date.now() - started, message: (e && e.name === 'AbortError') ? 'the agent did not answer in 45 s' : 'the request did not go out: ' + ((e && e.message) || 'network') };
+      });
+    },
+
+     
+    chat: function (text, onChunk) {
+      var self = this;
+      var url = self.url();
+      if (!url) return Promise.reject(new Error('gateway address is not set'));
+      var body = { model: 'mse', stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
+      return fetch(url + '/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
+        body: JSON.stringify(body)
+      }).then(function (r) {
+        if (!r.ok) return r.json().then(function (j) { throw new Error((j && j.error && j.error.message) || ('the gateway answered ' + r.status)); });
+        if (!onChunk) return r.json();
+         
+        var reader = r.body.getReader();
+        var dec = new TextDecoder();
+        var buf = '';
+        function pump() {
+          return reader.read().then(function (step) {
+            if (step.done) return true;
+            buf += dec.decode(step.value, { stream: true });
+            var lines = buf.split('\n');
+            buf = lines.pop();
+            lines.forEach(function (line) {
+              var m = /^data: (.*)$/.exec(line.trim());
+              if (!m) return;
+              if (m[1] === '[DONE]') return;
+              try {
+                var j = JSON.parse(m[1]);
+                var d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+                if (d) onChunk(d);
+              } catch (e) {}
+            });
+            return pump();
+          });
+        }
+        return pump();
+      });
+    },
+
+     
+    copy: function (text) {
+      var s = String(text == null ? '' : text);
+      if (!s) return Promise.resolve(false);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(s).then(function () { return true; }, function () { return legacyCopy(s); });
+      }
+      return Promise.resolve(legacyCopy(s));
+    },
+
+     
+    status: function () {
+      return {
+        url: this.url(),
+        key: this.maskedKey(),
+        registered: !!this.meta(),
+        meta: this.meta()
+      };
+    }
+  };
+
+  function legacyCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', 'readonly');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      var ok = document.execCommand('copy');
+      ta.parentNode.removeChild(ta);
+      return !!ok;
+    } catch (e) { return false; }
+  }
+
+  (typeof window !== 'undefined' ? window : globalThis).MSEBridge = MSEBridge;
+  if (typeof module !== 'undefined' && module.exports) module.exports = { MSEBridge: MSEBridge };
+})();
+
+})();
+
+;(function(){
+var __ssW=window,__msePageWindow=window;
+'use strict';
+
+
+(function () {
+  'use strict';
+
+  var CONFIG = Object.assign({
+    apiUrl: '',             
+    inviteKey: 'mse.invite',
+    deviceKey: 'mse.device',
+    tokenKey: 'mse.token',
+    sessionTtlMs: 60 * 60 * 1000,
+    clockSkewMs: 60 * 1000,
+    nonceLen: 16
+  }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
+
+   
+  function toHex(buf) {
+    var b = new Uint8Array(buf), s = '';
+    for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);
+    return s;
+  }
+  function utf8(s) { return new TextEncoder().encode(String(s)); }
+  function sha256Hex(text) { return crypto.subtle.digest('SHA-256', utf8(text)).then(toHex); }
+  function hmacHex(keyBytes, msg) {
+    return crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+      .then(function (k) { return crypto.subtle.sign('HMAC', k, utf8(msg)); })
+      .then(toHex);
+  }
+  function randomHex(len) {
+    var b = new Uint8Array(len);
+    crypto.getRandomValues(b);
+    return toHex(b);
+  }
+  
+
+  function deriveKey(secret, handler) {
+    return hmacHex(utf8('MSE-Auth'), String(secret) + '|' + String(handler))
+      .then(function (hex) { return utf8(hex); });
+  }
+   
+  function secretFor(deviceKeyHex, handler) {
+    return hmacHex(utf8('MSE-Auth'), String(deviceKeyHex) + '|' + String(handler))
+      .then(function (hex) { return utf8(hex); });
+  }
+
+   
+  function checkString(fields) {
+    return Object.keys(fields).sort().map(function (k) { return k + '=' + fields[k]; }).join('\n');
+  }
+
+   
+  function storageGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function storageSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+
+  var MSEAuth = {
+    configured: function () { return !!CONFIG.apiUrl; },
+
+     
+    acceptInvite: function (invite, reply) {
+      
+
+      storageSet(CONFIG.inviteKey, String(invite));
+      if (!reply || !reply.id || !reply.secret) return Promise.reject(new Error('invite not confirmed by the gateway'));
+      
+
+      return deriveKey(reply.secret, 'device').then(function (key) {
+        return hmacHex(utf8('MSE-Auth'), String(reply.secret) + '|device').then(function (deviceKey) {
+          storageSet(CONFIG.deviceKey, deviceKey);
+          storageSet(CONFIG.deviceKey + '.id', String(reply.id));
+          return { id: String(reply.id), key: deviceKey };
+        });
+      });
+    },
+
+    device: function () {
+      var key = storageGet(CONFIG.deviceKey);
+      var id = storageGet(CONFIG.deviceKey + '.id');
+      return key && id ? { id: id, key: key } : null;
+    },
+
+    forget: function () {
+      [CONFIG.inviteKey, CONFIG.deviceKey, CONFIG.deviceKey + '.id', CONFIG.tokenKey].forEach(function (k) {
+        try { localStorage.removeItem(k); } catch (e) {}
+      });
+    },
+
+     
+    sign: function (handler, bodyObj) {
+      var dev = MSEAuth.device();
+      if (!dev) return Promise.reject(new Error('no device key: enter an invite first'));
+      var body = JSON.stringify(bodyObj == null ? {} : bodyObj);
+      var fields = {
+        mse_id: dev.id,
+        nonce: randomHex(CONFIG.nonceLen),
+        ts: String(Date.now()),
+        input: null
+      };
+      return sha256Hex(body).then(function (h) {
+        fields.input = h;
+        var data = checkString(fields);
+        return secretFor(dev.key, handler).then(function (secret) { return hmacHex(secret, data); })
+          .then(function (sig) {
+            return {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+                'x-mse-handler': String(handler),
+                'x-mse-id': fields.mse_id,
+                'x-mse-nonce': fields.nonce,
+                'x-mse-ts': fields.ts,
+                'x-mse-signature': sig
+              },
+              body: body
+            };
+          });
+      });
+    },
+
+     
+    verify: function (req, lookupSecret, seen) {
+      var h = req.headers || {};
+      var id = h['x-mse-id'], nonce = h['x-mse-nonce'], ts = Number(h['x-mse-ts']), sig = h['x-mse-signature'];
+      var handler = h['x-mse-handler'];
+      if (!id || !nonce || !ts || !sig || !handler) return Promise.resolve({ ok: false, why: 'missing fields' });
+      if (Math.abs(Date.now() - ts) > CONFIG.clockSkewMs) return Promise.resolve({ ok: false, why: 'stale timestamp' });
+      if (seen && seen.has(nonce)) return Promise.resolve({ ok: false, why: 'nonce reused' });
+      return lookupSecret(id).then(function (secret) {
+        if (!secret) return { ok: false, why: 'unknown device' };
+        return sha256Hex(String(req.body || '')).then(function (inputHash) {
+          var data = checkString({ mse_id: id, nonce: nonce, ts: String(ts), input: inputHash });
+          return secretFor(secret, handler).then(function (key) { return hmacHex(key, data); })
+            .then(function (expected) {
+              if (expected !== sig) return { ok: false, why: 'bad signature' };
+              if (seen) seen.add(nonce);
+              return { ok: true, id: id };
+            });
+        });
+      });
+    },
+
+     
+    token: function () {
+      try {
+        var t = JSON.parse(storageGet(CONFIG.tokenKey) || 'null');
+        if (!t || !t.value) return null;
+        if (t.expiresAt && Date.now() > t.expiresAt) return null;
+        return t;
+      } catch (e) { return null; }
+    },
+    saveToken: function (value, ttlMs) {
+      var t = { value: String(value), issuedAt: Date.now(), expiresAt: Date.now() + (ttlMs || CONFIG.sessionTtlMs) };
+      storageSet(CONFIG.tokenKey, JSON.stringify(t));
+      return t;
+    },
+
+     
+    status: function () {
+      var dev = MSEAuth.device();
+      var tok = MSEAuth.token();
+      return {
+        configured: MSEAuth.configured(),
+        apiUrl: CONFIG.apiUrl || null,
+        device: dev ? { id: dev.id, keyMasked: dev.key.slice(0, 8) + '…' } : null,
+        session: tok ? { alive: true, expiresAt: tok.expiresAt } : { alive: false }
+      };
+    },
+
+     
+    request: function (handler, bodyObj) {
+      if (!MSEAuth.configured()) return Promise.reject(new Error('gateway is not configured'));
+      var tok = MSEAuth.token();
+      if (tok) {
+        return fetch(CONFIG.apiUrl.replace(/\x2F$/, '') + '/' + handler, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: 'Bearer ' + tok.value },
+          body: JSON.stringify(bodyObj || {})
+        }).then(function (r) {
+          if (r.status === 401) { try { localStorage.removeItem(CONFIG.tokenKey); } catch (e) {} }
+          if (r.status === 429) return r.json().then(function (j) { throw Object.assign(new Error('quota'), { quota: j }); });
+          return r.json();
+        });
+      }
+      return MSEAuth.sign(handler, bodyObj).then(function (req) {
+        return fetch(CONFIG.apiUrl.replace(/\x2F$/, '') + '/' + handler, req).then(function (r) {
+          if (r.status === 429) return r.json().then(function (j) { throw Object.assign(new Error('quota'), { quota: j }); });
+          return r.json().then(function (j) {
+            if (j && j.session) MSEAuth.saveToken(j.session);
+            return j;
+          });
+        });
+      });
+    }
+  };
+
+   
+  (typeof window !== 'undefined' ? window : globalThis).MSEAuth = MSEAuth;
+  if (typeof module !== 'undefined' && module.exports) module.exports = { MSEAuth: MSEAuth, checkString: checkString, deriveKey: deriveKey };
+})();
+
+})();
+
+;(function(){
+var __ssW=window,__msePageWindow=window;
+'use strict';
+
+
+(function () {
+  'use strict';
+
+  var CONFIG = Object.assign({
+    hotkey: 'd',
+    bottomOffset: 96,
+    maxEntries: 400,
+    maxBody: 6000,
+    showFab: false  
+  }, (typeof __SS_DEBUG_CONFIG__ === 'object' && __SS_DEBUG_CONFIG__) || {});
+
+   
+  var EXPECTED_SHA = '';
+
+  function boot() {
+    var win = window;
+    var doc = document;
+    if (win.__ssDebugPanel) return;
+    try { Object.defineProperty(win, '__ssDebugPanel', { value: true, enumerable: false }); } catch (e) { win.__ssDebugPanel = true; }
+
+     
+    var LS = 'ssdbg.';
+    function lsGet(k, dflt) {
+      try { var v = win.localStorage.getItem(LS + k); return v === null ? dflt : v; } catch (e) { return dflt; }
+    }
+    function lsSet(k, v) {
+      try { win.localStorage.setItem(LS + k, v); return true; } catch (e) { return false; }
+    }
+    function lsDel(k) {
+      try { win.localStorage.removeItem(LS + k); } catch (e) {}
+    }
+    function bytes(n) {
+      if (!n && n !== 0) return '—';
+      if (n < 1024) return n + ' B';
+      if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+      return (n / 1048576).toFixed(1) + ' MB';
+    }
+    function pad(n) { return n < 10 ? '0' + n : String(n); }
+    function hhmmss(t) {
+      var d = new Date(t);
+      return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    }
+    function shortUrl(u) {
+      try {
+        var x = new URL(u, String(win.location.href));
+        return x.pathname + (x.search ? '?' + x.search.slice(1) : '');
+      } catch (e) { return String(u); }
+    }
+    function clip(s, n) {
+      s = String(s == null ? '' : s);
+      return s.length > n ? s.slice(0, n) + '…' : s;
+    }
+    function sha256Hex(text) {
+      var subtle = win.crypto && win.crypto.subtle;
+      if (subtle && win.TextEncoder) {
+        return subtle.digest('SHA-256', new win.TextEncoder().encode(text)).then(function (buf) {
+          var b = new Uint8Array(buf), h = '';
+          for (var i = 0; i < b.length; i++) h += (b[i] < 16 ? '0' : '') + b[i].toString(16);
+          return h;
+        });
+      }
+      return Promise.resolve(fnv(text));
+    }
+     
+    function fnv(s) {
+      var a = 2166136261, b = 2166136261;
+      for (var i = 0; i < s.length; i++) {
+        a = (a ^ s.charCodeAt(i)) * 16777619 >>> 0;
+        b = (b + s.charCodeAt(i) * (i + 7)) >>> 0;
+      }
+      var out = '';
+      for (var k = 0; k < 4; k++) out += ('0000000' + ((a >>> (k * 8)) & 255).toString(16)).slice(-2);
+      for (var j = 0; j < 4; j++) out += ('0000000' + ((b >>> (j * 8)) & 255).toString(16)).slice(-2);
+      return 'fnv-' + out;
+    }
+
+     
+    var state = {
+      net: [],
+      seq: 0,
+      enabled: lsGet('enabled', '1') === '1',
+      recordBodies: lsGet('bodies', '1') === '1',
+      identity: null,
+      key: null,
+      visits: []
+    };
+
+    var seen = new Set();
+
+    function addEntry(e) {
+      if (!state.enabled) return null;
+      var key = e.method + ' ' + e.url + ' ' + (e.status || '') + ' ' + (e.from || '');
+      if (seen.has(key)) return null;
+      seen.add(key);
+      e.id = ++state.seq;
+      e.t = e.t || Date.now();
+      state.net.push(e);
+      if (state.net.length > CONFIG.maxEntries) state.net.shift();
+      return e;
+    }
+
+    function bodyText(v) {
+      if (v == null) return '';
+      if (typeof v === 'string') return clip(v, CONFIG.maxBody);
+      try { return clip(JSON.stringify(v), CONFIG.maxBody); } catch (e) { return ''; }
+    }
+
+     
+    function sniffJson(text) {
+      if (!text) return null;
+      var s = String(text).trim();
+      if (!s || (s[0] !== '{' && s[0] !== '[')) return null;
+      try { return JSON.parse(s); } catch (e) { return null; }
+    }
+
+    function installSniffer() {
+       
+      try {
+        var origFetch = win.fetch;
+        if (typeof origFetch === 'function') {
+          win.fetch = function (input, init) {
+            var url = typeof input === 'string' ? input : (input && input.url) || String(input);
+            var method = (init && init.method) || (input && input.method) || 'GET';
+            var started = Date.now();
+            var p = origFetch.apply(this, arguments);
+            p.then(function (res) {
+              var e = addEntry({ from: 'fetch', method: String(method).toUpperCase(), url: url, status: res.status, type: res.headers && res.headers.get ? (res.headers.get('content-type') || '') : '', ms: Date.now() - started });
+              if (e && state.recordBodies) {
+                try {
+                  res.clone().text().then(function (t) {
+                    e.size = t.length;
+                    var j = sniffJson(t);
+                    if (j) e.json = j;
+                    renderIfOpen();
+                  }, function () {});
+                } catch (x) {}
+              } else if (e) renderIfOpen();
+            }, function () {
+              addEntry({ from: 'fetch', method: String(method).toUpperCase(), url: url, status: 0, error: 'failed', ms: Date.now() - started });
+              renderIfOpen();
+            });
+            return p;
+          };
+        }
+      } catch (e) {}
+
+       
+      try {
+        var XHR = win.XMLHttpRequest;
+        if (XHR && XHR.prototype) {
+          var open = XHR.prototype.open;
+          var send = XHR.prototype.send;
+          XHR.prototype.open = function (method, url) {
+            this.__ssm = String(method || 'GET').toUpperCase();
+            this.__ssu = String(url || '');
+            this.__sst = Date.now();
+            return open.apply(this, arguments);
+          };
+          XHR.prototype.send = function () {
+            var self = this;
+            self.addEventListener('loadend', function () {
+              var ct = '';
+              try { ct = self.getResponseHeader('content-type') || ''; } catch (e) {}
+              var e = addEntry({ from: 'xhr', method: self.__ssm, url: self.__ssu, status: self.status, type: ct, ms: Date.now() - (self.__sst || Date.now()) });
+              if (e && state.recordBodies) {
+                try {
+                  var t = self.responseType === '' || self.responseType === 'text' ? self.responseText : '';
+                  if (t) {
+                    e.size = t.length;
+                    var j = sniffJson(t);
+                    if (j) e.json = j;
+                  }
+                } catch (x) {}
+              }
+              renderIfOpen();
+            });
+            return send.apply(this, arguments);
+          };
+        }
+      } catch (e) {}
+
+       
+      try {
+        var collectPerf = function () {
+          var list = [];
+          try { list = win.performance.getEntriesByType('resource') || []; } catch (e) { list = []; }
+          for (var i = 0; i < list.length; i++) {
+            var r = list[i];
+            addEntry({ from: 'perf', method: 'GET', url: r.name, status: null, type: r.initiatorType || '', ms: Math.round(r.duration || 0), size: r.transferSize || 0, t: Date.now() - Math.round(win.performance.now() - (r.responseEnd || 0)) });
+          }
+          var nav = [];
+          try { nav = win.performance.getEntriesByType('navigation') || []; } catch (e) { nav = []; }
+          for (var j = 0; j < nav.length; j++) {
+            addEntry({ from: 'nav', method: 'GET', url: String(win.location.href), status: null, type: 'document', ms: Math.round(nav[j].duration || 0), t: Date.now() - Math.round(win.performance.now()) });
+          }
+        };
+        collectPerf();
+        if (win.PerformanceObserver) {
+          try {
+            var po = new win.PerformanceObserver(function () { collectPerf(); });
+            po.observe({ entryTypes: ['resource', 'navigation'] });
+          } catch (e) {}
+        }
+        win.setTimeout(collectPerf, 1200);
+        win.setTimeout(collectPerf, 3500);
+      } catch (e) {}
+
+       
+      try {
+        var seenUrls = JSON.parse(lsGet('visits', '[]') || '[]');
+        var here = String(win.location.href).split('#')[0];
+        seenUrls.push({ t: Date.now(), url: here, title: String(doc.title || '') });
+        if (seenUrls.length > 60) seenUrls = seenUrls.slice(-60);
+        lsSet('visits', JSON.stringify(seenUrls));
+        state.visits = seenUrls;
+      } catch (e) {}
+    }
+
+     
+    var ID_KEYS = /(^|[_.-])(userid|user_id|useridnumber|idnumber|studentid|student_id|studentnumber|personid|person_id|authid|memberid|accountid|uid)$/i;
+    var NAME_KEYS = /(fullname|full_name|firstname|lastname|first_name|last_name|username|displayname|display_name|nickname|email)$/i;
+    var SKIP = /(sesskey|token|password|secret|csrf)/i;
+
+    function harvest(obj, path, out, depth) {
+      if (!obj || typeof obj !== 'object' || depth > 5 || out.length > 80) return out;
+      var keys = Array.isArray(obj) ? null : Object.keys(obj);
+      if (!keys) {
+        for (var i = 0; i < Math.min(obj.length, 12); i++) harvest(obj[i], path + '[' + i + ']', out, depth + 1);
+        return out;
+      }
+      keys.forEach(function (k) {
+        if (SKIP.test(k)) return;
+        var v = obj[k];
+        var p = path ? path + '.' + k : k;
+        if (v && typeof v === 'object') { harvest(v, p, out, depth + 1); return; }
+        if (v === null || v === undefined) return;
+        if (typeof v !== 'string' && typeof v !== 'number') return;
+        var s = String(v);
+        if (!s || s.length > 160) return;
+        var isId = ID_KEYS.test(k);
+        var isName = NAME_KEYS.test(k) || (typeof v === 'string' && /[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+/.test(s) && /name/i.test(k));
+        if (isId || isName) out.push({ where: p, key: k, value: s, kind: isId ? 'id' : 'name' });
+      });
+      return out;
+    }
+
+    function fromPage() {
+      var found = [];
+      var cfg = null;
+      try { cfg = win.M && win.M.cfg ? win.M.cfg : null; } catch (e) {}
+      if (cfg) {
+        if (cfg.userid != null) found.push({ where: 'M.cfg.userid', key: 'userid', value: String(cfg.userid), kind: 'id', src: 'page' });
+        if (cfg.username) found.push({ where: 'M.cfg.username', key: 'username', value: String(cfg.username), kind: 'name', src: 'page' });
+        if (cfg.siteId || cfg.siteid) found.push({ where: 'M.cfg.siteId', key: 'siteId', value: String(cfg.siteId || cfg.siteid), kind: 'id', src: 'page' });
+      }
+       
+      try {
+        var links = doc.querySelectorAll('a[href*="user/profile.php"], a[href*="user/view.php"]');
+        var ids = {};
+        for (var i = 0; i < links.length && i < 40; i++) {
+          var m = /[?&]id=(\d+)/.exec(links[i].getAttribute('href') || '');
+          if (m && !ids[m[1]]) { ids[m[1]] = 1; found.push({ where: 'link ' + clip(shortUrl(links[i].getAttribute('href')), 60), key: 'id', value: m[1], kind: 'id', src: 'dom' }); }
+        }
+      } catch (e) {}
+       
+      try {
+        var pics = doc.querySelectorAll('img.userpicture, img[src*="/user/icon"], img[src*="/user/pix"]');
+        for (var j = 0; j < pics.length && j < 6; j++) {
+          var alt = String(pics[j].getAttribute('alt') || '').trim();
+          if (alt && !/^picture of/i.test(alt)) found.push({ where: 'avatar alt', key: 'alt', value: alt, kind: 'name', src: 'dom' });
+          else if (alt) found.push({ where: 'avatar alt', key: 'alt', value: alt.replace(/^picture of\s{0,}/i, ''), kind: 'name', src: 'dom' });
+        }
+        var ut = doc.querySelector('.usertext, [data-region="user-menu"] .usertext, #nav-user-menu');
+        if (ut) {
+          var txt = String(ut.textContent || '').replace(/\s+/g, ' ').trim();
+          if (txt && txt.length < 120) found.push({ where: 'user menu', key: 'text', value: txt, kind: 'name', src: 'dom' });
+        }
+      } catch (e) {}
+       
+      try {
+        var scripts = doc.querySelectorAll('script:not([src])');
+        for (var k = 0; k < scripts.length && k < 20; k++) {
+          var t = scripts[k].textContent || '';
+          if (t.length > 200000) continue;
+          var mm = /"userid"\s*:\s*"?(\d+)/.exec(t) || /'userid'\s*:\s*'?(\d+)/.exec(t);
+          if (mm) found.push({ where: 'inline script', key: 'userid', value: mm[1], kind: 'id', src: 'page' });
+        }
+      } catch (e) {}
+      return found;
+    }
+
+    function fromTraffic() {
+      var out = [];
+      state.net.forEach(function (e) {
+        if (e.json) harvest(e.json, shortUrl(e.url), out, 0);
+      });
+       
+      var byValue = {};
+      out.forEach(function (f) {
+        if (f.kind !== 'id') return;
+        var v = byValue[f.value] || (byValue[f.value] = { value: f.value, count: 0, where: [] });
+        v.count++;
+        if (v.where.length < 5 && v.where.indexOf(f.where) < 0) v.where.push(f.where);
+      });
+      return { hits: out, candidates: Object.keys(byValue).map(function (k) { return byValue[k]; }).sort(function (a, b) { return b.count - a.count; }) };
+    }
+
+    function analyseIdentity() {
+      var page = fromPage();
+      var traffic = fromTraffic();
+      var merged = page.concat(traffic.hits.filter(function (h) {
+        return !page.some(function (p) { return p.value === h.value && p.key === h.key; });
+      }));
+      state.identity = { at: Date.now(), page: page, traffic: traffic.hits, candidates: traffic.candidates, merged: merged };
+      return state.identity;
+    }
+
+     
+    var KEY_LS = 'key';
+    var KEY_META = 'key.meta';
+
+    function gmGet(k) {
+      try { if (typeof GM_getValue === 'function') return GM_getValue(k, null); } catch (e) {}
+      return null;
+    }
+    function gmSet(k, v) {
+      try { if (typeof GM_setValue === 'function') { GM_setValue(k, v); return true; } } catch (e) {}
+      return false;
+    }
+    function gmDel(k) {
+      try { if (typeof GM_deleteValue === 'function') { GM_deleteValue(k); } } catch (e) {}
+    }
+
+    function maskKey(k) {
+      if (!k) return '';
+      if (k.length <= 8) return k[0] + '•••' + k[k.length - 1];
+       
+      var cut = k.lastIndexOf('-');
+      var head = cut > 0 ? k.slice(0, cut + 1) : k.slice(0, k.length - 4);
+      return head + '••••' + k.slice(-4);
+    }
+
+    function loadKey() {
+      var fromGm = gmGet('ssdbg_key');
+      var fromLs = lsGet(KEY_LS, '');
+      var meta = {};
+      try { meta = JSON.parse(lsGet(KEY_META, '{}') || '{}'); } catch (e) { meta = {}; }
+      var value = fromGm || fromLs || '';
+       
+      if (value && !state.pagesBumped) {
+        state.pagesBumped = true;
+        if (meta.value === value) meta.pages = (meta.pages || 1) + 1;
+        else { meta.value = value; meta.pages = 1; }
+        meta.savedAt = meta.savedAt || Date.now();
+        lsSet(KEY_META, JSON.stringify(meta));
+      }
+      state.key = {
+        value: value,
+        masked: maskKey(value),
+        source: fromGm ? 'script storage (GM)' : (fromLs ? 'site localStorage' : '—'),
+        inGm: !!fromGm,
+        inLs: !!fromLs,
+        savedAt: meta.savedAt || null,
+        pages: meta.pages || 0
+      };
+      return state.key;
+    }
+
+    function saveKey(value) {
+      var okGm = gmSet('ssdbg_key', value);
+      var okLs = lsSet(KEY_LS, value);
+      var meta = { savedAt: Date.now(), pages: 1 };
+       
+      try {
+        var prev = JSON.parse(lsGet(KEY_META, '{}') || '{}');
+        if (prev.value === value) meta.pages = (prev.pages || 1) + 1;
+        meta.value = value;
+      } catch (e) { meta.value = value; }
+      lsSet(KEY_META, JSON.stringify(meta));
+      loadKey();
+      state.key.savedOk = { gm: okGm, ls: okLs };
+      return state.key;
+    }
+
+    function forgetKey() {
+      gmDel('ssdbg_key');
+      lsDel(KEY_LS);
+      lsDel(KEY_META);
+      loadKey();
+      return state.key;
+    }
+
+    function checkKey(value) {
+      if (!value) return Promise.resolve({ ok: false, reason: 'empty' });
+      var shaped = /^SS-DBG-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(value);
+      return sha256Hex(value).then(function (h) {
+        return { ok: h === EXPECTED_SHA, shape: shaped, sha: h.slice(0, 16) + '…', expected: EXPECTED_SHA.slice(0, 16) + '…' };
+      });
+    }
+
+     
+    function readCookies() {
+      var out = [];
+      try {
+        var raw = String(doc.cookie || '');
+        if (raw) raw.split(';').forEach(function (part) {
+          var i = part.indexOf('=');
+          out.push({ name: (i < 0 ? part : part.slice(0, i)).trim(), value: (i < 0 ? '' : part.slice(i + 1)).trim(), source: 'document.cookie' });
+        });
+      } catch (e) {}
+      return out;
+    }
+
+     
+    var host = doc.createElement('div');
+    host.setAttribute('style', 'all:initial;position:fixed;inset:0;z-index:2147483647;display:none;');
+    var root;
+    try { root = host.attachShadow({ mode: 'closed' }); } catch (e) { root = host; }
+
+    var CSS = [
+      '*{box-sizing:border-box}',
+      '.wrap{position:absolute;inset:0;display:flex;align-items:stretch;justify-content:center;',
+      'background:rgba(12,14,22,.66);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);',
+      'font:15px/1.4 -apple-system,system-ui,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#e9edf7}',
+      '.panel{display:flex;flex-direction:column;width:100%;max-width:860px;background:#12151f;overflow:hidden}',
+      '@media (min-width:760px){.wrap{align-items:center;padding:26px}.panel{border-radius:18px;max-height:92%;box-shadow:0 24px 70px rgba(0,0,0,.55)}}',
+      '.head{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 13px) 14px 11px;border-bottom:1px solid #262b3a}',
+      '.head h1{margin:0;font-size:16px;font-weight:650;letter-spacing:-.2px;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.host{font-size:12px;color:#8d96ad;flex:0 1 auto;min-width:0;max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '@media (max-width:430px){.head{padding-left:12px;padding-right:12px;gap:8px}.head h1{font-size:15px}.host{max-width:36%}}',
+      '.tabs{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid #262b3a;overflow:auto}',
+      '.tabs button{flex:0 0 auto}',
+      'button{font:inherit;color:inherit;background:#1e2433;border:1px solid #2f374b;border-radius:10px;padding:7px 11px;cursor:pointer;-webkit-appearance:none;appearance:none}',
+      'button:active{transform:scale(.985)}',
+      'button.on{background:linear-gradient(145deg,#667eea,#4aa3f0);border-color:transparent;font-weight:600}',
+      'button.primary{background:linear-gradient(145deg,#667eea,#4aa3f0);border-color:transparent;font-weight:600}',
+      'button.ghost{background:transparent}',
+      'button.icon{width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px}',
+      '.bar{display:flex;gap:7px;flex-wrap:wrap;padding:9px 14px;border-bottom:1px solid #262b3a;align-items:center}',
+      '.stats{flex:1 1 100%;font-size:12.5px;color:#9aa3ba;line-height:1.45}',
+      '.body{flex:1 1 auto;overflow:auto;-webkit-overflow-scrolling:touch;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 18px)}',
+      '.card{border:1px solid #2b3247;border-radius:12px;background:#171b28;padding:10px 12px;margin:0 0 10px}',
+      '.card h2{margin:0 0 6px;font-size:13.5px;font-weight:650;color:#cbd6ff;letter-spacing:.1px}',
+      '.row{display:flex;gap:8px;font-size:12.5px;line-height:1.4;padding:2px 0}',
+      '.row .k{color:#8d96ad;flex:0 0 40%}',
+      '.row .v{color:#e9edf7;flex:1 1 auto;min-width:0;word-break:break-word}',
+      '.note{font-size:11.5px;color:#7d869c;line-height:1.45;margin-top:6px}',
+      '.hit{font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:#9fe6b4;word-break:break-all}',
+      '.hit b{color:#ffd479;font-weight:600}',
+      '.entry{border-bottom:1px solid #212736;padding:7px 0;font-size:12px}',
+      '.entry:last-child{border-bottom:0}',
+      '.entry .l1{display:flex;gap:8px;align-items:baseline}',
+      '.entry .m{font-weight:650;font-size:11px;color:#93a0c0;flex:0 0 auto}',
+      '.entry .u{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#dfe6f6}',
+      '.entry .s{flex:0 0 auto;font-size:11px;color:#7d869c}',
+      '.entry .meta{color:#6f788e;font-size:11px;margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}',
+      '.entry .b{color:#9aa3ba;font:11px/1.35 ui-monospace,Menlo,monospace;max-height:52px;overflow:hidden;word-break:break-all;margin-top:3px}',
+      '.ok{color:#7ee0a0}.bad{color:#ff8f8f}.warn{color:#ffd479}',
+      'input[type=text]{font:inherit;color:#e9edf7;background:#0f1219;border:1px solid #2f374b;border-radius:10px;padding:9px 11px;width:100%;-webkit-appearance:none;appearance:none}',
+      '.empty{color:#6f788e;font-size:12.5px;padding:14px 4px;text-align:center}',
+      '.mini{font-size:11.5px;color:#8d96ad}'
+    ].join('');
+
+    var style = doc.createElement('style');
+    style.textContent = CSS;
+    root.appendChild(style);
+
+    var wrap = doc.createElement('div');
+    wrap.className = 'wrap';
+    root.appendChild(wrap);
+
+    var panel = doc.createElement('div');
+    panel.className = 'panel';
+    wrap.appendChild(panel);
+
+    var tab = 'overview';
+
+    function el(tag, cls, text) {
+      var n = doc.createElement(tag);
+      if (cls) n.className = cls;
+      if (text != null) n.textContent = text;
+      return n;
+    }
+
+    function copy(text, btn) {
+      var done = function (ok) {
+        if (!btn) return;
+        var old = btn.textContent;
+        btn.textContent = ok ? '✓' : '✗';
+        win.setTimeout(function () { btn.textContent = old; }, 1200);
+      };
+      var nav = win.navigator || {};
+      if (nav.clipboard && nav.clipboard.writeText) {
+        nav.clipboard.writeText(text).then(function () { done(true); }, function () { fallback(); });
+      } else fallback();
+      function fallback() {
+        try {
+          var ta = doc.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          doc.body.appendChild(ta);
+          ta.select();
+          var ok = false;
+          try { ok = doc.execCommand('copy'); } catch (e) { ok = false; }
+          doc.body.removeChild(ta);
+          done(ok);
+        } catch (e) { done(false); }
+      }
+    }
+
+     
+    function jsonText() {
+      var idc = state.identity || analyseIdentity();
+      return JSON.stringify({
+        url: String(win.location.href),
+        collectedAt: new Date().toISOString(),
+        userAgent: win.navigator && win.navigator.userAgent,
+        identity: { page: idc.page, fromTraffic: idc.traffic, candidates: idc.candidates },
+        key: state.key ? {
+          masked: state.key.masked, source: state.key.source, savedAt: state.key.savedAt,
+          pages: state.key.pages, inGm: state.key.inGm, inLs: state.key.inLs
+        } : null,
+        cookies: readCookies(),
+        globalCookies: state.storeTotal,
+        traffic: state.net.map(function (e) {
+          return { t: e.t, from: e.from, method: e.method, url: e.url, status: e.status, type: e.type, ms: e.ms, size: e.size, json: e.json || undefined };
+        }),
+        visits: state.visits
+      }, null, 2);
+    }
+
+    function reportText() {
+      var idc = state.identity || analyseIdentity();
+      var out = [];
+      out.push('MSE debug v2');
+      out.push('page: ' + String(win.location.href));
+      out.push('time: ' + new Date().toISOString());
+      out.push('browser: ' + (win.navigator && win.navigator.userAgent));
+      out.push('');
+      out.push('== WHO THE USER IS ==');
+      if (!idc.merged.length) out.push('  nothing found: no ids, no names (neither on the page nor in the responses)');
+      idc.merged.slice(0, 40).forEach(function (f) {
+        out.push('  [' + (f.kind === 'id' ? 'id  ' : 'name ') + '] ' + f.value + '   ← ' + f.where + (f.src ? ' (' + f.src + ')' : ''));
+      });
+      if (idc.candidates.length) {
+        out.push('');
+        out.push('  the most frequent ids in the server responses:');
+        idc.candidates.slice(0, 8).forEach(function (c) { out.push('    ' + c.value + '  × ' + c.count + '  (' + c.where.join('; ') + ')'); });
+      }
+      out.push('');
+      out.push('== KEY ==');
+      var K = state.key || loadKey();
+      if (!K.value) out.push('  not set');
+      else {
+        out.push('  set: ' + K.masked);
+        out.push('  stored in: ' + K.source + (K.inGm ? ' + GM' : '') + (K.inLs ? ' + localStorage' : ''));
+        out.push('  saved: ' + (K.savedAt ? new Date(K.savedAt).toISOString() : '—'));
+        out.push('  pages with this key: ' + (K.pages || 1));
+      }
+      out.push('');
+      out.push('== TRAFFIC (' + state.net.length + ' records) ==');
+      state.net.slice(-120).forEach(function (e) {
+        out.push('  ' + hhmmss(e.t) + '  ' + (e.method || 'GET') + '  ' + (e.status == null ? '—' : e.status) + '  '
+          + (e.size != null ? bytes(e.size) : '') + '  ' + String(e.url).slice(0, 220));
+      });
+      out.push('');
+      out.push('== PAGES IN THIS BROWSER ==');
+      (state.visits || []).slice(-20).forEach(function (v) { out.push('  ' + hhmmss(v.t) + '  ' + String(v.url).slice(0, 200)); });
+      out.push('');
+      out.push('== COOKIES VISIBLE TO THE SCRIPT (' + readCookies().length + ') ==');
+      readCookies().forEach(function (c) { out.push('  ' + c.name + ' = ' + c.value); });
+      return out.join('\n');
+    }
+
+     
+    function renderHead() {
+      var head = el('div', 'head');
+      var h1 = el('h1', null, 'MSE · debug');
+      var hs = el('div', 'host', String(win.location.host));
+      var close = el('button', 'icon', '×');
+      close.setAttribute('aria-label', 'Close');
+      close.addEventListener('click', hide);
+      head.appendChild(h1); head.appendChild(hs); head.appendChild(close);
+      panel.appendChild(head);
+    }
+
+    function renderTabs() {
+      var tabs = el('div', 'tabs');
+      [['overview', 'Overview'], ['traffic', 'Traffic'], ['me', 'Who am I'], ['key', 'Key']].forEach(function (t) {
+        var b = el('button', tab === t[0] ? 'on' : '', t[1]);
+        b.addEventListener('click', function () { tab = t[0]; render(); });
+        tabs.appendChild(b);
+      });
+      panel.appendChild(tabs);
+    }
+
+    function renderBar() {
+      var bar = el('div', 'bar');
+      var stats = el('div', 'stats');
+      stats.textContent = 'requests: ' + state.net.length + ' · cookies: ' + readCookies().length
+        + (state.storeTotal != null ? ' · in the bank: ' + state.storeTotal : '')
+        + ' · key: ' + (state.key && state.key.value ? 'set' : 'none');
+      bar.appendChild(stats);
+      var bJson = el('button', 'primary', 'JSON');
+      bJson.addEventListener('click', function (e) { copy(jsonText(), e.target); });
+      var bRep = el('button', '', 'Report');
+      bRep.addEventListener('click', function (e) { copy(reportText(), e.target); });
+      var bScan = el('button', '', 'Scan');
+      bScan.addEventListener('click', function () { analyseIdentity(); loadKey(); render(); });
+      bar.appendChild(bJson); bar.appendChild(bRep); bar.appendChild(bScan);
+      panel.appendChild(bar);
+    }
+
+    function cardOverview() {
+      var idc = state.identity || analyseIdentity();
+      var c = el('div', 'card');
+      c.appendChild(el('h2', null, 'Who the user is'));
+      var best = idc.candidates[0];
+      var named = idc.merged.filter(function (f) { return f.kind === 'name'; })[0];
+      var simple = idc.merged.filter(function (f) { return f.kind === 'id'; })[0];
+      if (!idc.merged.length) {
+        c.appendChild(el('div', 'hit', 'nothing yet — open a page where you are signed in and press “Scan”'));
+      } else {
+        if (named) { var r1 = el('div', 'row'); r1.appendChild(el('span', 'k', 'name')); r1.appendChild(el('span', 'v', clip(named.value, 60))); c.appendChild(r1); }
+        if (simple) { var r2 = el('div', 'row'); r2.appendChild(el('span', 'k', 'id')); r2.appendChild(el('span', 'v', simple.value)); c.appendChild(r2); }
+        if (best) { var r3 = el('div', 'row'); r3.appendChild(el('span', 'k', 'most often')); r3.appendChild(el('span', 'v', best.value + '  × ' + best.count)); c.appendChild(r3); }
+      }
+      c.appendChild(el('div', 'note', 'Sources: the page (M.cfg, profile links, avatar) and the server responses captured by the sniffer. The full list is on the “Who am I” tab.'));
+      return c;
+    }
+
+    function cardKeyShort() {
+      var K = state.key || loadKey();
+      var c = el('div', 'card');
+      c.appendChild(el('h2', null, 'Key'));
+      var r = el('div', 'row');
+      r.appendChild(el('span', 'k', 'state'));
+      r.appendChild(el('span', 'v ' + (K.value ? 'ok' : 'warn'), K.value ? 'set: ' + K.masked : 'not set'));
+      c.appendChild(r);
+      var r2 = el('div', 'row');
+      r2.appendChild(el('span', 'k', 'pages with the key'));
+      r2.appendChild(el('span', 'v', String(K.pages || (K.value ? 1 : 0))));
+      c.appendChild(r2);
+      c.appendChild(el('div', 'note', 'Enter the key once on the “Key” tab and reload the page: it must stay. This checks that the extension remembers it.'));
+      return c;
+    }
+
+    function cardTrafficShort() {
+      var c = el('div', 'card');
+      c.appendChild(el('h2', null, 'Traffic'));
+      var withJson = state.net.filter(function (e) { return e.json; }).length;
+      var r = el('div', 'row');
+      r.appendChild(el('span', 'k', 'requests recorded'));
+      r.appendChild(el('span', 'v', String(state.net.length)));
+      c.appendChild(r);
+      var r2 = el('div', 'row');
+      r2.appendChild(el('span', 'k', 'with a JSON response'));
+      r2.appendChild(el('span', 'v', String(withJson)));
+      c.appendChild(r2);
+      c.appendChild(el('div', 'note', 'Requests made before the script was installed show up by timing only (no status codes) — that is expected.'));
+      return c;
+    }
+
+    function renderOverview() {
+      var body = el('div', 'body');
+      body.appendChild(cardOverview());
+      body.appendChild(cardKeyShort());
+      body.appendChild(cardTrafficShort());
+       
+      var interesting = state.net.filter(function (e) { return /\x2F(api|user|profile|login|auth|session|my)\b|userid|\x2Fmy\x2F|dashboard/i.test(String(e.url)); });
+      var c = el('div', 'card');
+      c.appendChild(el('h2', null, 'Looks like “who am I” (' + interesting.length + ')'));
+      if (!interesting.length) c.appendChild(el('div', 'empty', 'nothing similar'));
+      interesting.slice(-12).reverse().forEach(function (e) { c.appendChild(entryRow(e)); });
+      body.appendChild(c);
+      panel.appendChild(body);
+    }
+
+    function entryRow(e) {
+      var d = el('div', 'entry');
+      var l1 = el('div', 'l1');
+      l1.appendChild(el('span', 'm', e.method || 'GET'));
+      l1.appendChild(el('span', 'u', shortUrl(e.url)));
+      l1.appendChild(el('span', 's', (e.status == null ? '—' : e.status)));
+      d.appendChild(l1);
+      var meta = el('div', 'meta');
+      meta.appendChild(el('span', null, hhmmss(e.t)));
+      meta.appendChild(el('span', null, e.from));
+      if (e.type) meta.appendChild(el('span', null, clip(String(e.type).split(';')[0], 28)));
+      if (e.ms) meta.appendChild(el('span', null, e.ms + ' ms'));
+      if (e.size) meta.appendChild(el('span', null, bytes(e.size)));
+      d.appendChild(meta);
+      if (e.json) {
+        var hits = harvest(e.json, '', [], 0);
+        if (hits.length) {
+          var b = el('div', 'b');
+          b.textContent = hits.slice(0, 4).map(function (h) { return h.key + '=' + clip(h.value, 40); }).join('  ');
+          d.appendChild(b);
+        }
+      }
+      return d;
+    }
+
+    function renderTraffic() {
+      var body = el('div', 'body');
+      var c = el('div', 'card');
+      c.appendChild(el('h2', null, 'Requests'));
+      if (!state.net.length) c.appendChild(el('div', 'empty', 'empty — reload the page with the panel open'));
+      state.net.slice(-80).reverse().forEach(function (e) { c.appendChild(entryRow(e)); });
+      body.appendChild(c);
+
+      var d = el('div', 'card');
+      d.appendChild(el('h2', null, 'Pages in this browser'));
+      (state.visits || []).slice(-14).reverse().forEach(function (v) {
+        var r = el('div', 'row');
+        r.appendChild(el('span', 'k', hhmmss(v.t)));
+        r.appendChild(el('span', 'v', clip(shortUrl(v.url), 70)));
+        d.appendChild(r);
+      });
+      body.appendChild(d);
+      panel.appendChild(body);
+    }
+
+    function renderMe() {
+      var body = el('div', 'body');
+      var idc = state.identity || analyseIdentity();
+      var c = el('div', 'card');
+      c.appendChild(el('h2', null, 'Found on the page (' + idc.page.length + ')'));
+      if (!idc.page.length) c.appendChild(el('div', 'empty', 'nothing'));
+      idc.page.forEach(function (f) {
+        var r = el('div', 'row');
+        r.appendChild(el('span', 'k', f.kind === 'id' ? 'id' : 'name'));
+        var v = el('span', 'v', clip(f.value, 70));
+        r.appendChild(v);
+        c.appendChild(r);
+        var n = el('div', 'mini', '← ' + f.where);
+        r.appendChild(n);
+      });
+      body.appendChild(c);
+
+      var d = el('div', 'card');
+      d.appendChild(el('h2', null, 'Found in the server responses (' + idc.traffic.length + ')'));
+      if (!idc.traffic.length) d.appendChild(el('div', 'empty', 'nothing — is “record response bodies” on?'));
+      idc.traffic.slice(0, 40).forEach(function (f) {
+        var r = el('div', 'row');
+        r.appendChild(el('span', 'k', f.kind === 'id' ? 'id' : 'name'));
+        r.appendChild(el('span', 'v', clip(f.value, 70)));
+        d.appendChild(r);
+        d.appendChild(el('div', 'mini', '← ' + f.where));
+      });
+      body.appendChild(d);
+
+      var e2 = el('div', 'card');
+      e2.appendChild(el('h2', null, 'Candidates (id)'));
+      if (!idc.candidates.length) e2.appendChild(el('div', 'empty', 'none'));
+      idc.candidates.slice(0, 10).forEach(function (cd) {
+        var r = el('div', 'row');
+        r.appendChild(el('span', 'k', cd.value));
+        r.appendChild(el('span', 'v', '× ' + cd.count + '  ' + clip(cd.where.join('; '), 40)));
+        e2.appendChild(r);
+      });
+      e2.appendChild(el('div', 'note', 'The most frequent id in the server responses is usually the “student number” in this system.'));
+      body.appendChild(e2);
+      panel.appendChild(body);
+    }
+
+    function renderKey() {
+      var K = state.key || loadKey();
+      var body = el('div', 'body');
+
+      var c = el('div', 'card');
+      c.appendChild(el('h2', null, 'Secret key'));
+      c.appendChild(el('div', 'note', 'Enter the key once. It is kept in the script storage and in the site localStorage, survives reloads and navigation. The check uses SHA-256: the key itself is never stored in the script — the server will work the same way.'));
+
+      var input = doc.createElement('input');
+      input.type = 'text';
+      input.setAttribute('autocapitalize', 'off');
+      input.setAttribute('autocorrect', 'off');
+      input.setAttribute('spellcheck', 'false');
+      input.setAttribute('placeholder', 'SS-DBG-XXXX-XXXX-XXXX');
+      input.value = K.value || '';
+      var pad = el('div');
+      pad.style.marginTop = '8px';
+      pad.appendChild(input);
+      c.appendChild(pad);
+
+      var buttons = el('div', 'bar');
+      buttons.style.padding = '10px 0 0';
+      buttons.style.borderBottom = '0';
+      var verdict = el('div', 'note', '');
+
+      var bSave = el('button', 'primary', 'Save');
+      bSave.addEventListener('click', function () {
+        var v = String(input.value || '').trim();
+        if (!v) { verdict.className = 'note bad'; verdict.textContent = 'empty'; return; }
+        saveKey(v);
+        checkKey(v).then(function (r) {
+          verdict.className = 'note ' + (r.ok ? 'ok' : 'warn');
+          verdict.textContent = r.ok
+            ? 'saved · the key matches the expected one (' + r.sha + ')'
+            : 'saved · but this is not the key this build expects (' + r.sha + ' vs ' + r.expected + ')';
+          render();
+        });
+      });
+      var bCheck = el('button', '', 'Check');
+      bCheck.addEventListener('click', function () {
+        checkKey(String(input.value || '').trim()).then(function (r) {
+          verdict.className = 'note ' + (r.ok ? 'ok' : 'bad');
+          verdict.textContent = r.ok ? 'correct key (' + r.sha + ')' : (r.shape ? 'right format, wrong key' : 'wrong format') + ' (' + r.sha + ')';
+        });
+      });
+      var bForget = el('button', 'ghost', 'Forget');
+      bForget.addEventListener('click', function () { forgetKey(); input.value = ''; verdict.className = 'note'; verdict.textContent = 'key removed'; render(); });
+
+      buttons.appendChild(bSave); buttons.appendChild(bCheck); buttons.appendChild(bForget);
+      c.appendChild(buttons);
+      c.appendChild(verdict);
+      body.appendChild(c);
+
+      var s = el('div', 'card');
+      s.appendChild(el('h2', null, 'What is in memory now'));
+      [['set', K.value ? K.masked : '—'],
+       ['stored in', K.value ? K.source : '—'],
+       ['saved', K.savedAt ? new Date(K.savedAt).toLocaleString() : '—'],
+       ['pages with this key', String(K.pages || (K.value ? 1 : 0))]
+      ].forEach(function (p) {
+        var r = el('div', 'row');
+        r.appendChild(el('span', 'k', p[0]));
+        r.appendChild(el('span', 'v', p[1]));
+        s.appendChild(r);
+      });
+      s.appendChild(el('div', 'note', '“Pages with this key” grows with every page load: a number above 1 means the extension really remembers the key across pages.'));
+      body.appendChild(s);
+
+       
+      var ck = el('div', 'card');
+      var cc = readCookies();
+      ck.appendChild(el('h2', null, 'Cookies visible to the script (' + cc.length + ')'));
+      if (!cc.length) ck.appendChild(el('div', 'empty', 'none'));
+      cc.forEach(function (x) {
+        var r = el('div', 'row');
+        r.appendChild(el('span', 'k', x.name));
+        r.appendChild(el('span', 'v', x.value));
+        ck.appendChild(r);
+      });
+      ck.appendChild(el('div', 'note', 'Safari does not hand HttpOnly cookies to scripts — neither this script nor any other can read their values.'));
+      body.appendChild(ck);
+      panel.appendChild(body);
+    }
+
+    function renderIfOpen() {
+      if (host.style.display === 'none') return;
+      if (tab !== 'traffic' && tab !== 'overview') return;
+      render();
+    }
+
+    function render() {
+      panel.innerHTML = '';
+      renderHead();
+      renderTabs();
+      renderBar();
+      if (tab === 'overview') renderOverview();
+      else if (tab === 'traffic') renderTraffic();
+      else if (tab === 'me') renderMe();
+      else renderKey();
+    }
+
+    function open() {
+      host.style.display = 'block';
+      if (!host.isConnected) doc.documentElement.appendChild(host);
+      loadKey();
+      analyseIdentity();
+      render();
+      return true;
+    }
+    function hide() {
+      host.style.display = 'none';
+      return true;
+    }
+
+     
+    var fab = doc.createElement('div');
+    fab.setAttribute('style', 'all:initial;position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + ' +
+      (Number(CONFIG.bottomOffset) || 96) + 'px);z-index:2147483646;');
+    var fabRoot;
+    try { fabRoot = fab.attachShadow({ mode: 'closed' }); } catch (e) { fabRoot = fab; }
+    var fabBtn = doc.createElement('button');
+    fabBtn.setAttribute('type', 'button');
+    fabBtn.setAttribute('aria-label', 'MSE debug');
+    fabBtn.setAttribute('style', 'all:initial;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;' +
+      'background:rgba(18,21,31,.92);border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(0,0,0,.35);cursor:pointer;' +
+      '-webkit-appearance:none;appearance:none;');
+    fabBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ec1ff" stroke-width="2" ' +
+      'stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 4 3-3 6 5"></path><circle cx="7" cy="7" r="2"></circle></svg>';
+    fabRoot.appendChild(fabBtn);
+
+     
+    function mountFab() {
+      if (CONFIG.showFab === false) return;
+      if (!fab.isConnected && doc.documentElement) doc.documentElement.appendChild(fab);
+    }
+    fabBtn.addEventListener('click', function () { open(); });
+
+    try { if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('MSE debug: open', function () { open(); }); } catch (e) {}
+
+    doc.addEventListener('keydown', function (ev) {
+      var t = ev.target && ev.target.tagName;
+      if (/INPUT|TEXTAREA|SELECT/.test(t || '')) return;
+      if (ev.key === 'Escape' && host.style.display !== 'none') { hide(); return; }
+      if ((ev.key === CONFIG.hotkey || ev.key === CONFIG.hotkey.toUpperCase()) && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+        ev.preventDefault();
+        open();
+      }
+    }, true);
+
+     
+    win.__ssDebugOpen = open;
+    win.__ssDebugHide = hide;
+    win.__ssDebugCollect = function () {
+      loadKey();
+      return Promise.resolve().then(analyseIdentity).then(function () { return { identity: state.identity, key: state.key, net: state.net.length }; });
+    };
+    win.__ssDebugState = function () {
+      var px = panel.querySelector('.panel') ? panel : null;
+      var txt = function (sel) { var n = px && px.querySelector(sel); return n ? String(n.textContent || '').replace(/\s+/g, ' ').trim() : ''; };
+      return {
+        host: txt('.host'),
+        stats: txt('.stats'),
+        tab: tab,
+        visible: host.style.display !== 'none',
+        root: root,
+        panelText: String(panel.textContent || '').replace(/\s+/g, ' ').trim(),
+        identity: state.identity,
+        key: state.key,
+        net: state.net.length,
+        entries: state.net.slice(-30).map(function (e) { return { method: e.method, url: e.url, status: e.status, from: e.from }; }),
+        hasFab: !!fab.isConnected
+      };
+    };
+     
+    win.__ssDebugExport = function () { return { json: jsonText(), report: reportText() }; };
+    win.__ssDebugKey = function (value) {
+      if (value === undefined) return state.key || loadKey();
+      if (value === null) return forgetKey();
+      return saveKey(String(value));
+    };
+
+     
+    installSniffer();
+    loadKey();
+    mountFab();
+     
+    try {
+      if (win.cookieStore && typeof win.cookieStore.getAll === 'function') {
+        win.cookieStore.getAll().then(function (all) { state.storeTotal = (all || []).length; renderIfOpen(); }, function () {});
+      }
+    } catch (e) {}
+    analyseIdentity();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+
+})();
+
+;(function(){
+var __ssW=window,__msePageWindow=window;
+'use strict';
+
+
+(function () {
+  'use strict';
+
+  var CONFIG = Object.assign({
+    brand: 'MSE',
+    version: '0.3.0',
+    apiBase: 'https:/\/syncshare.ru/api/',
+    client: '2.22.0',
+    posKey: 'mse.pos',
+    logKey: 'mse.log',
+    width: 272,
+    agentRetryMs: 5000
+  }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
+
+   
+  var CSS = [
+    ':host,*{box-sizing:border-box}',
+    '.mse{',
+       
+      '--paper:#0d1420;--paper-2:#121b2a;--paper-3:#182335;',
+      '--ink:#eaf2ff;--ink-2:#c3d2e8;--muted:#8ba0bd;--rule:#243349;--rule-2:#334762;',
+      '--glow:rgba(169,205,255,.22);--glow-hard:rgba(198,222,255,.42);',
+      '--r:12px;--r-panel:16px;--pill:999px;',
+      '--ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);',
+      'font:14px/1.45 "Onest",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink);',
+      '-webkit-font-smoothing:antialiased',
+    '}',
+
+     
+    '.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;',
+      'height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);',
+      'background:#101a2b;border:1px solid rgba(160,200,255,.24);color:var(--ink);',
+      'font:700 10.5px/1 "Tektur","Onest",sans-serif;letter-spacing:.16em;text-indent:.16em;',
+      'text-shadow:0 0 9px rgba(180,214,255,.55),0 0 20px rgba(150,196,255,.26);',
+      'cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;',
+      'transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}',
+    '.pill.dragging{opacity:.9}',
+    '.pill:active{transform:scale(.97)}',
+    '.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;',
+      'background:#a9cdff;color:#0d1420;font:700 9px/14px "Onest",sans-serif;text-align:center;text-indent:0;text-shadow:none}',
+    '.pill.lit{animation:pill-press .9s linear;border-color:rgba(169,205,255,.55)}',
+    '@keyframes pill-press{0%,100%{text-shadow:0 0 9px rgba(180,214,255,.55),0 0 20px rgba(150,196,255,.26)}',
+      '8%{text-shadow:0 0 13px rgba(206,228,255,.9),0 0 30px rgba(160,200,255,.55)}',
+      '40%{text-shadow:0 0 11px rgba(190,220,255,.65),0 0 24px rgba(150,196,255,.34)}}',
+
+     
+    '.press{position:relative;isolation:isolate}',
+    '.press::before,.press::after{content:"";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;',
+      'opacity:0;transition:opacity .2s var(--ease-out)}',
+    '.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;',
+      'box-shadow:0 0 12px 1px rgba(190,220,255,.55),0 0 34px 6px rgba(150,196,255,.28),0 0 84px 20px rgba(120,170,255,.12)}',
+    '.press::after{top:0;right:0;bottom:0;left:0;background:rgba(169,205,255,.22);',
+      'box-shadow:0 0 24px 3px rgba(170,206,255,.42),0 0 72px 18px rgba(140,190,255,.18),inset 0 0 12px 1px rgba(190,220,255,.24)}',
+     
+    '.press.hot{animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards;border-color:rgba(169,205,255,.62)}',
+    '@property --press{syntax:"<number>";inherits:false;initial-value:0}',
+    '@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}',
+      '18%{--press:.52;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.3}74%{--press:.15}to{--press:0}}',
+    '@keyframes press-ink{0%{text-shadow:0 0 12px rgba(169,205,255,0),0 0 26px rgba(169,205,255,0)}',
+      '4%{text-shadow:0 0 13px rgba(206,228,255,.55),0 0 30px rgba(160,200,255,.36)}',
+      '18%{text-shadow:0 0 11px rgba(190,220,255,.3),0 0 26px rgba(150,196,255,.2)}',
+      '46%{text-shadow:0 0 9px rgba(170,206,255,.17),0 0 22px rgba(140,190,255,.12)}',
+      '74%{text-shadow:0 0 8px rgba(160,200,255,.08),0 0 18px rgba(130,180,255,.06)}',
+      'to{text-shadow:0 0 6px rgba(169,205,255,0),0 0 14px rgba(169,205,255,0)}}',
+    '.press.hot::before{opacity:var(--press)}',
+    '.press.hot::after{opacity:calc(var(--press) * .82)}',
+     
+    '.press.lit{border-color:rgba(169,205,255,.55);text-shadow:0 0 11px rgba(190,220,255,.5),0 0 26px rgba(150,196,255,.26)}',
+    '.press.lit::before{opacity:.42}',
+    '.press.lit::after{opacity:.28}',
+    '.press:active{transform:scale(.985)}',
+
+     
+    '.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:272px;max-width:calc(100vw - 16px);',
+      'background:linear-gradient(180deg,#111b2c,#0b1220 62%);border:1px solid var(--rule);border-radius:var(--r-panel);',
+      'box-shadow:0 22px 54px rgba(4,10,22,.78),0 0 0 1px rgba(150,196,255,.07);overflow:hidden;',
+      'transform-origin:var(--ox,100%) var(--oy,100%);',
+      'opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);',
+      'transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}',
+    '.pop.in{opacity:1;transform:none;filter:none}',
+    '.pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}',
+     
+    '.pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}',
+    '@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}',
+    '.ph{display:flex;align-items:center;gap:6px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.07)}',
+    '.ph .t{flex:1 1 auto;min-width:0;font:700 11px/1 "Tektur","Onest",sans-serif;letter-spacing:.15em;',
+      'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 0 10px rgba(169,205,255,.34)}',
+    '.ph .t em{font:400 10.5px/1 "Onest",sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none}',
+    '.ib{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;',
+      'border-radius:9px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);',
+      'font:600 13px/1 Georgia,serif;cursor:pointer}',
+    '.ib.x{font:400 15px/1 -apple-system,sans-serif}',
+    '.ib.back{font:400 14px/1 -apple-system,sans-serif}',
+    '.pb{max-height:min(52vh,340px);overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 10px 10px}',
+    '.pb::-webkit-scrollbar{width:0}',
+
+     
+    '.ans{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;margin:0 0 6px;padding:7px 9px;',
+      'border-radius:var(--r);border:1px solid #2a3b52;background:#121c2c;color:#e4eefc;',
+      'font:400 13px/1.3 inherit;text-align:left;cursor:pointer}',
+    '.ans .mark{flex:0 0 auto;width:17px;height:17px;border-radius:5px;border:1px solid #3c5470;',
+      'display:flex;align-items:center;justify-content:center;font:700 10px/1 inherit;color:#0d1420}',
+    '.ans.best .mark{background:#a9cdff;border-color:#a9cdff}',
+    '.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}',
+    '.ans .pct{flex:0 0 auto;font:600 10.5px/1 "Onest",sans-serif;color:var(--muted)}',
+    '.ans.agent{border-style:dashed}',
+    '.ans.ai{border-style:dotted;border-color:#5b7899}',
+    '.ans.ai.busy .lbl{color:var(--muted)}',
+    '.tag{font:600 9px/1 "Tektur","Onest",sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:4px}',
+
+     
+    '.row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border-radius:10px;border:1px solid #23364d;',
+      'background:#101a2a;color:var(--ink-2);font:400 11.5px/1.35 inherit;text-align:left;cursor:pointer}',
+    '.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:#5f7a9c}',
+    '.row .dot.ok{background:#8fd8f0;box-shadow:0 0 8px rgba(143,216,240,.7)}',
+    '.row .dot.warn{background:#f2c26b;box-shadow:0 0 8px rgba(242,194,107,.7)}',
+    '.row .dot.bad{background:#ff8f8f;box-shadow:0 0 8px rgba(255,143,143,.7)}',
+    '.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.row .more{flex:0 0 auto;font-size:10.5px;color:var(--muted)}',
+    '.btn{flex:1 1 auto;min-width:0;height:32px;padding:0 10px;border-radius:10px;border:1px solid var(--rule-2);',
+      'background:#152135;color:#e4eefc;font:600 12px/1 inherit;cursor:pointer;white-space:nowrap}',
+    '.btn.solid{background:#a9cdff;color:#0d1420;border-color:#a9cdff}',
+    '.frow{display:flex;gap:6px;flex-wrap:wrap}',
+    '.inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 9px;border-radius:10px;border:1px solid #2b3f59;',
+      'background:#0e1726;color:#e4eefc;font:12.5px/1 "Onest",sans-serif;outline:none}',
+    '.inp:focus{border-color:#7ea6d8}',
+    '.sec{font:700 9.5px/1 "Tektur","Onest",sans-serif;letter-spacing:.18em;color:#8ba0bd;margin:9px 0 6px}',
+    '.sec:first-child{margin-top:2px}',
+     
+    '.val{display:flex;align-items:center;gap:8px;width:100%;padding:8px 9px;margin:0 0 6px;border-radius:10px;',
+      'border:1px solid #23364d;background:#101a2a;color:var(--ink);font:400 12px/1.35 "JetBrains Mono",ui-monospace,Menlo,monospace;',
+      'text-align:left;cursor:pointer}',
+    '.val .k{flex:0 0 46px;font:600 9.5px/1.4 "Onest",sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}',
+    '.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}',
+     
+    '.val.human{font:400 12.5px/1.35 "Onest",sans-serif}',
+    '.val.human .v{overflow-wrap:break-word}',
+    '.val .copy{flex:0 0 auto;font:600 9.5px/1 "Onest",sans-serif;color:var(--muted)}',
+    '.models{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}',
+    '.chip{padding:4px 8px;border-radius:999px;border:1px solid #2a3b52;background:#101a2a;',
+      'font:500 10.5px/1 "JetBrains Mono",ui-monospace,Menlo,monospace;color:var(--ink-2)}',
+    '.log{font:400 10.5px/1.5 "JetBrains Mono",ui-monospace,Menlo,monospace;color:var(--ink-2)}',
+    '.log .ln{display:flex;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05);word-break:break-word}',
+    '.log .ln .g{flex:0 0 auto;width:6px;height:6px;margin-top:5px;border-radius:50%;background:#5f7a9c}',
+    '.log .ln.ok .g{background:#8ee6a4}',
+    '.log .ln.warn .g{background:#f2c26b}',
+    '.log .ln.bad .g{background:#ff8f8f}',
+    '.log .ln .t{flex:0 0 auto;color:#6f6f78}',
+    '.log .ln .m{flex:1 1 auto;min-width:0}',
+    '.empty{padding:12px 4px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5}',
+    '.spin{width:14px;height:14px;margin:8px auto;border-radius:50%;border:1.5px solid #2b3f59;border-top-color:#bcd8ff;animation:sp .7s linear infinite}',
+    '@keyframes sp{to{transform:rotate(360deg)}}',
+    '.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:8px 13px;',
+      'border-radius:999px;background:#152135;border:1px solid #34496a;color:#e4eefc;font:12px/1.35 inherit;text-align:center;',
+      'box-shadow:0 0 20px rgba(255,255,255,.12);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:2147483647}',
+    '.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}',
+    '@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}'
+  ].join('');
+
+   
+   
+  var TYPE_INFO = {
+    multichoice: { label: 'one answer', kind: 'choice' },
+    multichoiceset: { label: 'several answers', kind: 'choice' },
+    truefalse: { label: 'true/false', kind: 'choice' },
+    shortanswer: { label: 'short answer', kind: 'text' },
+    numerical: { label: 'number', kind: 'text' },
+    match: { label: 'matching', kind: 'select' },
+    gapselect: { label: 'choose from a list', kind: 'select' },
+    multianswer: { label: 'nested questions', kind: 'select' },
+    gapfill: { label: 'gaps', kind: 'text' },
+    coderunner: { label: 'code', kind: 'text' },
+    calculated: { label: 'calculated', kind: 'text' },
+    calculatedsimple: { label: 'calculated', kind: 'text' },
+    calculatedmulti: { label: 'calculated', kind: 'text' }
+  };
+   
+  var UNSUPPORTED = {
+    ddwtos: 'drag into text',
+    ddimageortext: 'drag onto an image',
+    ddmarker: 'markers on an image',
+    dragdrop: 'drag and drop',
+    ordering: 'ordering',
+    essay: 'essay',
+    description: 'description (not a question)'
+  };
+
+  function boot() {
+    var win = window;
+    var doc = document;
+    if (win.__mse) return;
+
+    var ls = {
+      get: function (k, d) { try { var v = win.localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+      set: function (k, v) { try { win.localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+    };
+    function el(tag, cls, text) {
+      var n = doc.createElement(tag);
+      if (cls) n.className = cls;
+      if (text != null) n.textContent = text;
+      return n;
+    }
+    function norm(s) {
+      return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase()
+        .replace(/^[a-zа-я]\.\s{0,}/i, '').replace(/[.,;:!?"'«»()]/g, '');
+    }
+
+     
+    var log = [];
+    try { log = JSON.parse(ls.get(CONFIG.logKey, '[]')) || []; } catch (e) { log = []; }
+    function logAdd(kind, ok, text, extra) {
+      var line = { t: Date.now(), kind: kind, ok: ok, text: String(text || '') };
+      if (extra && extra.ms != null) line.ms = extra.ms;
+      log.push(line);
+      if (log.length > 120) log.splice(0, log.length - 120);
+      ls.set(CONFIG.logKey, JSON.stringify(log));
+      if (pop && state.route === 'net') render();
+      updateDot();
+      return line;
+    }
+    function logLast(kind) {
+      for (var i = log.length - 1; i >= 0; i--) if (!kind || log[i].kind === kind) return log[i];
+      return null;
+    }
+    function ago(ts) {
+      var s = Math.round((Date.now() - ts) / 1000);
+      if (s < 60) return s + ' s';
+      if (s < 3600) return Math.round(s / 60) + ' min';
+      return Math.round(s / 3600) + ' h';
+    }
+
+     
+    
+
+    function idFromValue(v) {
+      if (v === null || v === undefined) return null;
+      var s = String(v).trim();
+      if (!/^\d{1,12}$/.test(s)) return null;
+      if (s === '0') return null;
+      return s;
+    }
+    function learnedKey() { return 'mse.id.' + String(win.location.host); }
+    function learnId(id, name, login) {
+      if (id) ls.set(learnedKey(), String(id));
+      if (name) ls.set(learnedKey() + '.name', String(name));
+      if (login) ls.set(learnedKey() + '.login', String(login));
+    }
+
+    function identity() {
+      var out = { id: null, idSource: null, name: null, nameSource: null, login: null, site: null };
+      var cfg = null;
+      try { cfg = win.M && win.M.cfg; } catch (e) { cfg = null; }
+      if (cfg) {
+        if (cfg.siteId) out.site = String(cfg.siteId);
+        if (cfg.username) out.login = String(cfg.username);
+      }
+       
+      var candidates = [];
+      if (cfg) {
+        candidates.push([idFromValue(cfg.userid), 'M.cfg.userid']);
+        candidates.push([idFromValue(cfg.userId), 'M.cfg.userId']);
+        candidates.push([idFromValue(cfg.user && cfg.user.id), 'M.cfg.user.id']);
+      }
+       
+      ['html', 'body'].forEach(function (sel) {
+        var node = doc.querySelector(sel);
+        if (!node) return;
+        candidates.push([idFromValue(node.getAttribute('data-userid')), sel + '@data-userid']);
+        candidates.push([idFromValue(node.getAttribute('data-user-id')), sel + '@data-user-id']);
+      });
+      var anyData = doc.querySelector('[data-userid], [data-user-id]');
+      if (anyData) {
+        candidates.push([idFromValue(anyData.getAttribute('data-userid')), 'data-userid']);
+        candidates.push([idFromValue(anyData.getAttribute('data-user-id')), 'data-user-id']);
+      }
+       
+      var links = doc.querySelectorAll('a[href*="profile.php"], a[href*="user/view.php"], a[href*="/user/profile"], a[href*="user/index.php?id="]');
+      for (var i = 0; i < links.length && i < 12; i++) {
+        var href = links[i].getAttribute('href') || '';
+        var m = /[?&](?:id|userid)=(\d+)/.exec(href) || /\x2Fuser\x2F(?:profile|view)\x2F(\d+)/.exec(href);
+        if (m) { candidates.push([idFromValue(m[1]), 'profile link']); break; }
+      }
+       
+      var hidden = doc.querySelector('input[name="userid"], input[name="user_id"], input[name="id"][type="hidden"]');
+      if (hidden) {
+        var ctx = String(hidden.form && hidden.form.getAttribute('action') || '');
+        if (/user|profile|message|course/.test(ctx) || hidden.name !== 'id') candidates.push([idFromValue(hidden.value), 'hidden field']);
+      }
+       
+      candidates.push([idFromValue(ls.get(learnedKey(), null)), 'remembered from /my/']);
+
+      for (var c = 0; c < candidates.length; c++) {
+        if (candidates[c][0]) { out.id = candidates[c][0]; out.idSource = candidates[c][1]; break; }
+      }
+
+       
+      var nameSel = [
+        '.usertext', '[data-region="user-menu"] .usertext', '.userbutton .usertext', '#nav-user-menu .usertext',
+        '[data-region="user-menu"] .fw-bold', '.usermenu .usertext', 'a.dropdown-toggle .usertext'
+      ];
+      for (var n = 0; n < nameSel.length && !out.name; n++) {
+        var node = doc.querySelector(nameSel[n]);
+        var t = node ? String(node.textContent || '').replace(/\s+/g, ' ').trim() : '';
+        if (t && t.length > 1 && t.length < 120) { out.name = t; out.nameSource = 'user menu'; }
+      }
+      if (!out.name) {
+        var pic = doc.querySelector('img.userpicture, img.avatar, img[src*="/user/icon"], img[src*="u/"]');
+        var alt = pic && String(pic.getAttribute('alt') || pic.getAttribute('title') || '').replace(/^picture of\s{0,}/i, '').trim();
+        if (alt && alt.length > 1 && alt.length < 120) { out.name = alt; out.nameSource = 'avatar'; }
+      }
+      if (!out.name) {
+        var kept = ls.get(learnedKey() + '.name', null);
+        if (kept) { out.name = kept; out.nameSource = 'remembered'; }
+      }
+      if (!out.login) {
+        var keptLogin = ls.get(learnedKey() + '.login', null);
+        if (keptLogin) out.login = keptLogin;
+      }
+      if (out.id) learnId(out.id, out.name, out.login);
+      return out;
+    }
+
+     
+    
+
+    function readIdFromHtml(text) {
+      var html = String(text || '');
+      var m = /M\.cfg\s*=\s*(\{[\s\S]{0,4000}?\})\s*;/.exec(html);
+      if (m) {
+        var cfg = null;
+        try { cfg = JSON.parse(m[1]); } catch (e) { cfg = null; }
+        if (cfg) {
+          var fromCfg = idFromValue(cfg.userid) || idFromValue(cfg.userId) || idFromValue(cfg.user && cfg.user.id);
+          if (fromCfg) return fromCfg;
+        } else {
+          var loose = /"userid"\s*:\s*"?(\d{1,12})/.exec(m[1]);
+          if (loose) return loose[1];
+        }
+      }
+      var userBlock = /"user"\s*:\s*\{[^{}]{0,400}"id"\s*:\s*"?(\d{1,12})/.exec(html);
+      if (userBlock) return userBlock[1];
+      var profile = /(?:user\x2Fprofile|user\x2Fview)\.php\?(?:[^"'\s]*?&)?id=(\d{1,12})/.exec(html)
+        || /\x2Fuser\x2F(?:profile|view)\x2F(\d{1,12})/.exec(html);
+      if (profile) return profile[1];
+      var dataAttr = /data-user-?id=["'](\d{1,12})/.exec(html);
+      if (dataAttr) return dataAttr[1];
+      var last = /\buserid\s*[:=]\s*"?[\"']?(\d{1,12})(?!\d)/.exec(html);
+      return last ? last[1] : null;
+    }
+
+     
+    function readNameFromHtml(text) {
+      var html = String(text || '');
+      var m = /class="[^"]*\busertext\b[^"]*"[^>]*>([^<]{2,120})</.exec(html);
+      if (m) return m[1].replace(/\s+/g, ' ').trim();
+      var alt = /<img[^>]+class="[^"]*userpicture[^"]*"[^>]*alt="([^"]{2,120})"/.exec(html);
+      if (alt) return alt[1].replace(/^picture of\s{0,}/i, '').trim();
+      var title = /<a[^>]+href="[^"]*user\x2Fprofile\.php[^"]*"[^>]*>([^<]{2,120})</.exec(html);
+      if (title) return title[1].replace(/\s+/g, ' ').trim();
+      return null;
+    }
+
+    function learnFromCabinet() {
+      var started = Date.now();
+      return fetch('/my/', { method: 'GET', credentials: 'same-origin', headers: { accept: 'text/html' } })
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+          var id = readIdFromHtml(html);
+          var name = readNameFromHtml(html);
+          if (!id) {
+            logAdd('gateway', false, 'no id on /my/ either', { ms: Date.now() - started });
+            return { ok: false, message: 'no id on /my/ either' };
+          }
+          learnId(id, name, null);
+          logAdd('gateway', true, 'id taken from /my/: ' + id, { ms: Date.now() - started });
+          return { ok: true, id: id, name: name };
+        }, function (e) {
+          logAdd('gateway', false, '/my/ page did not open: ' + ((e && e.message) || 'network'), { ms: Date.now() - started });
+          return { ok: false, message: '/my/ page did not open' };
+        });
+    }
+
+     
+    var LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+
+     
+    function questionIdentity(text) {
+      var t = String(text || '').trim().toLowerCase().replace(/[\s:.,!?*+\x2F-]/g, '');
+      var n = 7;
+      for (var i = 0; i < t.length; i++) {
+        var c = t.charCodeAt(i);
+        n = n + (c << 5) - c;
+      }
+      return n;
+    }
+    function textOf(node) {
+      if (!node) return '';
+      return String(node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+     
+    function answerText(input) {
+      var node = null;
+      var byRef = input.getAttribute('aria-labelledby');
+      if (byRef) {
+        byRef.split(/\s+/).forEach(function (id) {
+          if (node || !id) return;
+          var n = doc.getElementById(id);
+          if (n) node = n;
+        });
+      }
+      if (!node && input.id) node = doc.querySelector('label[for="' + input.id + '"]');
+      if (!node) {
+        var holder = input.closest('.answer, .r0, .r1, [class^="r"]') || input.parentNode;
+        node = holder && holder.querySelector('[data-region="answer-label"], label');
+      }
+      if (!node) return String(input.getAttribute('value') || '');
+      var flex = node.querySelector('.flex-fill');
+      if (flex) return textOf(flex);
+      var copy = node.cloneNode(true);
+      Array.prototype.forEach.call(copy.querySelectorAll('.answernumber, .accesshide'), function (x) {
+        if (x.parentNode) x.parentNode.removeChild(x);
+      });
+      return textOf(copy);
+    }
+    function typeOf(block) {
+      var cls = String(block.className || '').split(/\s+/);
+      for (var i = 0; i < cls.length; i++) {
+        if (cls[i] === 'que' || !cls[i]) continue;
+        return cls[i];
+      }
+      return 'multichoice';
+    }
+    function qidOf(block) {
+      var post = block.querySelector('input.questionflagpostdata');
+      if (post) {
+        var v = String(post.getAttribute('value') || '');
+        var m = /(?:^|&)qid=(\d+)/.exec(v);
+        if (m) return m[1];
+      }
+      var m2 = /^question-(\d+)-/.exec(block.id || '');
+      return m2 ? null : null;
+    }
+
+    function readQuestion(block) {
+      var qtext = block.querySelector('.qtext');
+      if (!qtext) return null;
+      var clone = qtext.cloneNode(true);
+      Array.prototype.forEach.call(clone.querySelectorAll('.accesshide'), function (x) {
+        if (x.parentNode) x.parentNode.removeChild(x);
+      });
+      var text = textOf(clone);
+      var type = typeOf(block);
+      var q = {
+        node: block,
+        text: text,
+        type: type,
+        label: (TYPE_INFO[type] || {}).label || null,
+        kind: (TYPE_INFO[type] || {}).kind || null,
+        supported: !!TYPE_INFO[type],
+        unsupported: UNSUPPORTED[type] || null,
+        identity: questionIdentity(text),
+        questionId: qidOf(block),
+        answers: [],
+        controls: []
+      };
+       
+      var inputs = block.querySelectorAll('input[type=radio], input[type=checkbox]');
+      for (var i = 0; i < inputs.length; i++) {
+        var inp = inputs[i];
+        if (!/^q\d+:\d+_answer/.test(inp.name || '')) continue;
+        if (String(inp.getAttribute('value')) === '-1') continue;  
+        if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;
+        q.answers.push({ input: inp, kind: 'choice', text: answerText(inp), letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
+      }
+       
+      var selects = block.querySelectorAll('select');
+      for (var s = 0; s < selects.length; s++) {
+        var sel = selects[s];
+        if (!/^q\d+:\d+_/.test(sel.name || '')) continue;
+        q.controls.push({ kind: 'select', node: sel });
+      }
+       
+      var texts = block.querySelectorAll('input[type=text][name], textarea[name]');
+      for (var t2 = 0; t2 < texts.length; t2++) {
+        var box = texts[t2];
+        if (!/^q\d+:\d+_/.test(box.name || '')) continue;
+        if (/_:flagged|_:sequencecheck/.test(box.name)) continue;
+        q.controls.push({ kind: 'text', node: box });
+      }
+       
+      var places = block.querySelectorAll('input.placeinput');
+      if (places.length) q.controls.push({ kind: 'places', count: places.length });
+      return q;
+    }
+
+    function readQuestions() {
+      var out = [];
+      var blocks = doc.querySelectorAll('.que');
+      for (var i = 0; i < blocks.length; i++) {
+        var q = readQuestion(blocks[i]);
+        if (q) out.push(q);
+      }
+      return out;
+    }
+
+    function currentQuestion(all) {
+      if (!all.length) return null;
+      var mid = win.innerHeight / 2;
+      var best = null, bestD = Infinity;
+      all.forEach(function (q) {
+        var r = q.node.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > win.innerHeight) return;
+        var d = Math.abs((r.top + r.bottom) / 2 - mid);
+        if (d < bestD) { bestD = d; best = q; }
+      });
+      return best || all[0];
+    }
+
+     
+    
+
+    function attemptMeta() {
+      var meta = { host: String(win.location.host), courseId: null, quizId: null, attemptId: null, moodleId: null, missing: [] };
+      var id = identity();
+      meta.identity = { id: id.id, name: id.name, login: id.login, source: id.idSource };
+      if (id.id) meta.moodleId = id.id;
+      var bodyCls = (doc.body && doc.body.className) || '';
+      var bodyId = (doc.body && doc.body.id) || '';
+      var url = String(win.location.href);
+
+      var m;
+      if ((m = /[?&]attempt=(\d+)/.exec(url))) meta.attemptId = m[1];
+      if (!meta.attemptId) {
+        var hi = doc.querySelector('form#responseform input[name="attempt"], form input[name="attempt"]');
+        if (hi && /^\d+$/.test(hi.value || '')) meta.attemptId = hi.value;
+      }
+      if (!meta.attemptId) {
+        var form = doc.querySelector('form#responseform');
+        var action = form && (form.getAttribute('action') || '');
+        if ((m = /[?&]attempt=(\d+)/.exec(action || ''))) meta.attemptId = m[1];
+      }
+
+      if ((m = /[?&]cmid=(\d+)/.exec(url))) meta.quizId = m[1];
+      if (!meta.quizId) {
+        var link = doc.querySelector('a[href*="/mod/quiz/view.php?id="]');
+        if (link) {
+          var q = /[?&]id=(\d+)/.exec(link.getAttribute('href') || '');
+          if (q) meta.quizId = q[1];
+        }
+      }
+      if (!meta.quizId) {
+        try { if (win.M && win.M.cfg && win.M.cfg.cmid != null) meta.quizId = String(win.M.cfg.cmid); } catch (e) {}
+      }
+      if (!meta.quizId && (m = /\bcmid-(\d+)\b/.exec(bodyCls))) meta.quizId = m[1];
+      if (!meta.quizId && (m = /-(\d+)$/.exec(bodyId)) && /quiz/.test(bodyId)) meta.quizId = m[1];
+
+      try { if (win.M && win.M.cfg && win.M.cfg.courseId != null) meta.courseId = String(win.M.cfg.courseId); } catch (e) {}
+      if (!meta.courseId && (m = /\bcourse-(\d+)\b/.exec(bodyCls))) meta.courseId = m[1];
+      if (!meta.courseId) {
+        var cl = doc.querySelector('a[href*="/course/view.php?id="]');
+        if (cl && (m = /[?&]id=(\d+)/.exec(cl.getAttribute('href') || ''))) meta.courseId = m[1];
+      }
+
+      ['courseId', 'quizId', 'attemptId', 'moodleId'].forEach(function (k) {
+        if (!meta[k]) meta.missing.push(k);
+      });
+      return meta;
+    }
+
+     
+    function serviceUrl(q, meta) {
+      var params = [
+        'client=' + encodeURIComponent(CONFIG.client),
+        'host=' + encodeURIComponent(meta.host),
+        'courseId=' + encodeURIComponent(meta.courseId),
+        'quizId=' + encodeURIComponent(meta.quizId),
+        'attemptId=' + encodeURIComponent(meta.attemptId),
+        'moodleId=' + encodeURIComponent(meta.moodleId),
+        'questionIdentity=' + encodeURIComponent(q.identity),
+        'questionType=' + encodeURIComponent(q.type)
+      ];
+      if (q.questionId) params.push('questionId=' + encodeURIComponent(q.questionId));
+      return CONFIG.apiBase.replace(/\x2F$/, '') + '/v2/quiz/solution?' + params.join('&');
+    }
+
+     
+    function fetchSolution(q, meta) {
+      var started = Date.now();
+      if (meta.missing.length) {
+        var why = missingSentence(meta);
+        logAdd('answers', false, why + ' — request not sent');
+        return Promise.reject(new Error(why));
+      }
+      var url = serviceUrl(q, meta);
+      return fetch(url, { method: 'GET', headers: { accept: 'application/json' } }).then(function (r) {
+        var ms = Date.now() - started;
+        if (r.status === 400) {
+          return r.text().then(function (body) {
+            logAdd('answers', false, 'answer database: 400 (page data incomplete or the service rejected the request)', { ms: ms });
+            throw new Error('answer database: 400 — ' + String(body || '').slice(0, 120));
+          });
+        }
+        if (!r.ok) {
+          logAdd('answers', false, 'answer database: ' + r.status, { ms: ms });
+          throw new Error('answer database: ' + r.status);
+        }
+        return r.json().then(function (json) {
+          logAdd('answers', true, 'answer database: ' + (Array.isArray(json) ? json.length : 0) + ' records', { ms: ms });
+          return json;
+        });
+      }, function (e) {
+        logAdd('answers', false, 'answer database did not respond: ' + ((e && e.message) || 'network'), { ms: Date.now() - started });
+        throw new Error('no connection to the answer database');
+      });
+    }
+    function nameOfParam(k) {
+      return {
+        courseId: 'course',
+        quizId: 'quiz',
+        attemptId: 'attempt',
+        moodleId: 'user id'
+      }[k] || k;
+    }
+     
+    function missingSentence(meta) {
+      var names = meta.missing.map(nameOfParam).join(', ');
+      return 'page data missing: ' + names;
+    }
+
+     
+    function toRows(json) {
+      var rows = [];
+      var groups = Array.isArray(json) ? json : [json];
+      groups.forEach(function (g) {
+        if (!g || typeof g !== 'object') return;
+        var pool = (g.suggestions || []).concat(g.submissions || []);
+        pool.forEach(function (s) {
+          if (!s || s.label == null) return;
+          var label = String(s.label).trim();
+          if (!label) return;
+          var hit = rows.filter(function (r) { return r.label.toLowerCase() === label.toLowerCase(); })[0];
+          var correctness = typeof s.correctness === 'number' ? s.correctness : 0;
+          var count = typeof s.count === 'number' ? s.count : 0;
+          var confidence = typeof s.confidence === 'number' ? s.confidence : null;
+          if (!hit) rows.push({ label: label, correctness: correctness, count: count, confidence: confidence });
+          else {
+            hit.count = Math.max(hit.count, count);
+            hit.correctness = Math.max(hit.correctness, correctness);
+            if (confidence != null) hit.confidence = Math.max(hit.confidence || 0, confidence);
+          }
+        });
+      });
+      var total = rows.reduce(function (a, r) { return a + (r.count || 0); }, 0);
+      rows.forEach(function (r) { r.share = total ? Math.round(((r.count || 0) / total) * 100) : null; });
+      rows.sort(function (a, b) {
+        if (b.correctness !== a.correctness) return b.correctness - a.correctness;
+        return (b.count || 0) - (a.count || 0);
+      });
+      return rows.filter(function (r) { return r.correctness > -1; });
+    }
+
+     
+    function applyAnswer(q, row) {
+      var want = norm(row.label);
+      var done = false;
+       
+      var hit = null;
+      q.answers.forEach(function (a) {
+        if (hit) return;
+        var n = norm(a.text);
+        if (n === want || (want.length > 3 && (n.indexOf(want) >= 0 || want.indexOf(n) >= 0))) hit = a;
+      });
+      if (hit) {
+        if (hit.input.type === 'radio') hit.input.checked = true;
+        else hit.input.checked = row.checked === undefined ? true : !!row.checked;
+        try { hit.input.click(); } catch (e) {}
+        try { hit.input.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (e) {}
+        return { ok: true, how: 'choice' };
+      }
+       
+      var selDone = false;
+      q.controls.forEach(function (c) {
+        if (selDone || c.kind !== 'select') return;
+        var opts = c.node.options || [];
+        for (var i = 0; i < opts.length; i++) {
+          var n = norm(opts[i].textContent);
+          if (!n) continue;
+          if (n === want || (want.length > 3 && (n.indexOf(want) >= 0 || want.indexOf(n) >= 0))) {
+            c.node.selectedIndex = opts[i].index;
+            try { c.node.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (e) {}
+            selDone = true;
+            return;
+          }
+        }
+      });
+      if (selDone) return { ok: true, how: 'select' };
+       
+      var boxes = q.controls.filter(function (c) { return c.kind === 'text' && !c.node.value; });
+      if (!boxes.length) boxes = q.controls.filter(function (c) { return c.kind === 'text'; });
+      if (boxes.length) {
+        boxes[0].node.value = row.label;
+        try { boxes[0].node.dispatchEvent(new win.Event('input', { bubbles: true })); } catch (e) {}
+        try { boxes[0].node.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (e) {}
+        return { ok: true, how: 'text' };
+      }
+      return { ok: false, how: null, done: done };
+    }
+
+     
+    var host = doc.createElement('div');
+    host.setAttribute('style', 'all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483640;');
+    var root;
+    try { root = host.attachShadow({ mode: 'closed' }); } catch (e) { root = host; }
+    var style = doc.createElement('style');
+    style.textContent = CSS;
+    root.appendChild(style);
+    var wrap = el('div', 'mse');
+    root.appendChild(wrap);
+
+    var pill = el('button', 'pill');
+    pill.setAttribute('type', 'button');
+    pill.setAttribute('aria-label', CONFIG.brand);
+    pill.innerHTML = '<span>' + CONFIG.brand + '</span>';
+    pill.style.pointerEvents = 'auto';
+    wrap.appendChild(pill);
+
+    var badge = null;
+    function setBadge(n) {
+      if (!n) { if (badge && badge.parentNode) badge.parentNode.removeChild(badge); badge = null; return; }
+      if (!badge) { badge = el('span', 'num'); badge.setAttribute('data-mse-badge', '1'); pill.appendChild(badge); }
+      badge.textContent = String(n);
+    }
+     
+    function flash(node) {
+      if (!node) return;
+      node.classList.remove('hot');
+       
+      void node.offsetWidth;
+      node.classList.add('hot');
+      win.setTimeout(function () { node.classList.remove('hot'); }, 1500);
+    }
+
+    var pos = { x: null, y: null };
+    try { var saved = JSON.parse(ls.get(CONFIG.posKey, 'null') || 'null'); if (saved && typeof saved.x === 'number') { pos.x = saved.x; pos.y = saved.y; } } catch (e) {}
+
+    function place() {
+      var w = win.innerWidth, h = win.innerHeight;
+      var pw = pill.offsetWidth || 44, ph = pill.offsetHeight || 28;
+      var x = pos.x == null ? w - 12 - pw : pos.x;
+      var y = pos.y == null ? h - 76 : pos.y;
+      x = Math.max(6, Math.min(x, w - pw - 6));
+      y = Math.max(6, Math.min(y, h - ph - 6));
+      pos.x = x; pos.y = y;
+      pill.style.left = x + 'px';
+      pill.style.top = y + 'px';
+      if (pop) layout();
+    }
+
+     
+    var drag = null;
+    pill.addEventListener('pointerdown', function (ev) {
+      drag = { id: ev.pointerId, sx: ev.clientX, sy: ev.clientY, ox: pos.x, oy: pos.y, moved: false };
+      pill.classList.add('dragging');
+      try { pill.setPointerCapture(ev.pointerId); } catch (e) {}
+      ev.preventDefault();
+    });
+    pill.addEventListener('pointermove', function (ev) {
+      if (!drag) return;
+      var dx = ev.clientX - drag.sx, dy = ev.clientY - drag.sy;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.moved = true;
+      if (!drag.moved) return;
+      pos.x = drag.ox + dx; pos.y = drag.oy + dy;
+      place();
+      ev.preventDefault();
+    });
+    pill.addEventListener('pointerup', function () {
+      if (!drag) return;
+      var moved = drag.moved;
+      try { pill.releasePointerCapture(drag.id); } catch (e) {}
+      drag = null;
+      pill.classList.remove('dragging');
+      if (moved) { ls.set(CONFIG.posKey, JSON.stringify({ x: pos.x, y: pos.y })); return; }
+      pill.classList.add('lit');
+      win.setTimeout(function () { pill.classList.remove('lit'); }, 900);
+      toggle();
+    });
+    pill.addEventListener('pointercancel', function () { drag = null; pill.classList.remove('dragging'); });
+    pill.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    win.addEventListener('resize', place);
+    win.addEventListener('orientationchange', function () { win.setTimeout(place, 120); });
+
+     
+    var pop = null;
+    var state = {
+      route: 'answers',         
+      question: null,
+      rows: null,
+      loading: false,
+      error: null,
+      meta: null,
+      agent: null,              
+      agentTimer: null,
+      gw: { busy: null, probe: null, models: null, check: null, reg: null },
+      ai: null,                 
+      tier: null,               
+      t0: 0
+    };
+
+    function closePop() {
+      if (!pop) return;
+      var p = pop;
+      pop = null;
+      state.t0 = 0;
+      if (state.agentTimer) { win.clearInterval(state.agentTimer); state.agentTimer = null; }
+      p.classList.remove('in');
+      p.classList.add('out');
+      win.setTimeout(function () { if (p.parentNode) p.parentNode.removeChild(p); }, 300);
+    }
+
+    function toggle() { if (pop) closePop(); else openPop(); }
+
+    function layout() {
+      if (!pop) return;
+      var w = Math.min(CONFIG.width, win.innerWidth - 16);
+      pop.style.width = w + 'px';
+      var r = pill.getBoundingClientRect();
+      var gap = 8;
+      var h = pop.offsetHeight || 180;
+      var left = Math.max(8, Math.min(r.right - w, win.innerWidth - w - 8));
+      pop.style.left = left + 'px';
+      var above = r.top - gap - 6, below = win.innerHeight - r.bottom - gap - 6;
+      var top;
+      if (above >= h || above >= below) {
+        top = Math.max(6, r.top - gap - h);
+        pop.style.setProperty('--oy', '100%');
+      } else {
+        top = r.bottom + gap;
+        pop.style.setProperty('--oy', '0%');
+      }
+      pop.style.top = top + 'px';
+      pop.style.setProperty('--ox', Math.max(0, Math.min(100, ((r.right - 24 - left) / w) * 100)) + '%');
+    }
+
+     
+    function press(node, action) {
+      node.classList.add('press');
+      node.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        flash(node);
+        win.setTimeout(function () { try { action(ev); } catch (e) {} }, 70);
+      });
+      return node;
+    }
+
+    function openPop() {
+      closePop();
+      pop = el('div', 'pop');
+      wrap.appendChild(pop);
+      state.route = 'answers';
+      state.rows = null;
+      state.error = null;
+      state.agent = null;
+      state.t0 = Date.now();
+      var all = readQuestions();
+      state.question = currentQuestion(all);
+      state.meta = attemptMeta();
+      render();
+      win.requestAnimationFrame(function () { if (pop) pop.classList.add('in'); });
+      load();
+    }
+
+    var rise = 0;
+    function N(node, index) {
+       
+      node.classList.add('rise');
+      node.style.setProperty('--i', String(index === undefined ? rise++ : index));
+      return node;
+    }
+
+    function head(titleText, sub, leading) {
+      var h = el('div', 'ph');
+      var lead = leading === 'back'
+        ? press(el('button', 'ib back', '←'), function () { state.route = 'account'; render(); })
+        : press(el('button', 'ib', 'i'), function () { state.route = state.route === 'account' ? 'answers' : 'account'; render(); });
+      lead.setAttribute('aria-label', leading === 'back' ? 'back' : 'your id');
+      lead.style.fontFamily = leading === 'back' ? '' : 'Georgia,serif';
+      h.appendChild(lead);
+      var t = el('div', 't', titleText);
+      if (sub) t.appendChild(el('em', '', ' · ' + sub));
+      h.appendChild(t);
+      var x = press(el('button', 'ib x', '×'), closePop);
+      x.setAttribute('aria-label', 'close');
+      h.appendChild(x);
+      return h;
+    }
+
+    function statusLine() {
+       
+      var last = log[log.length - 1];
+      var okAll = true, worst = null;
+      ['answers', 'gateway'].forEach(function (k) {
+        var l = logLast(k);
+        if (l && !l.ok) { okAll = false; worst = l; }
+      });
+      var dotCls = !last ? '' : (okAll ? 'ok' : (worst && Date.now() - worst.t < 60000 ? 'bad' : 'warn'));
+      var text;
+      if (!last) text = 'network: no requests yet';
+      else if (okAll) text = last.kind === 'agent' ? 'agent answered' : 'network ok';
+      else {
+        var bad = logLast('agent') && !logLast('agent').ok && logLast('agent').t > (logLast('answers') || {}).t ? logLast('agent')
+          : (logLast('gateway') && !logLast('gateway').ok && logLast('gateway').t > (logLast('answers') || {}).t ? logLast('gateway') : logLast('answers'));
+        text = (bad && bad.text ? bad.text : 'network error');
+        if (bad && bad.ms) text += ' · ' + bad.ms + ' ms';
+      }
+      var row = el('div', 'row');
+      row.appendChild(el('span', 'dot ' + dotCls));
+      row.appendChild(el('span', 'txt', text));
+      row.appendChild(el('span', 'more', 'log'));
+      return press(row, function () { state.route = 'net'; render(); });
+    }
+
+    
+
+
+    function isActive(st) { return !!(st && st.state === 'active'); }
+
+     
+    function tierNow() {
+      if (state.tier === 'owner') return Promise.resolve('owner');
+      return Promise.resolve(state.tier || 'base');
+    }
+
+    function refreshTier() {
+      var br = win.MSEBridge;
+      
+
+      if (!br || !br.url() || !br.meta()) { state.tier = 'base'; return Promise.resolve('base'); }
+      if (state.tier === 'owner') return Promise.resolve('owner');
+      return br.check().then(function (res) {
+        state.gw.check = res;
+        state.tier = isActive(res) ? 'owner' : 'base';
+        return state.tier;
+      }, function () { state.tier = 'base'; return 'base'; });
+    }
+
+     
+    function aiPrompt(q) {
+      var lines = [String(q.text || '').slice(0, 2000)];
+      var opts = (q.answers || []).map(function (a) { return String(a.text || '').trim(); }).filter(Boolean);
+      if (opts.length) {
+        lines.push('');
+        lines.push('Options:');
+        opts.forEach(function (o, i) { lines.push((i + 1) + '. ' + o); });
+        lines.push('');
+        lines.push('Answer with exactly one line — the text of the correct option, no numbering and no explanation.');
+      } else {
+        lines.push('');
+        lines.push('Answer only with the short answer to the task, no explanation.');
+      }
+      return lines.join('\n');
+    }
+
+    function aiRow(text, busy) {
+      return { label: String(text || '').trim(), correctness: 0, count: 0, agent: true, busy: !!busy };
+    }
+
+     
+    function runAi(q, why) {
+      var br = win.MSEBridge;
+      if (!br) return;
+      state.ai = { state: 'running', text: '' };
+      render();
+      var t0 = Date.now();
+      var buf = '';
+      var finish = function (ok, text, extra) {
+        var ms = Date.now() - t0;
+        if (ok) {
+          logAdd('agent', true, 'AI: ' + String(text).slice(0, 40), { ms: ms });
+          state.ai = { state: 'ok', text: String(text), model: (extra && extra.model) || null };
+        } else {
+          logAdd('agent', false, 'AI: ' + (text || 'no answer'), { ms: ms });
+          state.ai = { state: 'error', text: String(text || 'no answer') };
+        }
+        render();
+      };
+      br.chat(aiPrompt(q), function (chunk) {
+        buf += chunk;
+        state.ai = { state: 'running', text: buf };
+        if (pop && state.route === 'answers') render();
+      }).then(function (res) {
+         
+        var plain = res && res.choices && res.choices[0] && res.choices[0].message ? String(res.choices[0].message.content || '') : '';
+        var text = (buf || plain || '').trim();
+        if (!text) { finish(false, 'the model said nothing'); return; }
+        finish(true, text, { model: res && res.model });
+      }, function (e) {
+        var msg = (e && e.message) || 'network';
+        if (/40[13]/.test(msg)) finish(false, 'key not accepted');
+        else finish(false, msg.slice(0, 80));
+        state.tier = /40[13]/.test(msg) ? 'base' : state.tier;
+      });
+    }
+
+     
+    function aiAllowed() { return state.tier === 'owner'; }
+
+     
+    function viewAnswers() {
+      var q = state.question;
+      if (!q) {
+        body.appendChild(N(el('div', 'empty', 'no question on this page')));
+        body.appendChild(N(statusLine()));
+        return;
+      }
+      if (!q.supported) {
+        body.appendChild(N(el('div', 'empty', '«' + (q.unsupported || q.type) + '” — the answer database cannot parse this question type')));
+        if (aiAllowed()) appendAi(q);
+        body.appendChild(N(statusLine()));
+        return;
+      }
+      if (state.loading) {
+        body.appendChild(N(el('div', 'spin')));
+        body.appendChild(N(el('div', 'empty', 'asking the database…')));
+        return;
+      }
+      if (state.error) {
+        body.appendChild(N(el('div', 'empty', state.error)));
+        var missingId = state.meta && state.meta.missing && state.meta.missing.indexOf('moodleId') >= 0;
+        var again = press(el('button', 'btn', missingId ? 'take the id from /my/' : 'retry'), function () {
+          if (missingId) {
+            learnFromCabinet().then(function (r) {
+              if (r.ok) { toast('ID: ' + r.id); }
+              else toast(r.message);
+              state.error = null;
+              cabinetTried = false;
+              load();
+            });
+            return;
+          }
+          load();
+        });
+        body.appendChild(N(again, 1));
+        if (aiAllowed()) appendAi(q);
+        body.appendChild(N(statusLine(), 1));
+        return;
+      }
+      var rows = state.rows || [];
+      if (!rows.length) {
+        body.appendChild(N(el('div', 'empty', 'no answers yet')));
+        if (aiAllowed()) appendAi(q);
+      } else {
+        rows.slice(0, 6).forEach(function (r, i) {
+          var a = el('button', 'ans press' + (r.correctness > 0 ? ' best' : ''));
+          a.setAttribute('type', 'button');
+          a.appendChild(el('span', 'mark', r.correctness > 0 ? '✓' : ''));
+          a.appendChild(el('span', 'lbl', r.label));
+          if (r.share != null) a.appendChild(el('span', 'pct', r.share + '%'));
+          else if (r.count) a.appendChild(el('span', 'pct', r.count + '×'));
+          if (r.agent) a.appendChild(el('span', 'tag', 'agent'));
+          if (r.correctness > 0) a.classList.add('lit');
+          a.addEventListener('click', function () {
+            flash(a);
+            win.setTimeout(function () {
+              var res = applyAnswer(q, r);
+              if (res.ok) { toast('selected: ' + r.label); setBadge(0); win.setTimeout(closePop, 420); }
+              else toast('no such option in the form');
+            }, 70);
+          });
+          body.appendChild(N(a, i));
+        });
+      }
+      body.appendChild(N(statusLine(), 1));
+      if (aiAllowed()) body.appendChild(N(agentStrip(), 1));
+    }
+
+     
+    function appendAi(q) {
+      var ai = state.ai;
+      if (!ai || ai.state === 'idle') {
+         
+        var ask = el('button', 'ans press ai');
+        ask.setAttribute('type', 'button');
+        ask.appendChild(el('span', 'mark', '✦'));
+        ask.appendChild(el('span', 'lbl', 'ask AI'));
+        ask.appendChild(el('span', 'tag', 'AI'));
+        ask.addEventListener('click', function () { flash(ask); runAi(q, 'asked'); });
+        body.appendChild(N(ask, 1));
+        return;
+      }
+      if (ai.state === 'running') {
+        var run = el('div', 'ans ai busy');
+        run.appendChild(el('span', 'mark', '✦'));
+        run.appendChild(el('span', 'lbl', ai.text ? ai.text : 'AI is thinking…'));
+        run.appendChild(el('span', 'tag', 'AI'));
+        body.appendChild(N(run, 1));
+        return;
+      }
+      if (ai.state === 'error') {
+        var err = el('button', 'ans press ai');
+        err.setAttribute('type', 'button');
+        err.appendChild(el('span', 'mark', '✦'));
+        err.appendChild(el('span', 'lbl', 'AI: ' + (ai.text || 'no answer')));
+        err.appendChild(el('span', 'tag', 'AI'));
+        err.addEventListener('click', function () { flash(err); runAi(q, 'again'); });
+        body.appendChild(N(err, 1));
+        return;
+      }
+      var row = aiRow(ai.text);
+      row.ai = true;
+      row.label = ai.text;
+      var a = el('button', 'ans press ai best');
+      a.setAttribute('type', 'button');
+      a.appendChild(el('span', 'mark', '✦'));
+      a.appendChild(el('span', 'lbl', ai.text));
+      a.appendChild(el('span', 'tag', 'AI' + (ai.model ? ' · ' + ai.model : '')));
+      a.addEventListener('click', function () {
+        flash(a);
+        win.setTimeout(function () {
+          var res = applyAnswer(q, row);
+          if (res.ok) { toast(res.how === 'text' ? 'filled in' : 'selected: ' + ai.text.slice(0, 40)); setBadge(0); win.setTimeout(closePop, 420); }
+          else toast('the AI answered with something not in the form');
+        }, 70);
+      });
+      body.appendChild(N(a, 1));
+    }
+
+     
+    function agentStrip() {
+      var st = state.agent || { state: 'idle' };
+      var row = el('div', 'row');
+      row.appendChild(el('span', 'dot ' + (st.state === 'ok' ? 'ok' : st.state === 'error' ? 'bad' : st.state === 'retry' || st.state === 'running' ? 'warn' : '')));
+      var txt;
+      if (st.state === 'idle') txt = 'agent: ask';
+      else if (st.state === 'running') txt = 'agent is thinking…';
+      else if (st.state === 'ok') txt = 'agent: ' + (st.answer || '—') + (st.model ? ' · ' + st.model : '');
+      else if (st.state === 'retry') txt = 'agent is busy, retrying in ' + st.retryIn + ' s';
+      else txt = 'agent: ' + (st.text || 'error');
+      row.appendChild(el('span', 'txt', txt));
+      row.appendChild(el('span', 'more', st.state === 'ok' ? 'again' : st.state === 'running' ? '…' : 'run'));
+      return press(row, function () { runAgent(false); });
+    }
+
+    function runAgent(automatic) {
+      var q = state.question;
+      if (!q) return;
+      if (!win.MSEBridge || !win.MSEBridge.url()) {
+        state.agent = { state: 'error', text: 'AI gateway is not set' };
+        render();
+        return;
+      }
+      state.agent = { state: 'running' };
+      render();
+      var t0 = Date.now();
+      win.MSEBridge.agent({
+        host: state.meta.host,
+        question: q.text,
+        type: q.type,
+        options: q.answers.map(function (a) { return a.text; }),
+        multiple: q.type === 'multichoiceset'
+      }).then(function (res) {
+        var ms = Date.now() - t0;
+        if (res.ok && res.answer) {
+          logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
+          state.agent = { state: 'ok', answer: res.answer, model: res.model };
+          var row = { label: res.answer, correctness: 0, count: 0, agent: true };
+          state.rows = [row].concat(state.rows || []);
+          render();
+          var applied = applyAnswer(q, row);
+          if (applied.ok) toast('agent picked: ' + String(res.answer).slice(0, 40));
+          return;
+        }
+        if (res.code === 'rate_limited') {
+          logAdd('agent', false, 'agent is busy (limit hit), retrying', { ms: ms });
+          startRetry(automatic);
+          return;
+        }
+        var text = res.code === 'network' || res.code === 'timeout' ? 'request did not go out · check the network'
+          : res.code === 'no_gateway' ? 'AI gateway is not set'
+          : res.code === 'unauthorized' || res.code === 'invalid_key' ? 'key not accepted'
+          : res.code === 'device_pending' ? 'waiting for approval by id'
+          : 'agent failed: ' + (res.message || 'error');
+        logAdd('agent', false, text, { ms: ms });
+        state.agent = { state: 'error', text: text };
+        render();
+      });
+    }
+    function startRetry(automatic) {
+      if (state.agentTimer) { win.clearInterval(state.agentTimer); state.agentTimer = null; }
+      var left = Math.round(CONFIG.agentRetryMs / 1000);
+      state.agent = { state: 'retry', retryIn: left };
+      render();
+      state.agentTimer = win.setInterval(function () {
+        left -= 1;
+        if (left <= 0) {
+          win.clearInterval(state.agentTimer);
+          state.agentTimer = null;
+          runAgent(true);
+          return;
+        }
+        if (state.agent) { state.agent.retryIn = left; if (pop && state.route === 'answers') render(); }
+      }, 1000);
+    }
+
+    function load() {
+      var q = state.question;
+      if (!q) { render(); return; }
+      state.loading = true;
+      state.ai = null;
+      render();
+       
+      var tier = refreshTier();
+      if (!q.supported) {
+         
+        state.loading = false;
+        state.rows = [];
+        state.error = null;
+        tier.then(function () { render(); });
+        return;
+      }
+       
+      var ready = state.meta && state.meta.moodleId ? Promise.resolve(state.meta) : withIdentity();
+      ready.then(function (meta) {
+        state.meta = meta;
+        return fetchSolution(q, meta);
+      }).then(function (json) {
+        state.rows = toRows(json);
+        state.loading = false;
+        state.error = null;
+        setBadge(state.rows.length);
+        return tier.then(function () {
+           
+          if (!state.rows.length && aiAllowed() && (!state.ai || state.ai.state === 'idle')) runAi(q, 'empty');
+          render();
+        });
+      }, function (e) {
+        state.loading = false;
+        state.error = e.message;
+        return tier.then(function () {
+          if (aiAllowed() && (!state.ai || state.ai.state === 'idle')) runAi(q, 'error');
+          render();
+        });
+      });
+    }
+
+     
+    var cabinetTried = false;
+    function withIdentity() {
+      var meta = attemptMeta();
+      if (meta.moodleId || cabinetTried || !meta.missing.length || meta.missing.indexOf('moodleId') < 0) return Promise.resolve(meta);
+      cabinetTried = true;
+      return learnFromCabinet().then(function () {
+        return attemptMeta();
+      });
+    }
+
+     
+    function valueRow(key, value, copyable, human) {
+      var row = el('button', 'val press' + (human ? ' human' : ''));
+      row.setAttribute('type', 'button');
+      row.appendChild(el('span', 'k', key));
+      row.appendChild(el('span', 'v', value == null || value === '' ? '—' : String(value)));
+      var hint = el('span', 'copy', '');
+      row.appendChild(hint);
+      if (!copyable) { row.classList.remove('press'); row.disabled = true; return row; }
+      row.addEventListener('click', function () {
+        flash(row);
+        win.MSEBridge.copy(value).then(function (ok) {
+          hint.textContent = ok ? 'copied' : 'failed';
+          win.setTimeout(function () { hint.textContent = ''; }, 1600);
+        });
+      });
+      return row;
+    }
+
+    function viewAccount() {
+      var id = identity();
+      var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
+      body.appendChild(N(el('div', 'sec', 'MOODLE ACCOUNT')));
+      body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
+      body.appendChild(N(valueRow('login', id.login, !!id.login), 1));
+      body.appendChild(N(valueRow('name', id.name, !!id.name, true), 1));
+      body.appendChild(N(el('div', 'sec', 'DEVICE'), 1));
+      body.appendChild(N(valueRow('key', win.MSEBridge ? win.MSEBridge.key() : null, !!(win.MSEBridge && win.MSEBridge.key())), 1));
+      var st = state.gw.check;
+      var line = el('div', 'row');
+      var good = st && st.state === 'active';
+      line.appendChild(el('span', 'dot ' + (good ? 'ok' : st ? 'warn' : '')));
+      line.appendChild(el('span', 'txt', good ? 'key accepted' : st ? (st.message || 'key not checked') : 'key not checked'));
+      line.appendChild(el('span', 'more', 'AI gateway'));
+      body.appendChild(N(press(line, function () { state.route = 'gateway'; render(); }), 1));
+      var net = el('div', 'row');
+      net.appendChild(el('span', 'dot'));
+      net.appendChild(el('span', 'txt', 'network log'));
+      net.appendChild(el('span', 'more', 'open'));
+      body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
+    }
+
+     
+    function viewGateway() {
+      var gw = state.gw;
+      var br = win.MSEBridge;
+      if (!br) { body.appendChild(N(el('div', 'empty', 'the AI gateway layer did not load'))); return; }
+
+      body.appendChild(N(el('div', 'sec', 'AI GATEWAY'), 0));
+      var input = el('input', 'inp');
+      input.type = 'url';
+      input.inputMode = 'url';
+      input.autocapitalize = 'off';
+      input.spellcheck = false;
+      input.placeholder = 'https:/\/…';
+      input.value = br.url() || '';
+      body.appendChild(N(input, 1));
+      var frow = el('div', 'frow');
+      body.appendChild(N(frow, 1));
+      var check = press(el('button', 'btn solid', gw.busy ? 'checking…' : 'check'), function () {
+        var url = String(input.value || '').trim();
+        gw.busy = 'check';
+        gw.probe = null;
+        gw.models = null;
+        render();
+        br.probe(url).then(function (r) {
+          gw.probe = r;
+          if (!r.ok) { gw.busy = null; logAdd('gateway', false, 'AI gateway: ' + r.message); render(); return; }
+          br.setUrl(url);
+           
+          return Promise.all([br.models(), br.check()]).then(function (out) {
+            gw.models = out[0];
+            gw.check = out[1];
+            gw.busy = null;
+            logAdd('gateway', true, 'AI gateway is up · ' + (out[0].models.length || 0) + ' models', { ms: r.ms });
+            render();
+          });
+        }, function (e) {
+          gw.busy = null;
+          gw.probe = { ok: false, message: (e && e.message) || 'error' };
+          render();
+        });
+      });
+      frow.appendChild(check);
+      if (gw.busy === 'check') check.textContent = 'checking…';
+
+      if (gw.probe) {
+        var p = el('div', 'row');
+        p.appendChild(el('span', 'dot ' + (gw.probe.ok ? 'ok' : 'bad')));
+        p.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered · ' + gw.probe.ms + ' ms' : gw.probe.message));
+        body.appendChild(N(p, 1));
+      }
+      if (gw.check) {
+        var c = el('div', 'row');
+        c.appendChild(el('span', 'dot ' + (gw.check.state === 'active' ? 'ok' : 'warn')));
+        c.appendChild(el('span', 'txt', gw.check.state === 'active' ? 'key accepted' : gw.check.message || 'key not accepted'));
+        body.appendChild(N(c, 1));
+        if (gw.check.state === 'unregistered') {
+          body.appendChild(N(press(el('button', 'btn', 'bind to my id'), function () {
+            gw.busy = 'reg';
+            render();
+            br.register(identity()).then(function () { return br.check(); }).then(function (res) {
+              gw.check = res;
+              gw.busy = null;
+              logAdd('gateway', res.state === 'active', 'binding: ' + res.state);
+              render();
+            }, function (e) {
+              gw.busy = null;
+              logAdd('gateway', false, 'binding: ' + e.message);
+              render();
+            });
+          }), 1));
+        }
+      }
+      if (gw.models && gw.models.models.length) {
+        body.appendChild(N(el('div', 'sec', 'MODELS · CHOSEN BY THE SERVER'), 1));
+        var list = el('div', 'models');
+        gw.models.models.forEach(function (m) { list.appendChild(el('span', 'chip', m)); });
+        body.appendChild(N(list, 1));
+      } else if (gw.models && !gw.models.ok) {
+        body.appendChild(N(el('div', 'empty', gw.models.message), 1));
+      }
+      body.appendChild(N(statusLine(), 1));
+    }
+
+     
+    function viewNet() {
+      body.appendChild(N(el('div', 'sec', 'NETWORK LOG'), 0));
+      if (!log.length) { body.appendChild(N(el('div', 'empty', 'empty so far'))); return; }
+      var box = el('div', 'log');
+      log.slice(-40).reverse().forEach(function (l, i) {
+        var ln = el('div', 'ln ' + (l.ok ? 'ok' : 'warn'));
+        ln.appendChild(el('span', 'g'));
+        ln.appendChild(el('span', 't', ago(l.t)));
+        ln.appendChild(el('span', 'm', l.text + (l.ms != null ? ' · ' + l.ms + ' ms' : '')));
+        box.appendChild(ln);
+      });
+      body.appendChild(N(box, 1));
+      body.appendChild(N(press(el('button', 'btn', 'clear'), function () {
+        log = [];
+        logAdd('answers', true, 'log cleared');
+        render();
+      }), 1));
+    }
+
+     
+    var body = null;
+    function render() {
+      if (!pop) return;
+      rise = 0;
+      pop.innerHTML = '';
+       
+      var sub = null;
+      var title = CONFIG.brand;
+      var leading = 'info';
+      if (state.route === 'answers' && state.question) {
+        var idx = Array.prototype.indexOf.call(doc.querySelectorAll('.que'), state.question.node) + 1;
+        sub = 'question ' + (idx || 1);
+      } else if (state.route === 'account') { sub = 'account'; }
+      else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
+      else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
+      pop.appendChild(head(title, sub, leading));
+      body = el('div', 'pb');
+      pop.appendChild(body);
+      if (state.route === 'account') viewAccount();
+      else if (state.route === 'gateway') viewGateway();
+      else if (state.route === 'net') viewNet();
+      else viewAnswers();
+      layout();
+    }
+
+     
+    function updateDot() {}
+
+    var toastTimer = null, toastEl = null;
+    function toast(text) {
+      if (!toastEl) { toastEl = el('div', 'toast'); wrap.appendChild(toastEl); }
+      toastEl.textContent = text;
+      toastEl.classList.add('on');
+      if (toastTimer) win.clearTimeout(toastTimer);
+      toastTimer = win.setTimeout(function () { toastEl.classList.remove('on'); }, 2000);
+    }
+
+     
+    doc.addEventListener('pointerdown', function (e) {
+      if (!pop) return;
+      var path = e.composedPath ? e.composedPath() : [];
+      if (path.indexOf(host) >= 0 || e.target === host) return;
+      closePop();
+    }, true);
+    doc.addEventListener('keydown', function (e) { if (e.key === 'Escape' && pop) closePop(); }, true);
+
+     
+    place();
+    (doc.body || doc.documentElement).appendChild(host);
+
+    win.__mse = {
+      open: function () { openPop(); return true; },
+      close: closePop,
+      identity: identity,
+      questions: readQuestions,
+      types: function () {
+         
+        var out = { supported: Object.keys(TYPE_INFO), unsupported: Object.keys(UNSUPPORTED) };
+        return out;
+      },
+      current: function () { return currentQuestion(readQuestions()); },
+      rows: function () { return state.rows; },
+      meta: function () { return attemptMeta(); },
+      learnId: function () { return learnFromCabinet(); },
+      apply: function (label) {
+        var q = state.question || currentQuestion(readQuestions());
+        if (!q) return false;
+        return applyAnswer(q, { label: label });
+      },
+      agent: function () { return state.agent; },
+      runAgent: function () { runAgent(false); return true; },
+      log: function () { return log.slice(-40); },
+      clearLog: function () { log = []; render(); return true; },
+      copy: function (t) { return win.MSEBridge ? win.MSEBridge.copy(t) : Promise.resolve(false); },
+      bridge: function () { return win.MSEBridge || null; },
+      settings: function (open) {
+        if (open) { if (!pop) openPop(); state.route = 'gateway'; render(); }
+        return win.MSEBridge ? win.MSEBridge.status() : null;
+      },
+      route: function (r) { if (r) { if (!pop) openPop(); state.route = r; render(); } return state.route; },
+      pos: function () { return { x: pos.x, y: pos.y }; },
+      move: function (x, y) { pos.x = x; pos.y = y; place(); ls.set(CONFIG.posKey, JSON.stringify({ x: pos.x, y: pos.y })); return { x: pos.x, y: pos.y }; },
+      toast: toast,
+      state: function () {
+        return {
+          visible: !!pop,
+          route: state.route,
+          pill: {
+            text: String((pill.querySelector('span:not([data-mse-badge])') || pill).textContent || '').trim(),
+            left: pill.style.left, top: pill.style.top, w: pill.offsetWidth, h: pill.offsetHeight,
+            badge: badge ? String(badge.textContent) : null
+          },
+          pop: pop ? {
+            left: pop.style.left, top: pop.style.top, w: pop.offsetWidth, h: pop.offsetHeight,
+            text: String(pop.textContent || '').replace(/\s+/g, ' ').trim(),
+            controls: controls()
+          } : null,
+          rows: state.rows,
+          error: state.error,
+          agent: state.agent,
+          ai: state.ai,
+          tier: state.tier,
+          meta: state.meta,
+          identity: identity(),
+          bridge: win.MSEBridge ? win.MSEBridge.status() : null,
+          log: log.slice(-12),
+          question: state.question ? {
+            text: state.question.text.slice(0, 120),
+            type: state.question.type,
+            kind: state.question.kind,
+            supported: state.question.supported,
+            identity: state.question.identity,
+            questionId: state.question.questionId,
+            answers: state.question.answers.map(function (a) { return a.text; })
+          } : null
+        };
+      }
+    };
+
+    function controls() {
+      var out = {};
+      if (!pop) return out;
+      Array.prototype.forEach.call(pop.querySelectorAll('[data-mse]'), function (n) {
+        var r = n.getBoundingClientRect();
+        out[n.getAttribute('data-mse')] = { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+      });
+      Array.prototype.forEach.call(pop.querySelectorAll('.ans, .btn, .val, .row, .ib'), function (n, i) {
+        var r = n.getBoundingClientRect();
+        out['c' + i] = { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), text: String(n.textContent || '').trim().slice(0, 40) };
+      });
+      return out;
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+
+})();
+
+ 
+try{ var __mseReady=(__ssW.__mseSources||{}); __mseReady.shell=1; __mseReady.debug=1; __mseReady.auth=1; __mseReady.bridge=1; __ssW.__mseSources=__mseReady; }catch(e){}
 })();

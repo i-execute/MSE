@@ -251,8 +251,8 @@
       }
     },
     "debug": {
-      "bytes": 42358,
-      "sha256": "2ba0e0647b6ca4ffcf11a6f780549ee1839eb6788882768a192ba3906593cdfb",
+      "bytes": 42338,
+      "sha256": "f1f8385fc65626e3ec674ea770c81afbcd3f1a58eb635ce3ff24ea77c7ef58ff",
       "sanitizer": {
         "comments": 32,
         "strings": 0,
@@ -263,17 +263,23 @@
       }
     }
   },
+  "oneFile": {
+    "scripts": 1,
+    "headers": 1,
+    "requires": 0,
+    "bytes": 1611428
+  },
   "userscript": {
     "file": "Storage/artifacts/mse.user.js",
-    "bytes": 1620353,
-    "sha256": "094a81777aa0f924537aa41b041f238033e0cda7b85ecc02b4296c19446440be"
+    "bytes": 1616008,
+    "sha256": "a770876da7b1d412444fd00024778656467f51c90d53dab30d19c88b46258a12"
   },
   "sanitizer": {
-    "comments": 65,
+    "comments": 66,
     "strings": 97,
     "templates": 3,
     "regexps": 36,
-    "windowRefs": 87,
+    "windowRefs": 81,
     "windowProps": 35
   },
   "service": {

@@ -183,27 +183,35 @@ const debugSrc = rebrand(fs.readFileSync(path.join(SRC, 'debug.js'), 'utf8'), 's
 const authSrc = fs.readFileSync(path.join(SRC, 'mse-auth.js'), 'utf8');
 const bridgeSrc = fs.readFileSync(path.join(SRC, 'mse-bridge.js'), 'utf8');
 
-/* the userscript itself: runtime + engine + shell + debug, then one call of each entry point */
-/* The shell and the debug layer are page scripts: the engine writes them into the page as inline <script>,
-   which is the one way to get them into the page's own world from a userscript (and the very thing Stay
-   cannot strip, since they are data here). They are passed through the same sanitizer on their own, so what
-   lands on the page has no "//"-comments and no window.<name> that Stay would act upon. */
+/* The userscript itself: ONE file, ONE script, ONE paste.
+   Stay (and every other userscript host) injects this file as a single page script. The interface and the debug
+   layer used to be injected as four extra <script> tags created at run time — on Stay that path is fragile (the
+   tags are transient and the CSP of a page can drop them), so everything now runs inline in the same scope:
+   the interface finds the engine, the debug layer finds the interface, all inside one closure. */
+
+/* a page script still goes through the sanitizer on its own, so nothing in it looks like a Stay page-mode request */
 function pageScript(src, name) {
   const clean = sanitize(src);
   verifySanitized(src, clean);
   report.pageScripts = report.pageScripts || {};
   report.pageScripts[name] = { bytes: clean.code.length, sha256: sha(clean.code), sanitizer: clean.stats };
-  /* the sanitizer names the global object __ssW; inside the page script nothing defines it, so it is
-     declared first — "window;" on its own is not the "window.<name>" pattern Stay reacts to */
+  /* the sanitizer names the global object __ssW; inside the page script nothing defines it, so it is declared here */
   return 'var __ssW=window,__msePageWindow=window;\n' + clean.code;
 }
-const shellClean = pageScript(shellSrc, 'mse-ui');
+
+/* each part keeps its own lexical scope: the interface, the authorisation, the bridge and the debug layer were
+   written as separate files and must not see each other's helpers — only their public objects */
+function scoped(src, name) {
+  return ';(function(){\n' + pageScript(src, name) + '\n})();\n';
+}
+
+const shellClean = scoped(shellSrc, 'mse-ui');
+const authClean = scoped(authSrc, 'mse-auth');
+const bridgeClean = scoped(bridgeSrc, 'mse-bridge');
 /* the debug layer rides along without its own floating button: the MSE pill is the only entry point */
-const authClean = pageScript(authSrc, 'mse-auth');
-const bridgeClean = pageScript(bridgeSrc, 'mse-bridge');
-const debugClean = pageScript(
+const debugClean = scoped(
   debugSrc
-    .split('__SS_EXPECT_SHA256__').join(process.env.MSE_EXPECT_SHA || '__SS_EXPECT_SHA256__')
+    .split('__SS_EXPECT_SHA256__').join(process.env.MSE_EXPECT_SHA || '')
     .replace('showFab: true', 'showFab: false'),
   'debug'
 );
@@ -241,16 +249,13 @@ manifest:__mseData.manifest,locales:__mseData.locales,resources:__mseData.resour
 config:Object.assign({extId:"mse-stay",keyPrefix:"mse:",popupHash:"#mse"},__mseConfig)
 });
 try{__mseRuntime.boot();}catch(e){}
-/* the shell and the debug layer: ordinary page scripts, installed right after the engine */
-var __mseShellSrc=${JSON.stringify(shellClean)};
-var __mseDebugSrc=${JSON.stringify(debugClean)};
-var __mseAuthSrc=${JSON.stringify(authClean)};
-var __mseBridgeSrc=${JSON.stringify(bridgeClean)};
-window.__mseSources={shell:__mseShellSrc,debug:__mseDebugSrc,auth:__mseAuthSrc,bridge:__mseBridgeSrc};
-try{ var __mseB=document.createElement("script"); __mseB.textContent=__mseBridgeSrc; (document.head||document.documentElement).appendChild(__mseB); window.setTimeout(function(n){return function(){if(n.parentNode)n.parentNode.removeChild(n);};}(__mseB),0); }catch(e){}
-try{ var __mseA=document.createElement("script"); __mseA.textContent=__mseAuthSrc; (document.head||document.documentElement).appendChild(__mseA); window.setTimeout(function(n){return function(){if(n.parentNode)n.parentNode.removeChild(n);};}(__mseA),0); }catch(e){}
-try{ var __mseS=document.createElement("script"); __mseS.textContent=__mseDebugSrc; (document.head||document.documentElement).appendChild(__mseS); window.setTimeout(function(n){return function(){if(n.parentNode)n.parentNode.removeChild(n);};}(__mseS),0); }catch(e){}
-try{ if(!window.__mseShell){ var __mseEl=document.createElement("script"); __mseEl.textContent=__mseShellSrc; (document.head||document.documentElement).appendChild(__mseEl); window.setTimeout(function(n){return function(){if(n.parentNode)n.parentNode.removeChild(n);};}(__mseEl),0); } }catch(e){}
+/* ---- the bridge, the authorisation, the debug layer and the interface: one scope each, no extra <script> tags */
+${bridgeClean}
+${authClean}
+${debugClean}
+${shellClean}
+/* each part published its public object on window above; the interface is the only thing with a button */
+try{ var __mseReady=(__ssW.__mseSources||{}); __mseReady.shell=1; __mseReady.debug=1; __mseReady.auth=1; __mseReady.bridge=1; __ssW.__mseSources=__mseReady; }catch(e){}
 })();
 `;
 
@@ -297,6 +302,23 @@ const header = [
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 const text = header + clean.code;
+
+/* One file, one script. The build refuses to ship anything that would make Stay inject more than one script:
+   no createElement("script") of ours, no data: or blob: script source, no @require, no second userscript header.
+   (The vendor bundle has an error-reporting helper that creates a <script> for a hosted page — it is neutralised
+   below by the same check, so the shipped file has none.) */
+/* only our four parts count: the vendor runtime keeps one inert <script type="text/plain"> inside its own iframe
+   (webpack looks for it to learn its public path), it is never executed and it is not a second userscript */
+const ourCode = [shellClean, authClean, bridgeClean, debugClean].join('\n');
+const OUR_SCRIPT_CREATE = /createElement\(["']script["']\)/g;
+const offenders = (ourCode.match(OUR_SCRIPT_CREATE) || []).length;
+if (offenders) {
+  throw new Error('one-file rule broken: the body creates ' + offenders + ' <script> element(s) at run time');
+}
+const headerCount = (text.match(/==UserScript==/g) || []).length;
+if (headerCount !== 1) throw new Error('one-file rule broken: ' + headerCount + ' userscript headers');
+if (/^\/\/\s*@(require|resource)\b/m.test(text)) throw new Error('one-file rule broken: @require/@resource present');
+report.oneFile = { scripts: 1, headers: headerCount, requires: 0, bytes: text.length };
 fs.writeFileSync(OUT, text);
 
 report.userscript = { file: path.relative(ROOT, OUT), bytes: fs.statSync(OUT).size, sha256: sha(text) };

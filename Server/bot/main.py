@@ -43,6 +43,8 @@ API_HASH = os.environ.get("MSE_API_HASH", "")
 PING_EVERY = float(os.environ.get("MSE_PING_EVERY", "15") or 15)
 EMOJI = str(os.environ.get("MSE_EMOJI", "0") or "0").strip().lower() in ("1", "on", "yes", "true")
 UPDATE_TIMEOUT = float(os.environ.get("MSE_UPDATE_TIMEOUT", "900") or 900)
+INLINE_WARN = ("inline mode is off for this bot: turn it on in @BotFather (/mybots -> your bot -> Bot Settings -> "
+               "Inline Mode -> Turn on), or the inline input buttons do nothing")
 
 
 def is_owner(evt: object) -> bool:
@@ -117,6 +119,7 @@ class Bot:
         self.pending_input: dict[int, str] = {}
         # a test can put a callable here and get every rendered message instead of a network call
         self.sink: Any = None
+        self.inline_enabled: bool | None = None
 
     # ------------------------------------------------------------------ transport
     async def snap(self) -> dict[str, Any]:
@@ -709,6 +712,57 @@ class Bot:
         self.app = app
         return app
 
+    async def check_inline_mode(self) -> bool | None:
+        """Is inline mode on in BotFather? None means "could not tell", which must never raise a false alarm."""
+        if self.app is None:
+            return None
+        app = self.app
+        for name in ("get_me", "getMe"):
+            getter = getattr(app, name, None)
+            if not callable(getter):
+                continue
+            try:
+                me = await asyncio.wait_for(getter(refresh=True), 20)
+            except TypeError:
+                try:
+                    me = await asyncio.wait_for(getter(), 20)
+                except Exception:  # noqa: BLE001
+                    return None
+            except Exception as exc:  # noqa: BLE001
+                log.debug("getMe failed: %s", exc)
+                return None
+            if not isinstance(me, dict):
+                return None
+            supports = me.get("supports_inline_queries")
+            if supports is None and "bot_inline_placeholder" in me:
+                supports = me.get("bot_inline_placeholder") is not None
+            if supports is None:
+                supports = me.get("supports_inline")
+            if supports is None:
+                # the bot api in front of the account may hide it: try the raw method once
+                raw = await self.bot_call("getMe")
+                if isinstance(raw, dict):
+                    supports = raw.get("supports_inline_queries")
+            if supports is None:
+                return None
+            self.inline_enabled = bool(supports)
+            return bool(supports)
+        return None
+
+    async def bot_call(self, method: str, **kwargs: Any) -> Any:
+        """A raw bot api call, whichever of the names this goygram build exposes."""
+        if self.app is None:
+            return None
+        for name in ("bot_req", "call_bot", "bot_api"):
+            fn = getattr(self.app, name, None)
+            if callable(fn):
+                try:
+                    return await asyncio.wait_for(fn(method, **kwargs), 20)
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("bot %s failed: %s", method, exc)
+                    return None
+        return None
+
     async def self_check(self) -> list[str]:
         """What would keep the panel from working. Printed at start and shown on the panel as a notice."""
         problems: list[str] = []
@@ -730,11 +784,18 @@ class Bot:
             problems.append("MSE_BOT_TOKEN is not in " + ENV_FILE + ": the installer never got a token")
         if not env.get("MSE_TAILSCALE_KEY"):
             problems.append("no tailscale key: the tunnel has to be brought up by hand (panel -> Tailscale)")
+        if self.inline_enabled is False:
+            problems.append(INLINE_WARN)
         return [p for p in problems if p]
 
     async def run(self) -> None:
         app = self.build()
         inline.configure(ADMIN_TOKEN or BOT_TOKEN)
+        self.inline_enabled = await self.check_inline_mode()
+        if self.inline_enabled is False:
+            log.warning("%s", INLINE_WARN)
+            print(INLINE_WARN, file=sys.stderr, flush=True)
+            await self.tell_owner(INLINE_WARN)
         problems = await self.self_check()
         for problem in problems:
             log.warning("start check: %s", problem)
@@ -746,6 +807,15 @@ class Bot:
             await app.run()
         finally:
             watcher.cancel()
+
+    async def tell_owner(self, line: str) -> None:
+        """One plain sentence in the chat, no screen: this is about the bot itself, not about the gateway."""
+        if not OWNER_ID:
+            return
+        try:
+            await self.deliver_raw(OWNER_ID, line)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("the owner was not told: %s", exc)
 
     async def notify_start(self) -> None:
         if not OWNER_ID:
