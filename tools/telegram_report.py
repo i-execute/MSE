@@ -22,24 +22,24 @@ OUT = ROOT.parent / "deliverables"   # "out" is not kept in a snapshot; "deliver
 API = "https://api.telegram.org/bot%s/%s"
 LIMIT = 3900
 
-REPORT = """<b>MSE 2.2 — five bugs, all fixed and proved by running</b>
+REPORT = """<b>MSE 2.3 — сервер и расширение переделаны, всё проверено запуском</b>
 
-<b>1. Inline did not work at all</b> — <code>messages.setInlineBotResults:results: nested object missing _</code>. The results were built in the Bot API shape, while goygram sends inline over MTProto: now each one is <code>inputBotInlineResult</code> with <code>send_message: inputBotInlineMessageText</code>, exactly as OBHOD does it. <code>tests/test_inline_format.py</code> drives the real <code>Obj.answer()</code>, catches the exact payload and walks every nested object: 32 checks, all green.
+<b>A1/A2 — установка сама поднимает туннель и ЖДЁТ внешний https.</b> Было: tailscale не залогинен, url null, а снаружи <code>SSL routines::unexpected eof</code>. Теперь <code>mse-tunnel.sh wait --timeout 60</code> (повтор на eof/handshake/сертификат, понятная причина отказа) вызывается после <code>funnel</code> и до рестарта роутера, а адрес после ожидания принимается только если он <code>https://…</code>. Проверка запуском: <code>tests/tunnel_test.sh</code> — 10/10 (локальный TLS-сервер, отказ в бюджете, порядок строк install.sh).
 
-<b>2. No check of inline mode at start</b> — <code>Bot.check_inline_mode()</code> asks <code>getMe</code> (the placeholder and a raw call as fallbacks), and on "off" it writes one line to the journal, sends you one plain sentence in the chat and puts it in <code>self_check()</code> and on the panel. Ran it against your bot: <code>check_inline_mode -> False</code>, you were told. Inline for @ArenaAI_agent_Bot is genuinely off in BotFather right now.
+<b>A3/A4 — один каталог данных.</b> Было <code>state not saved: ENOENT mkdir /opt/mse/data</code> и vault в <code>/opt/mse</code>. Теперь <code>/var/lib/mse</code> (режим 700, создаётся до старта юнитов): state.json, admin-token.txt и vault goygram. По ходу нашёлся и починен настоящий баг потери настроек — квота из панели не попадала в состояние и рестарт её откатывал. Проверка: <code>tests/state_persistence.py</code> на настоящем роутере — 24/24 (создал каталог сам, три цикла старт/стоп/старт, «обновление» сносит код и данные на месте).
 
-<b>3. iOS was five scripts</b> — the file was one, but the runtime created four extra script tags for the interface, the auth, the bridge and the debug layer. Now all four live in the same file as scoped blocks: one paste, like 0.2. The build refuses to ship anything else — <code>oneFile {scripts: 1, headers: 1, requires: 0}</code> — and <code>tests/onefile.test.js</code> keeps it that way.
+<b>A5 — инлайн проверяется при старте.</b> <code>check_inline_mode()</code>: off → строка в журнал, одно сообщение тебе в чат, то же в self_check и на панели; сервер молчит → тревоги нет. <code>tests/inline_mode_check.py</code> — 16/16.
 
-<b>4. First run asks for the keys</b> — bot token (three tries, format checked), owner telegram id, tailscale auth key; each validated, all written to <code>/etc/mse/mse.env</code> mode 600. A pipe gets the exact commands instead. The TUI hands the same values to the installer and says up front what is still missing.
+<b>B1 — новый адрес заменяет старый во всех хранилищах.</b> Новый адрес пишется в оба хранилища, затем сканируются все ключи, похожие на адрес (localStorage сайта, хранилище расширения через рантайм, зеркало, старый ключ), и всё чужое удаляется; сохраняется только ПРОВЕРЕННЫЙ адрес, а список вычищенного уходит строкой в журнал панели. Проверка: <code>tests/b1_address.test.js</code> — 2/2 против двух настоящих https-шлюзов со счётчиками: старый не получает ни одного запроса, после перезагрузки старого нет нигде.
 
-<b>5. The tunnel comes up during the install</b> — the order is now <code>install -> tunnel up + funnel -> MSE_PUBLIC_URL -> restart mse-router -> check</code>, so the router never starts with an empty address. At the end it prints whether both units are active and whether the address is in place.
+<b>B2 — воздух.</b> 8 px между строками, паддинги внутри строк, именованные группы (address/connection/answer, account/this device, journal), шапка в две строки вместо стены текста, ширина панели от реального вьюпорта и всегда внутри экрана (это нашлось на скриншоте — панель вылезала за правый край). Проверка: <code>tests/b2_b3_theme.test.js</code> измеряет всё это на живой панели.
 
-<b>Proved by running, not by reading:</b> extension 13/13, one-file 4/4, router 9/9, gateway 14/14, TUI 19/19, bot 14 screens / 28 callbacks, inline format 32/32, installer 24/24 (pty dialogue, pipe, order of calls), <code>audit --strict</code> 0 hits three times, and a clean clone of <code>release/2.2</code> with a fresh <code>npm install</code> — all green.
+<b>B3 — строго ч/б.</b> Один файл темы <code>Extensions/src/theme.css</code> вставляется сборкой (второй копии нет, старая палитра удалена): бумага #0a0a0a, чернила #f2f2f2, единственный акцент — белая рамка выбранной строки, свечение только на буквах «MSE», системный шрифт. Ключ устройства на экране аккаунта теперь замаскирован. Проверка: тест обходит ВСЕ элементы всех четырёх экранов и требует ни одного цветного значения; скриншоты в <code>Storage/screenshots/</code> (приложены).
 
-<b>Branch:</b> <code>release/2.2</code>, not pushed to main. Commits <code>22465e4</code>, <code>259d3ef</code>, <code>27980a7</code>.
-<b>Not verified live:</b> tapping an inline result needs an MTProto session (api_id/hash and a login) and a real tailnet key. Everything else went through the real code paths. Give me those and I take that step too.
+<b>Прогоны:</b> расширение M1–M13 13/13, one-file 4/4, B1 2/2, B2/B3 2/2, роутер 9/9, шлюз 14/14, состояние 24/24, туннель 10/10, инлайн 16/16, бот 14 экранов/28 callback, формат инлайна ok, установка 24/24, TUI 19/19, <code>audit --strict</code> 0 hits ×3 — и всё это ещё раз с нуля из архива после свежего <code>npm install</code>.
 
-Attached: the source archive, the git bundle of the branch, and the PR description.
+<b>Ветка:</b> <code>release/2.3</code> (от <code>release/2.2</code>), коммиты <code>37d4b6e</code>, <code>a683d8f</code>, <code>a76e850</code>.
+<b>Не проверено живьём:</b> настоящий tailnet (нужен рабочий ключ tailscale и разрешённый Funnel) и реальный Telegram — всё остальное шло настоящим кодом. Прогон всего mse.test.js одним процессом падает по памяти песочницы (2 ГБ без swap) — каждый тест по отдельности зелёный.
 """
 
 
@@ -113,7 +113,9 @@ def main() -> int:
     good = send_text(REPORT)
     print("report: " + ("sent" if good else "failed"))
 
-    for path in (OUT / "MSE-2.2-source.tar.gz", OUT / "MSE-release-2.2.bundle", ROOT / "PR-DESCRIPTION.md"):
+    files = [OUT / "MSE-2.3-source.tar.gz", OUT / "MSE-release-2.3.bundle", ROOT / "PR-DESCRIPTION.md"]
+    files += sorted((ROOT / "Storage" / "screenshots").glob("*-bw.png"))
+    for path in files:
         if args.text or not path.exists():
             continue
         res = call("sendDocument", {"chat_id": chat(), "caption": path.name}, {"document": path})
