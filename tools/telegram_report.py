@@ -22,33 +22,24 @@ OUT = ROOT.parent / "deliverables"   # "out" is not kept in a snapshot; "deliver
 API = "https://api.telegram.org/bot%s/%s"
 LIMIT = 3900
 
-REPORT = """<b>MSE 2.1 — the round is done</b>
+REPORT = """<b>MSE 2.2 — five bugs, all fixed and proved by running</b>
 
-<b>1. Bot = the OBHOD panel</b>
-Screens are <code>Rich</code> objects sent through <code>send_rich</code>/<code>edit_rich</code>, so Telegram draws headings, tables and button rows instead of printing <code>&lt;tg-button&gt;</code> as text. 14 screens: panel, people/requests, model, quota, tailscale, services, log, config, update, help. 28 buttons, every one answered by a handler (checked by a test, not by eye).
+<b>1. Inline did not work at all</b> — <code>messages.setInlineBotResults:results: nested object missing _</code>. The results were built in the Bot API shape, while goygram sends inline over MTProto: now each one is <code>inputBotInlineResult</code> with <code>send_message: inputBotInlineMessageText</code>, exactly as OBHOD does it. <code>tests/test_inline_format.py</code> drives the real <code>Obj.answer()</code>, catches the exact payload and walks every nested object: 32 checks, all green.
 
-<b>2. No more block fills</b>
-<code>&lt;mark&gt;</code> chips are gone: a state is an icon plus coloured words ("#3f8f5f" for yes, "#b4553f" for no).
+<b>2. No check of inline mode at start</b> — <code>Bot.check_inline_mode()</code> asks <code>getMe</code> (the placeholder and a raw call as fallbacks), and on "off" it writes one line to the journal, sends you one plain sentence in the chat and puts it in <code>self_check()</code> and on the panel. Ran it against your bot: <code>check_inline_mode -> False</code>, you were told. Inline for @ArenaAI_agent_Bot is genuinely off in BotFather right now.
 
-<b>3. The emoji pack, borrowed whole, off by default</b>
-<code>Server/bot/icons.py</code> is the OBHOD set — <code>tgiosicons</code>, 401 ids and 61 named icons, each with a unicode fallback. <code>MSE_EMOJI=0</code> in <code>/etc/mse/mse.env</code>; switch it on with the <b>emoji pack</b> button on the config screen, or <code>MSE_EMOJI=1</code>. Off means plain emoji that every client can draw.
+<b>3. iOS was five scripts</b> — the file was one, but the runtime created four extra script tags for the interface, the auth, the bridge and the debug layer. Now all four live in the same file as scoped blocks: one paste, like 0.2. The build refuses to ship anything else — <code>oneFile {scripts: 1, headers: 1, requires: 0}</code> — and <code>tests/onefile.test.js</code> keeps it that way.
 
-<b>4. Inline input, the OBHOD way</b>
-A button opens the message field with a signed 10-character token already in it (HMAC of mode|field|context). You type the value, see it as a live result, tap it — the value is applied and the marker message is deleted. That is how you now enter a <b>new tailscale key</b> (it is fed straight into <code>mse-tunnel.sh up</code> and the tunnel screen shows the result), a bot token, owner id, api id/hash, a Moodle id to allow or revoke, the model and the quota. A stranger's inline query gets an empty answer.
+<b>4. First run asks for the keys</b> — bot token (three tries, format checked), owner telegram id, tailscale auth key; each validated, all written to <code>/etc/mse/mse.env</code> mode 600. A pipe gets the exact commands instead. The TUI hands the same values to the installer and says up front what is still missing.
 
-<b>5. Checks at start</b>
-<code>Bot.self_check()</code> looks at the admin token, the router (<code>/health</code>), owner id, bot token and tailscale key. Anything missing goes to the journal and shows as one quiet "check these first" line on the panel.
+<b>5. The tunnel comes up during the install</b> — the order is now <code>install -> tunnel up + funnel -> MSE_PUBLIC_URL -> restart mse-router -> check</code>, so the router never starts with an empty address. At the end it prints whether both units are active and whether the address is in place.
 
-<b>6. Installer</b>
-The bot token is required: the installer asks for it (three tries, format 1234567890:AAH... checked), and without a terminal it prints the exact command instead of "no bot token". <code>sudo: 'obhod': command not found</code> is gone (backticks in a heredoc). The bot unit is <code>python -m bot.main</code> with <code>HOME=/var/lib/mse</code>. After the services start the installer waits up to 15 s for <code>/health</code> and says whether the router answered.
+<b>Proved by running, not by reading:</b> extension 13/13, one-file 4/4, router 9/9, gateway 14/14, TUI 19/19, bot 14 screens / 28 callbacks, inline format 32/32, installer 24/24 (pty dialogue, pipe, order of calls), <code>audit --strict</code> 0 hits three times, and a clean clone of <code>release/2.2</code> with a fresh <code>npm install</code> — all green.
 
-<b>7. TUI</b>
-The <code>████</code> progress fills are gone: a step is a check mark, its name and a short dotted rail; work runs behind a spinner. The token field is marked as required and saving without one warns instead of going quiet.
+<b>Branch:</b> <code>release/2.2</code>, not pushed to main. Commits <code>22465e4</code>, <code>259d3ef</code>, <code>27980a7</code>.
+<b>Not verified live:</b> tapping an inline result needs an MTProto session (api_id/hash and a login) and a real tailnet key. Everything else went through the real code paths. Give me those and I take that step too.
 
-<b>Tests:</b> extension 13/13, router 9/9, gateway 14/14, TUI 19/19, bot 14 screens / 28 callbacks, <code>audit --strict</code> 0 hits.
-<b>Commit:</b> <code>7999e46</code>
-
-The screens are in this chat (the 14 messages above), <code>mse-screens.html</code> renders them as a page, and the source archive is attached.
+Attached: the source archive, the git bundle of the branch, and the PR description.
 """
 
 
@@ -122,7 +113,7 @@ def main() -> int:
     good = send_text(REPORT)
     print("report: " + ("sent" if good else "failed"))
 
-    for path in (OUT / "MSE-2.1-source.tar.gz", OUT / "mse-screens.html"):
+    for path in (OUT / "MSE-2.2-source.tar.gz", OUT / "MSE-release-2.2.bundle", ROOT / "PR-DESCRIPTION.md"):
         if args.text or not path.exists():
             continue
         res = call("sendDocument", {"chat_id": chat(), "caption": path.name}, {"document": path})
