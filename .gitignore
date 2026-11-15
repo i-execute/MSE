@@ -30,3 +30,11 @@ __pycache__/
 *.pyc
 evidence/
 package-lock.json
+
+# the working files of the round (goal, progress, attempts): kept out of commits
+GOAL.md
+PROGRESS.md
+NOTES.md
+ATTEMPTS.md
+IDEAS.md
+evidence/
