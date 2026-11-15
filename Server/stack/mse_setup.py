@@ -1606,6 +1606,36 @@ class Setup:
         panel("stack health", rows, self.limit, theme.frame, pill("read-only", theme.badge_info))
 
     # ------------------------------------------------------------------ install / update
+    def installer_env(self) -> dict[str, str]:
+        """Everything the installer needs, from the settings screen and the env file, never from thin air."""
+        out = dict(os.environ)
+        pairs = {
+            "MSE_BOT_TOKEN": self.credentials.get("BOT_TOKEN") or self.env.get("MSE_BOT_TOKEN", ""),
+            "MSE_OWNER_ID": self.credentials.get("OWNER_ID") or self.env.get("MSE_OWNER_ID", ""),
+            "MSE_TAILSCALE_KEY": self.credentials.get("TAILSCALE_KEY") or self.env.get("MSE_TAILSCALE_KEY", ""),
+            "MSE_API_ID": self.credentials.get("API_ID") or self.env.get("MSE_API_ID", ""),
+            "MSE_API_HASH": self.credentials.get("API_HASH") or self.env.get("MSE_API_HASH", ""),
+            "MSE_MODEL": self.settings.get("MODEL") or self.env.get("MSE_MODEL", ""),
+            "MSE_DAILY_QUOTA": self.settings.get("QUOTA") or self.env.get("MSE_DAILY_QUOTA", ""),
+            "MSE_UPSTREAM_PORT": self.settings.get("UPSTREAM_PORT") or self.env.get("MSE_UPSTREAM_PORT", ""),
+            "MSE_PREFIX": self.prefix,
+        }
+        for key, value in pairs.items():
+            if str(value or "").strip():
+                out[key] = str(value).strip()
+        return out
+
+    def missing_keys(self) -> list[str]:
+        """What the first run would still have to ask for: shown before the install, not discovered halfway."""
+        missing = []
+        if not str(self.credentials.get("BOT_TOKEN") or self.env.get("MSE_BOT_TOKEN", "")).strip():
+            missing.append("bot token (BotFather)")
+        if not str(self.credentials.get("OWNER_ID") or self.env.get("MSE_OWNER_ID", "")).strip():
+            missing.append("owner id (@userinfobot)")
+        if not str(self.credentials.get("TAILSCALE_KEY") or self.env.get("MSE_TAILSCALE_KEY", "")).strip():
+            missing.append("tailscale key (login.tailscale.com/admin/settings/keys)")
+        return missing
+
     def installer_argv(self) -> list[str]:
         script = Path(self.prefix) / "stack" / "install.sh"
         if not script.is_file():
@@ -1651,12 +1681,19 @@ class Setup:
         rows = []
         total = 4
         names = ["code into " + self.prefix, "settings and permissions", "venv and dependencies", "systemd and the tunnel"]
+        missing = self.missing_keys()
+        if missing:
+            rows.append(paint("the installer will ask for: " + ", ".join(missing), theme.warn))
+            rows.append("")
         with Spinner("installing") as spin:
-            proc = subprocess.run(argv, capture_output=True, text=True)
+            proc = subprocess.run(argv, capture_output=True, text=True, env=self.installer_env(), timeout=1800)
             ok = proc.returncode == 0
             spin.close(OK if ok else BAD, "install.sh")
         for idx, name in enumerate(names, 1):
             rows.append(self.progress(idx, total, name))
+        for line in (proc.stdout or "").splitlines():
+            if any(word in line for word in ("tunnel:", "router:", "keys:", "public address")):
+                rows.append(paint(clip(line.strip(), self.limit - 6), theme.muted))
         if not ok:
             rows.append("")
             for line in ((proc.stderr or proc.stdout or "").splitlines())[-6:]:

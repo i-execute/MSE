@@ -36,7 +36,7 @@ const DATA_DIR = process.env.MSE_DATA_DIR || path.join(here, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const PORT = Number(process.env.MSE_PORT || 8788);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
 const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT || 8799);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';

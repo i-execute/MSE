@@ -77,7 +77,7 @@ async def main() -> int:
 
     inline.configure("unit-test")
     token = inline.token_for("tailscale_key")
-    results = inline.results_for(token + " tskey-auth-example0123456789")
+    results = inline.results_for(token + " tskey-auth-example000000")
 
     # ---- the shape the MTProto path requires
     for index, item in enumerate(results):

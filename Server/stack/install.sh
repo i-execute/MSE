@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# MSE 2.0 — one-line server install (router + AI bridge + telegram bot + tailscale tunnel).
+# MSE 2.2 — one-line server install (router + AI bridge + telegram bot + tailscale tunnel).
 #
 #     curl -fsSL https://raw.githubusercontent.com/i-execute/MSE/main/Storage/get.sh | bash
 #
 # No arguments are required. The installer:
 #   . installs what is missing (node, python3, git, curl, openssl, tailscale) with the system package manager;
 #   . asks for sudo itself when it needs root — you do not have to remember it;
+#   . the first run asks for the three values it cannot invent — the bot token, the owner id and the tailscale
+#     auth key — and starts everything with them; a pipe gets the same three as exact commands instead;
 #   . takes the values from the environment when they are already there, so a fully unattended install is:
 #       MSE_BOT_TOKEN=... MSE_OWNER_ID=... MSE_API_ID=... MSE_API_HASH=... MSE_TAILSCALE_KEY=... \
 #         bash install.sh
@@ -30,6 +32,7 @@ PREFIX="${MSE_PREFIX:-/opt/mse}"
 ENV_DIR="${MSE_ENV_DIR:-/etc/mse}"
 ENV_FILE="$ENV_DIR/mse.env"
 STATE_DIR="${MSE_STATE_DIR:-/var/lib/mse}"
+UNIT_DIR="${MSE_UNIT_DIR:-/etc/systemd/system}"
 ASSUME_YES=0
 WITH_VENV=1
 WITH_BOT=1
@@ -71,56 +74,117 @@ ensure_root() {
   note "warning: run the same command with sudo for a complete install"
 }
 
-# ------------------------------------------------------------------ the bot token (required)
-# The bot is the only way to run this stack from a phone, so the installer never quietly skips it: with no token it
-# asks for one, and when the shell cannot ask (curl | bash, no terminal) it says exactly what to pass instead.
+# ------------------------------------------------------------------ first run: the values the stack cannot start without
+# Three things are required and the installer asks for all of them, in one session, before anything starts:
+#   1. the bot token   1234567890:AAH...  (@BotFather -> /newbot, or /token)
+#   2. the owner id    the numeric telegram id the bot answers
+#   3. the tailscale auth key   tskey-auth-...  (fed straight into mse-tunnel.sh up)
+# A pipe (curl | bash) cannot answer, so the same three are printed as exact commands to run later, and anything
+# already present in the environment or in /etc/mse/mse.env is taken as the answer.
 valid_token() {
   case "${1:-}" in
-    "" | *" "*) return 1 ;;
+    "" | *" "* | *$'\t'*) return 1 ;;
     *:*) [ "${#1}" -ge 20 ] ;;
     *) return 1 ;;
   esac
 }
 
-ask_bot_token() {
-  [ "$WITH_BOT" = "1" ] || return 0
-  [ "$UPDATE" = "1" ] && [ -n "$(env_get MSE_BOT_TOKEN)" ] && return 0
-  if [ "$DRY" = "1" ]; then say "  bot token: [dry] the installer asks for it (required)"; return 0; fi
-
-  token="${MSE_BOT_TOKEN:-$(env_get MSE_BOT_TOKEN)}"
-  if valid_token "$token"; then
-    MSE_BOT_TOKEN="$token"
-    say "  bot token: present"
-    return 0
-  fi
-
-  say ""
-  say "  ── the telegram bot needs a token, and the install asks for it now ──"
-  say "  open @BotFather, send /newbot (or /token for an existing bot) and copy the line"
-  say "  that looks like 1234567890:AAH...  The bot cannot run without it."
-  say ""
-  if [ "$ASSUME_YES" != "1" ] && [ -t 0 ] && [ -t 1 ]; then
-    i=0
-    while [ "$i" -lt 3 ]; do
-      printf '  bot token: '
-      IFS= read -r answer || answer=""
-      if valid_token "$answer"; then
-        MSE_BOT_TOKEN="$answer"
-        say "  bot token: accepted"
-        return 0
-      fi
-      [ -n "$answer" ] && note "that is not a bot token: the form is 1234567890:AAH..."
-      i=$((i + 1))
-    done
-    note "still no valid token: the rest installs, the bot stays off (sudo mse -> Keys)"
-    return 0
-  fi
-  note "the bot token is required, and this shell cannot ask for it (no terminal attached)."
-  note "run it again with the token in front:  MSE_BOT_TOKEN=1234567890:AAH... bash install.sh"
-  note "everything except the bot installs now; add the token later with: sudo mse"
-  return 0
+valid_owner() {
+  case "${1:-}" in
+    "" | *[!0-9-]*) return 1 ;;
+    -*) [ "${#1}" -ge 2 ] ;;
+    *) [ "${#1}" -ge 5 ] ;;
+  esac
 }
 
+valid_tskey() {
+  case "${1:-}" in
+    "" | *" "* | *$'\t'*) return 1 ;;
+    tskey-*) [ "${#1}" -ge 20 ] ;;
+    *) return 1 ;;
+  esac
+}
+
+# ask_one KEY "prompt" "hint" VALIDATOR CURRENT -> prints the accepted value on stdout (empty when nothing was given)
+ask_one() {
+  key="$1"; prompt="$2"; hint="$3"; validator="$4"; current="$5"
+  if [ -n "$current" ] && "$validator" "$current"; then
+    printf '%s\n' "$current"
+    return 0
+  fi
+  [ -n "$current" ] && note "  $key in the settings does not look right: it will be asked again"
+  i=0
+  while [ "$i" -lt 3 ]; do
+    printf '  %s: ' "$prompt" >&2
+    IFS= read -r answer || answer=""
+    if "$validator" "$answer"; then
+      printf '%s\n' "$answer"
+      return 0
+    fi
+    [ -n "$answer" ] && note "  that does not look like $hint"
+    i=$((i + 1))
+  done
+  note "  three tries, nothing accepted for $key"
+  printf '\n'
+  return 1
+}
+
+first_run_dialogue() {
+  # a value already given through the environment wins: that is what makes the install unattended
+  MSE_BOT_TOKEN="${MSE_BOT_TOKEN:-$(env_get MSE_BOT_TOKEN)}"
+  MSE_OWNER_ID="${MSE_OWNER_ID:-$(env_get MSE_OWNER_ID)}"
+  MSE_TAILSCALE_KEY="${MSE_TAILSCALE_KEY:-$(env_get MSE_TAILSCALE_KEY)}"
+
+  [ "$WITH_TUNNEL" = "1" ] || MSE_TAILSCALE_KEY="${MSE_TAILSCALE_KEY:-skip}"
+  [ "$WITH_BOT" = "1" ] || MSE_BOT_TOKEN="${MSE_BOT_TOKEN:-skip}"
+
+  if valid_token "$MSE_BOT_TOKEN" && valid_owner "$MSE_OWNER_ID" && { [ "$WITH_TUNNEL" != "1" ] || valid_tskey "$MSE_TAILSCALE_KEY"; }; then
+    say "  keys:      bot token, owner id and tailscale key are already in place"
+    return 0
+  fi
+
+  say ""
+  say "  ── first run: three values, and the stack comes up complete ──────────────"
+  say "  1. bot token        @BotFather -> /newbot (or /token), the line 1234567890:AAH..."
+  say "  2. owner id         your numeric telegram id; the bot answers only this account"
+  say "  3. tailscale key    the keys page of your tailnet, tskey-auth-... (the tunnel comes up at once)"
+  say ""
+
+  if [ "$ASSUME_YES" = "1" ] || ! { [ -t 0 ] && [ -t 1 ]; }; then
+    # nobody to ask: say exactly what to run, and install everything that does not need these values
+    if ! valid_token "$MSE_BOT_TOKEN"; then
+      note "the bot token is required, and this shell cannot ask for it."
+      note "  run:  MSE_BOT_TOKEN=1234567890:AAH... MSE_OWNER_ID=<your id> MSE_TAILSCALE_KEY=tskey-auth-... bash install.sh --update --yes"
+      note "  or:   sudo mse   ->  Model, Quota & Keys   (bot token, owner id, tailscale key)"
+    fi
+    if ! valid_owner "$MSE_OWNER_ID"; then
+      note "the owner id is required (the numeric telegram id the bot answers)."
+      note "  find it: message @userinfobot once, it answers with your id"
+    fi
+    if [ "$WITH_TUNNEL" = "1" ] && ! valid_tskey "$MSE_TAILSCALE_KEY"; then
+      note "the tailscale auth key is required for the tunnel (https://login.tailscale.com/admin/settings/keys)."
+      note "  without it the router installs and answers on 127.0.0.1 only"
+    fi
+    FIRST_RUN_UNANSWERED=1
+    return 0
+  fi
+
+  if ! valid_token "$MSE_BOT_TOKEN"; then
+    MSE_BOT_TOKEN="$(ask_one bot_token "bot token" "a bot token (1234567890:AAH...)" valid_token "$MSE_BOT_TOKEN")" || true
+  fi
+  if ! valid_owner "$MSE_OWNER_ID"; then
+    MSE_OWNER_ID="$(ask_one owner_id "owner telegram id" "a telegram id (a number, e.g. 100000001)" valid_owner "$MSE_OWNER_ID")" || true
+  fi
+  if [ "$WITH_TUNNEL" = "1" ] && ! valid_tskey "$MSE_TAILSCALE_KEY"; then
+    note "  the tailscale auth key: press Enter to skip the tunnel for now (it can be added later in the panel)"
+    MSE_TAILSCALE_KEY="$(ask_one tailscale_key "tailscale auth key" "a tailscale auth key (tskey-auth-...)" valid_tskey "$MSE_TAILSCALE_KEY")" || true
+  fi
+  say ""
+  say "  keys:      bot token $([ -n "$MSE_BOT_TOKEN" ] && echo ok || echo missing)" \
+      "· owner id $([ -n "$MSE_OWNER_ID" ] && echo ok || echo missing)" \
+      "· tailscale key $([ -n "$MSE_TAILSCALE_KEY" ] && echo ok || echo missing)"
+  return 0
+}
 # ------------------------------------------------------------------ packages
 PKG=""
 pkg_manager() {
@@ -317,7 +381,7 @@ setup_bot_env() {
 write_units() {
   have systemctl || { note "no systemctl: the router is not registered as a service"; return 0; }
   if [ "$DRY" != "0" ]; then say "  [dry] would write mse-router.service and mse-bot.service"; return 0; fi
-  cat > /etc/systemd/system/mse-router.service <<UNIT
+  cat > $UNIT_DIR/mse-router.service <<UNIT
 [Unit]
 Description=MSE router (tailscale funnel -> local AI backend)
 After=network-online.target tailscaled.service
@@ -342,7 +406,7 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 UNIT
-  cat > /etc/systemd/system/mse-bot.service <<UNIT
+  cat > $UNIT_DIR/mse-bot.service <<UNIT
 [Unit]
 Description=MSE telegram control panel (goygram)
 After=network-online.target mse-router.service
@@ -412,7 +476,7 @@ wait_for_router() {
 
 setup_tunnel() {
   [ "$WITH_TUNNEL" = "1" ] || return 0
-  if [ "$DRY" = "1" ]; then say "  [dry] tailscale install / up / funnel"; return 0; fi
+  if [ "$DRY" = "1" ]; then say "  [dry] tailscale install / up / funnel / wait for the url"; return 0; fi
   have mse-tunnel.sh || { note "mse-tunnel.sh is not in PATH: skipping the tunnel"; return 0; }
 
   if ! have tailscale; then
@@ -442,34 +506,87 @@ setup_tunnel() {
   fi
 
   key="$(env_get MSE_TAILSCALE_KEY)"
-  if [ -n "$key" ]; then
-    say "  tunnel:    tailscale up (key from the settings)"
-    MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh up || note "tailscale up failed: see the panel (Tunnel)"
-  else
-    note "no tailscale key: the address appears after Tunnel -> tailscale up in the panel (or set MSE_TAILSCALE_KEY)"
-    note "the node can also be logged in on the machine once: sudo tailscale up"
+  if [ -z "$key" ]; then
+    note "no tailscale key: the tunnel stays down, the router answers on 127.0.0.1 only"
+    note "  add it later:  sudo mse  ->  Tunnel  ->  tailscale up   (or MSE_TAILSCALE_KEY=tskey-auth-... then --update)"
     return 0
   fi
 
-  wait_for_router
+  say "  tunnel:    tailscale up"
+  MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh up \
+    || note "tailscale up failed: the panel shows why (Tunnel -> Status)"
+
   say "  tunnel:    funnel -> 127.0.0.1:${MSE_PORT:-8788}"
-  if url="$(MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh funnel "${MSE_PORT:-8788}" 2>/dev/null | tail -1)"; then
-    case "$url" in
-      https://*)
-        env_set MSE_PUBLIC_URL "$url"
-        have systemctl && run systemctl restart mse-router.service >/dev/null 2>&1 || true
-        say "  tunnel:    $url"
+  url=""
+  i=0
+  while [ "$i" -lt 3 ]; do
+    url="$(MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh funnel "${MSE_PORT:-8788}" 2>/dev/null | tail -1 || true)"
+    case "$url" in https://*) break ;; esac
+    i=$((i + 1))
+    sleep 2
+  done
+  case "$url" in
+    https://*)
+      env_set MSE_PUBLIC_URL "$url"
+      say "  tunnel:    $url"
+      PUBLIC_URL_SET=1
+      ;;
+    *)
+      note "funnel did not report an address: allow Funnel for this node in the tailnet ACL"
+      note "  the panel does the same in one step: sudo mse -> Tunnel -> funnel"
+      ;;
+  esac
+}
+
+# after the address exists the router has to read it again: it starts before the tunnel could possibly be up
+restart_router_after_tunnel() {
+  [ "${PUBLIC_URL_SET:-0}" = "1" ] || return 0
+  have systemctl || return 0
+  say "  router:    restarting to pick up the public address"
+  run systemctl restart mse-router.service || note "mse-router did not restart: journalctl -u mse-router -n 40"
+  if have curl; then
+    ok=0
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      if curl -fsS "http://127.0.0.1:${MSE_PORT:-8788}/health" >/dev/null 2>&1; then ok=1; break; fi
+      sleep 1
+    done
+    [ "$ok" = "1" ] && say "  router:    answers, with the address in /health" \
+                    || note "the router does not answer after the restart: journalctl -u mse-router -n 40"
+  fi
+}
+
+# the last thing the installer does: check that what it promised is actually running
+final_report() {
+  [ "$DRY" = "1" ] && return 0
+  have systemctl || return 0
+  say ""
+  for unit in mse-router mse-bot; do
+    [ "$unit" = "mse-bot" ] && [ "$WITH_BOT" != "1" ] && continue
+    state="$(systemctl is-active "$unit" 2>/dev/null || echo unknown)"
+    if [ "$state" = "active" ]; then
+      say "  $unit: active"
+    elif [ "$unit" = "mse-bot" ] && [ -z "$(env_get MSE_BOT_TOKEN)" ]; then
+      say "  $unit: off (no token: add it with sudo mse -> Model, Quota & Keys)"
+    else
+      note "$unit: $state — journalctl -u $unit -n 40 --no-pager"
+    fi
+  done
+  if [ "$WITH_TUNNEL" = "1" ] && have mse-tunnel.sh; then
+    status="$(MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh status --json 2>/dev/null || true)"
+    case "$status" in
+      *'"url": null'* | *'"url":null'* | "")
+        note "tunnel: no address yet (panel -> Tunnel -> up / funnel)"
         ;;
-      *) note "funnel did not report an address: allow Funnel for this node in the tailnet ACL (panel -> Tunnel)" ;;
+      *)
+        say "  tunnel: address in place"
+        ;;
     esac
-  else
-    note "funnel did not turn on: allow Funnel for this node in the tailnet ACL (panel -> Tunnel)"
   fi
 }
 
 # ------------------------------------------------------------------ main
 ensure_root "$@"
-say "MSE 2.0 · installer"
+say "MSE 2.2 · installer"
 say "  prefix:    $PREFIX"
 say "  settings:  $ENV_FILE"
 say "  state:     $STATE_DIR"
@@ -478,7 +595,7 @@ if [ "$UPDATE" = "1" ]; then say "  mode:      update (settings and state are ke
 install_deps
 fetch_source
 
-run mkdir -p "$PREFIX" "$ENV_DIR" "$STATE_DIR" "$PREFIX/logs"
+run mkdir -p "$PREFIX" "$ENV_DIR" "$STATE_DIR" "$PREFIX/logs" "$UNIT_DIR"
 if [ "$UPDATE" = "1" ] && [ "$DRY" = "0" ]; then
   # an update replaces the code only: settings, devices and the allow list stay where they are
   find "$PREFIX" -mindepth 1 -maxdepth 1 ! -name venv ! -name logs -exec rm -rf {} + 2>/dev/null || true
@@ -488,7 +605,7 @@ run chmod 755 "$PREFIX/stack/mse-tunnel.sh" "$PREFIX/stack/install.sh"
 run ln -sf "$PREFIX/stack/mse-tunnel.sh" /usr/local/bin/mse-tunnel.sh
 say "  code:      installed into $PREFIX"
 
-ask_bot_token
+first_run_dialogue
 write_env
 merge_env_from_environment
 setup_bot_env
@@ -510,7 +627,10 @@ PANEL
 fi
 say "  panel:     sudo mse   (update: sudo mse update)"
 
+# install -> tunnel up + funnel -> router restart (the router starts before the address can exist)
 setup_tunnel
+restart_router_after_tunnel
+final_report
 
 if [ -n "${TMP:-}" ]; then rm -rf "$TMP"; fi
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MSE 2.0 — one-line install of the server (router + AI bridge + telegram bot + tailscale tunnel).
+# MSE 2.2 — one-line install of the server (router + AI bridge + telegram bot + tailscale tunnel).
 #
 #     curl -fsSL https://raw.githubusercontent.com/i-execute/MSE/main/Storage/get.sh | bash
 #
@@ -7,9 +7,13 @@
 # hands the work over to it, so the install lives in exactly one place.
 #
 # Nothing but a shell is required. install.sh installs the missing packages itself (node, python3, git, curl,
-# tailscale), asks for sudo when it needs root, and brings the tailscale tunnel up as soon as a key is present.
+# tailscale), asks for sudo when it needs root, and on the first run asks for the three values it cannot invent:
+# the bot token, the owner id and the tailscale auth key. With them in hand it starts the router, brings the
+# tailscale tunnel up, turns the funnel on, restarts the router so it picks the public address up, and then
+# checks that both units are active and the address is in place — one session, a working stack at the end.
 #
-# Values can be passed straight through, and then the whole install is unattended:
+# A pipe cannot answer questions, so in that case the same three values are printed as exact commands to run
+# later. Passing them straight through makes the whole install unattended:
 #
 #     MSE_BOT_TOKEN=123:ABC MSE_OWNER_ID=12345 MSE_TAILSCALE_KEY=tskey-auth-... \
 #       bash -c "$(curl -fsSL .../Storage/get.sh)"
@@ -25,6 +29,9 @@
 #
 # Flags are passed to install.sh: --yes, --update, --dry-run, --no-bot, --no-tunnel, --no-venv.
 set -euo pipefail
+
+# A pipe has no terminal: the installer must know that before it tries to ask anything.
+: "${MSE_UNATTENDED:=}"
 
 REPO="${MSE_REPO:-i-execute/MSE}"
 REF="${MSE_REF:-main}"

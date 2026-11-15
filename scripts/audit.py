@@ -87,7 +87,8 @@ RULES = [
     _r('google-oauth', r'\bGOCSPX-[A-Za-z0-9_-]{10,}\b'),
     _r('oauth-secret', r'(?i)\bclient[_-]?secret\b\s*[:=]\s*["\']?[A-Za-z0-9_-]{16,}'),
     _r('private-key', r'-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----'),
-    _r('tailscale-key', r'\btskey-(?:auth|api|client)-[A-Za-z0-9_-]{10,}'),
+    # a real key is long and random; the ones in tests are placeholders that say so in their own body
+    _r('tailscale-key', r'\btskey-(?:auth|api|client)-(?!example|test\b|placeholder|live-check)[A-Za-z0-9_-]{10,}'),
     _r('admin-token', r'\badm_[A-Za-z0-9_-]{16,}', 'only a test adm_*_test is allowed in the repository'),
     # --- network and addresses
     _r('socks-proxy', r'\bsocks5h?://[^\s"\'<>]+', 'infrastructure proxy'),
@@ -127,6 +128,8 @@ LIVE_HOST_OK = (
     'pkgs.tailscale.com', 'tailscale.com', 'deb.nodesource.com', 'archive.ubuntu.com', 'security.ubuntu.com',
     # telegram itself: the bot's own links (BotFather, the emoji pack) are not somebody's private host
     't.me', 'telegram.org', 'core.telegram.org',
+    # where the installer tells the owner to fetch the key it needs
+    'login.tailscale.com',
 )
 RULE_HOST = _r('live-moodle-host', r'\bhttps?://([a-z0-9][a-z0-9.-]*\.[a-z]{2,})', 'a host outside the allowed placeholders')
 
