@@ -71,6 +71,56 @@ ensure_root() {
   note "warning: run the same command with sudo for a complete install"
 }
 
+# ------------------------------------------------------------------ the bot token (required)
+# The bot is the only way to run this stack from a phone, so the installer never quietly skips it: with no token it
+# asks for one, and when the shell cannot ask (curl | bash, no terminal) it says exactly what to pass instead.
+valid_token() {
+  case "${1:-}" in
+    "" | *" "*) return 1 ;;
+    *:*) [ "${#1}" -ge 20 ] ;;
+    *) return 1 ;;
+  esac
+}
+
+ask_bot_token() {
+  [ "$WITH_BOT" = "1" ] || return 0
+  [ "$UPDATE" = "1" ] && [ -n "$(env_get MSE_BOT_TOKEN)" ] && return 0
+  if [ "$DRY" = "1" ]; then say "  bot token: [dry] the installer asks for it (required)"; return 0; fi
+
+  token="${MSE_BOT_TOKEN:-$(env_get MSE_BOT_TOKEN)}"
+  if valid_token "$token"; then
+    MSE_BOT_TOKEN="$token"
+    say "  bot token: present"
+    return 0
+  fi
+
+  say ""
+  say "  ── the telegram bot needs a token, and the install asks for it now ──"
+  say "  open @BotFather, send /newbot (or /token for an existing bot) and copy the line"
+  say "  that looks like 1234567890:AAH...  The bot cannot run without it."
+  say ""
+  if [ "$ASSUME_YES" != "1" ] && [ -t 0 ] && [ -t 1 ]; then
+    i=0
+    while [ "$i" -lt 3 ]; do
+      printf '  bot token: '
+      IFS= read -r answer || answer=""
+      if valid_token "$answer"; then
+        MSE_BOT_TOKEN="$answer"
+        say "  bot token: accepted"
+        return 0
+      fi
+      [ -n "$answer" ] && note "that is not a bot token: the form is 1234567890:AAH..."
+      i=$((i + 1))
+    done
+    note "still no valid token: the rest installs, the bot stays off (sudo mse -> Keys)"
+    return 0
+  fi
+  note "the bot token is required, and this shell cannot ask for it (no terminal attached)."
+  note "run it again with the token in front:  MSE_BOT_TOKEN=1234567890:AAH... bash install.sh"
+  note "everything except the bot installs now; add the token later with: sudo mse"
+  return 0
+}
+
 # ------------------------------------------------------------------ packages
 PKG=""
 pkg_manager() {
@@ -226,6 +276,8 @@ MSE_OWNER_ID=${MSE_OWNER_ID:-}
 MSE_API_ID=${MSE_API_ID:-}
 MSE_API_HASH=${MSE_API_HASH:-}
 MSE_OWNER_USERNAME=${MSE_OWNER_USERNAME:-}
+# the custom emoji pack (tgiosicons, as in the obhod panel): off by default, on from the bot's config screen
+MSE_EMOJI=${MSE_EMOJI:-0}
 MSE_ADMIN_URL=http://127.0.0.1:${MSE_PORT:-8788}
 ENV
   chmod 600 "$ENV_FILE"
@@ -236,7 +288,7 @@ ENV
 merge_env_from_environment() {
   if [ "$DRY" = "1" ]; then return 0; fi
   [ -f "$ENV_FILE" ] || return 0
-  for key in MSE_BOT_TOKEN MSE_OWNER_ID MSE_OWNER_USERNAME MSE_API_ID MSE_API_HASH MSE_TAILSCALE_KEY MSE_MODEL MSE_DAILY_QUOTA MSE_UPSTREAM_PORT MSE_PORT; do
+  for key in MSE_BOT_TOKEN MSE_OWNER_ID MSE_OWNER_USERNAME MSE_API_ID MSE_API_HASH MSE_TAILSCALE_KEY MSE_MODEL MSE_DAILY_QUOTA MSE_UPSTREAM_PORT MSE_PORT MSE_EMOJI; do
     val="${!key:-}"
     [ -n "$val" ] || continue
     [ "$(env_get "$key")" = "$val" ] && continue
@@ -274,7 +326,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=$ENV_FILE
-Environment=HOME=/root
+Environment=HOME=$STATE_DIR
 WorkingDirectory=$PREFIX
 ExecStart=$NODE_BIN $PREFIX/mse-router.js
 Restart=always
@@ -299,11 +351,11 @@ Wants=network-online.target mse-router.service
 [Service]
 Type=simple
 EnvironmentFile=$ENV_FILE
-Environment=HOME=/root
+Environment=HOME=$STATE_DIR
 Environment=MSE_ENV_FILE=$ENV_FILE
 Environment=MSE_TUNNEL_SCRIPT=/usr/local/bin/mse-tunnel.sh
 WorkingDirectory=$PREFIX
-ExecStart=$PREFIX/venv/bin/python -m bot
+ExecStart=$PREFIX/venv/bin/python -m bot.main
 Restart=always
 RestartSec=5
 UMask=0077
@@ -323,12 +375,29 @@ start_services() {
   run systemctl daemon-reload
   run systemctl enable mse-router.service >/dev/null 2>&1 || true
   run systemctl restart mse-router.service || note "mse-router did not start: journalctl -u mse-router -n 40"
+  # the router is the health probe the panel and the bot read: give it a moment, then say what really happened
+  if have curl; then
+    ready=0
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+      if curl -fsS "http://127.0.0.1:${MSE_PORT:-8788}/health" >/dev/null 2>&1; then ready=1; break; fi
+      sleep 1
+    done
+    if [ "$ready" = "1" ]; then
+      say "  router:    http://127.0.0.1:${MSE_PORT:-8788}/health answers"
+    else
+      note "the router did not answer on 127.0.0.1:${MSE_PORT:-8788} after 15 s"
+      note "look at it with:  journalctl -u mse-router -n 40 --no-pager"
+      note "restart it with:  sudo mse  ->  Service Control  ->  Restart mse-router"
+    fi
+  fi
   if [ "$WITH_BOT" = "1" ] && [ -n "$(env_get MSE_BOT_TOKEN)" ]; then
     run systemctl enable mse-bot.service >/dev/null 2>&1 || true
     run systemctl restart mse-bot.service || note "mse-bot did not start: journalctl -u mse-bot -n 40"
     say "  bot:       mse-bot.service is running"
   elif [ "$WITH_BOT" = "1" ]; then
-    note "bot is not started yet: no bot token. Add it in the panel (Model, Quota & Keys) or set MSE_BOT_TOKEN"
+    note "the bot was NOT started: it has no token, and the token is required."
+    note "one step to fix it:  MSE_BOT_TOKEN=1234567890:AAH... bash $PREFIX/stack/install.sh --update --yes"
+    note "or from the panel:   sudo mse  ->  Keys  ->  bot token"
   fi
 }
 
@@ -419,6 +488,7 @@ run chmod 755 "$PREFIX/stack/mse-tunnel.sh" "$PREFIX/stack/install.sh"
 run ln -sf "$PREFIX/stack/mse-tunnel.sh" /usr/local/bin/mse-tunnel.sh
 say "  code:      installed into $PREFIX"
 
+ask_bot_token
 write_env
 merge_env_from_environment
 setup_bot_env
@@ -430,7 +500,7 @@ if [ "$DRY" = "0" ]; then
   rm -f "$PREFIX/stack/tui.py" 2>/dev/null || true
   cat > /usr/local/bin/mse <<PANEL
 #!/usr/bin/env bash
-# MSE panel — the same screen engine as `sudo obhod`
+# MSE panel — the control screen, run it as: sudo mse
 case "\${1:-}" in
   update|upgrade) shift; exec bash $PREFIX/stack/install.sh --update "\$@" ;;
 esac

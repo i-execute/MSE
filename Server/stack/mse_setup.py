@@ -102,8 +102,8 @@ class g:
     tri = glyph("25b2")
     arrow = glyph("276f")
     bullet = glyph("2022")
-    bar_on = glyph("2588")
-    bar_off = glyph("2591")
+    bar_on = glyph("2500")   # a thin rule, never a block fill: the panel does not shade areas
+    bar_off = glyph("2504")
     spark = glyph("2726")
     ring = glyph("25cb")
     fill = glyph("25cf")
@@ -1554,12 +1554,13 @@ class Setup:
         return paint(g.h, theme.subtle).join(dots) + "  " + paint("step %d/%d" % (current, total), theme.muted) + paint(" " + g.half + " " + label, theme.accent)
 
     def progress(self, done: int, total: int, label: str) -> str:
+        """One step of a finished run: a mark, the label, a short dotted rail. No block fills."""
         total = max(1, total)
         done = max(0, min(done, total))
-        cells = 22
-        filled = int(round(cells * done / total))
-        bar = paint(g.bar_on * filled, theme.accent) + paint(g.bar_off * (cells - filled), theme.subtle)
-        return "  " + bar + " " + paint("%3d%%" % int(100 * done / total), theme.text) + " " + paint(label, theme.muted)
+        done_mark = paint(g.check, theme.good) if done < total else paint(g.check, theme.good, theme.bold)
+        rail = paint(g.h * 3, theme.subtle)
+        return ("  " + done_mark + " " + paint(label, theme.text) + "  " + rail + "  "
+                + paint("%3d%%" % int(100 * done / total), theme.muted))
 
     # ------------------------------------------------------------------ step 1: the menu
     def ask_action(self) -> bool:
@@ -1765,7 +1766,7 @@ class Setup:
             Field("MODEL", "model", False, self.settings["MODEL"], "The model name on the local backend (OpenAI-compatible)"),
             Field("QUOTA", "quota", False, self.settings["QUOTA"], "Requests per day per device"),
             Field("UPSTREAM_PORT", "backend port", False, self.settings["UPSTREAM_PORT"], "127.0.0.1:<port> — where the AI backend lives"),
-            Field("BOT_TOKEN", "bot token", True, self.contrib_or("BOT_TOKEN"), "From @BotFather; empty means the bot is off"),
+            Field("BOT_TOKEN", "bot token", True, self.contrib_or("BOT_TOKEN"), "Required. @BotFather -> /newbot (or /token); without it the bot stays off"),
             Field("OWNER_ID", "owner id", False, self.contrib_or("OWNER_ID"), "Your numeric Telegram id (the person the bot answers)"),
             Field("API_ID", "api id", False, self.contrib_or("API_ID"), "my.telegram.org → App api_id (optional, for the MTProto transport)"),
             Field("API_HASH", "api hash", True, self.contrib_or("API_HASH"), "my.telegram.org → App api_hash (optional, masked)"),
@@ -1811,6 +1812,12 @@ class Setup:
         rows = [self.pill_for("up" if ok else "warn") + " " + paint(text, theme.text if ok else theme.warn),
                 fact("file", str(self.stack.env_file)),
                 fact("model", self.settings["MODEL"]), fact("quota", self.settings["QUOTA"] + "/day")]
+        if not self.credentials["BOT_TOKEN"]:
+            rows.append("")
+            rows.append(paint("the bot token is required: without it mse-bot does not start.", theme.warn))
+            rows.append(paint("open @BotFather, send /newbot, paste the 1234567890:AAH... line into this field.", theme.muted))
+            panel("settings saved", rows, self.limit, theme.warn)
+            return True
         panel("settings saved", rows, self.limit, theme.good if ok else theme.warn)
         return True
 
