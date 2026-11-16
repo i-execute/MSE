@@ -68,7 +68,7 @@ FIELDS: dict[str, Field] = {
                       "0123456789abcdef", True),
     "tailscale_key": Field("tailscale_key", "tailscale key", "tskey-auth-... from the keys page of the tailnet",
                            "tskey-auth-xxxx", True),
-    "model": Field("model", "model", "the model name the local AI backend serves", "gemini-3-flash"),
+    "model": Field("model", "model", "the model the local AI backend serves", ""),
     "quota": Field("quota", "quota", "requests per day per device", "200", False, "digits"),
     "allow_id": Field("allow_id", "Moodle id", "the id of the person to let in", "2040", False, "digits"),
     "revoke_id": Field("revoke_id", "Moodle id or device", "whose access to take away", "2040"),
@@ -77,8 +77,14 @@ FIELDS: dict[str, Field] = {
 
 OPTIONS: dict[str, tuple[str, ...]] = {
     "quota": ("50", "100", "200", "500", "1000"),
-    "model": ("gemini-3-flash", "gpt-4o-mini", "deepseek-v3"),
+    # the model list is never written down here: the bot fills it from the backend before it offers the inline query
+    "model": (),
 }
+
+
+def set_options(ident: str, values: tuple[str, ...] | list[str]) -> None:
+    """Fill a live list (the models of the backend, for instance) right before the query is offered."""
+    OPTIONS[ident] = tuple(str(v) for v in values if str(v).strip())
 
 
 # ------------------------------------------------------------------ registry
@@ -140,6 +146,15 @@ def normalize_ctx(ctx: object) -> str:
 def prefill(ident: str, ctx: object = "-") -> str:
     """What goes into the message field: the token and a space, ready for the value."""
     return token_for(ident, ctx, MODE_INPUT) + " "
+
+
+def ident_of(query: str) -> str:
+    """Which field an inline query is about, or "" — the bot fills live lists before it answers."""
+    token, _value = parse_query(query)
+    if not token:
+        return ""
+    ident, _ctx, _mode = resolve(token)
+    return ident or ""
 
 
 def list_query(ident: str, ctx: object = "-") -> str:

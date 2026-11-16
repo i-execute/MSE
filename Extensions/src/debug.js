@@ -645,7 +645,7 @@
         if (simple) { var r2 = el('div', 'row'); r2.appendChild(el('span', 'k', 'id')); r2.appendChild(el('span', 'v', simple.value)); c.appendChild(r2); }
         if (best) { var r3 = el('div', 'row'); r3.appendChild(el('span', 'k', 'most often')); r3.appendChild(el('span', 'v', best.value + '  × ' + best.count)); c.appendChild(r3); }
       }
-      c.appendChild(el('div', 'note', 'Sources: the page (M.cfg, profile links, avatar) and the server responses captured by the sniffer. The full list is on the “Who am I” tab.'));
+      c.appendChild(el('div', 'note', 'Sources: the page · M.cfg, profile links, avatar. Server responses: the sniffer. Full list: “Who am I”.'));
       return c;
     }
 
@@ -661,7 +661,7 @@
       r2.appendChild(el('span', 'k', 'pages with the key'));
       r2.appendChild(el('span', 'v', String(K.pages || (K.value ? 1 : 0))));
       c.appendChild(r2);
-      c.appendChild(el('div', 'note', 'Enter the key once on the “Key” tab and reload the page: it must stay. This checks that the extension remembers it.'));
+      c.appendChild(el('div', 'note', 'Key entered on “Key”, page reloaded: it must survive. This checks that the script remembers it.'));
       return c;
     }
 
@@ -677,7 +677,7 @@
       r2.appendChild(el('span', 'k', 'with a JSON response'));
       r2.appendChild(el('span', 'v', String(withJson)));
       c.appendChild(r2);
-      c.appendChild(el('div', 'note', 'Requests made before the script was installed show up by timing only (no status codes) — that is expected.'));
+      c.appendChild(el('div', 'note', 'Requests from before the script was installed carry timing only, no status.'));
       return c;
     }
 
@@ -790,7 +790,7 @@
 
       var c = el('div', 'card');
       c.appendChild(el('h2', null, 'Secret key'));
-      c.appendChild(el('div', 'note', 'Enter the key once. It is kept in the script storage and in the site localStorage, survives reloads and navigation. The check uses SHA-256: the key itself is never stored in the script — the server will work the same way.'));
+      c.appendChild(el('div', 'note', 'The key lives in script storage and site localStorage, survives reloads and navigation. The check is SHA-256: the key itself never lands in the script.'));
 
       var input = doc.createElement('input');
       input.type = 'text';

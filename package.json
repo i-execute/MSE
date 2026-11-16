@@ -1,6 +1,6 @@
 {
   "name": "mse",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "description": "MSE — Moodle answer panel (userscript) and the gateway/router stack behind it",
   "license": "UNLICENSED",

@@ -22,8 +22,8 @@ from bot import inline, screens, ui  # noqa: E402
 from bot.ui import ScreenRich  # noqa: E402
 
 SNAP = {
-    "health": {"version": "2.0.0", "model": "gemini-3-flash", "quota": 200, "publicUrl": "https://mse-gateway.example-tailnet.ts.net",
-               "models": ["gemini-3-flash", "gpt-4o-mini"]},
+    "health": {"version": "2.0.0", "model": "demo-model-a", "quota": 200, "publicUrl": "https://mse-gateway.example-tailnet.ts.net",
+               "models": ["demo-model-a", "demo-model-b"]},
     "devices": [
         {"deviceId": "d1", "moodleId": "2040", "name": "Гуги", "status": "approved", "site": "moodle.example", "requests": 37, "quota": 200},
         {"deviceId": "d2", "moodleId": "2041", "name": "второй ноутбук", "status": "pending", "site": "moodle.example", "requests": 2, "quota": 200},
@@ -38,7 +38,7 @@ SNAP = {
 TUNNEL = {"backend": "tailscale", "state": "up", "mode": "funnel", "address": "https://mse-gateway.example-tailnet.ts.net",
           "node": "203.0.113.1", "expires": "2027-05-01"}
 
-CFG = {"model": "gemini-3-flash", "quota": "200", "upstream_port": "8799", "public_url": "https://mse-gateway.example-tailnet.ts.net",
+CFG = {"model": "demo-model-a", "quota": "200", "upstream_port": "8799", "public_url": "https://mse-gateway.example-tailnet.ts.net",
        "bot_token": "1234567890:AAH-placeholder-token", "owner_id": "100000001",
        "api_id": "10000001", "api_hash": "0123456789abcdef0123456789abcdef", "tailscale_key": "tskey-auth-example"}
 
@@ -49,7 +49,7 @@ def every_screen() -> list[tuple[str, object]]:
         ("the panel, gateway down", screens.home({"error": "the gateway does not answer: connection refused"}, notice="")),
         ("people", screens.people(SNAP, notice="id 2040 is allowed")),
         ("requests", screens.people(SNAP, only="pending")),
-        ("model", screens.model_screen(SNAP, notice="chosen gemini-3-flash")),
+        ("model", screens.model_screen(SNAP, notice="chosen demo-model-a")),
         ("quota", screens.quota_screen(SNAP, notice="now 200")),
         ("tailscale", screens.tunnel_screen(TUNNEL, notice="funnel is up")),
         ("tailscale, down", screens.tunnel_screen({"backend": "tailscale", "error": "tailscale is not running"})),

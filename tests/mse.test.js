@@ -695,20 +695,22 @@ test('M13 the two tiers: a base key never reaches the gateway, an allowed key ge
     });
     assert.equal(waited.ai.state, 'ok', 'the model answered the empty question: ' + JSON.stringify(waited.ai));
     assert.match(waited.ai.text, /A hashtag/, 'and named the option of the question');
-    const chatHits = t.apiLog.filter((r) => /\/chat\/completions/.test(r.url));
-    assert.ok(chatHits.length > 0, 'the AI call went through the gateway');
-    const chatBody = chatHits[chatHits.length - 1];
-    assert.match(String(chatBody.body), /elections2018/, 'the full text of the question went out');
-    assert.match(String(chatBody.body), /Options/, 'together with the list of answers');
-    assert.match(String(chatBody.body), /A hashtag/, 'every option is there');
-    assert.ok(chatBody.headers.authorization && /^Bearer mse_/.test(chatBody.headers.authorization), 'with the device key');
+    /* 2.4: the extension asks the agent route of the gateway; the gateway itself builds the /v1 call to the backend */
+    const agentHits = t.apiLog.filter((r) => /\/mse\/v1\/agent/.test(r.url));
+    assert.ok(agentHits.length > 0, 'the AI call went through the gateway: ' + JSON.stringify(t.apiLog.map((r) => r.path)));
+    const agentBody = agentHits[agentHits.length - 1];
+    assert.match(String(agentBody.body), /elections2018/, 'the full text of the question went out');
+    assert.match(String(agentBody.body), /A hashtag/, 'every option is there');
+    assert.ok(agentBody.headers.authorization && /^Bearer mse_/.test(agentBody.headers.authorization), 'with the device key');
+    assert.equal(t.apiLog.filter((r) => /\/chat\/completions/.test(r.url)).length, 0,
+      'and the extension does not speak to the backend itself: one door only');
 
     /* 4. the AI row is on the panel, marked, and a tap puts it in the form */
     await page.evaluate(() => window.__mse.open());
     await page.waitForTimeout(600);
     const shown = await page.evaluate(() => window.__mse.state());
     assert.match(shown.pop.text, /A hashtag/, 'the answer is in the panel');
-    assert.match(shown.pop.text, /AI/, 'marked as the model\'s own row');
+    assert.match(shown.pop.text, /agent/, 'marked as the model\'s own row');
     const aiRow = byText(shown.pop.controls, /A hashtag/);
     assert.ok(aiRow, 'the row is tappable');
     await page.mouse.click(aiRow.x, aiRow.y);
@@ -722,9 +724,9 @@ test('M13 the two tiers: a base key never reaches the gateway, an allowed key ge
     /* 5. a base user who tries anyway gets nothing from the gateway */
     await page.evaluate(() => window.MSEBridge.forgetRegister = true);
     const journal = await page.evaluate(() => window.__mse.log());
-    assert.ok(journal.some((l) => l.kind === 'agent' && l.ok && /AI/.test(l.text)), 'the journal keeps the AI call');
+    assert.ok(journal.some((l) => l.kind === 'agent' && l.ok && /\bagent\b:/.test(l.text)), 'the journal keeps the AI call');
     await page.screenshot({ path: path.join(EVID, '7-ai-row.png') });
-    report.m13 = { base: base.pop.text.slice(0, 120), ai: waited.ai, chatHits: chatHits.length, tier: await page.evaluate(() => window.__mse.state().tier) };
+    report.m13 = { base: base.pop.text.slice(0, 120), ai: waited.ai, agentHits: agentHits.length, tier: await page.evaluate(() => window.__mse.state().tier) };
     assert.deepEqual(t.errors, []);
   } finally {
     await t.close();

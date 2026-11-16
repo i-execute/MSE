@@ -1,5 +1,5 @@
 {
-  "version": "2.3.0",
+  "version": "2.4.0",
   "brand": "MSE",
   "base": "2.22.0",
   "bundles": {
@@ -215,10 +215,10 @@
   },
   "pageScripts": {
     "mse-ui": {
-      "bytes": 68453,
-      "sha256": "a8e0b76d09bd95ea1a86e2419775a1301764bb896834cde22a72a7ae4a3e160d",
+      "bytes": 66811,
+      "sha256": "ae8d46aa562a4088fe00715d31271004d067b2dfb0f188eaabd8ba482c431fd3",
       "sanitizer": {
-        "comments": 83,
+        "comments": 82,
         "strings": 3,
         "templates": 0,
         "regexps": 10,
@@ -239,10 +239,10 @@
       }
     },
     "mse-bridge": {
-      "bytes": 20895,
-      "sha256": "1230f750bf7ecc4ac4f4e1b06ad8f9fa5538e45e1aea7eb6bce6e00072db5da6",
+      "bytes": 20889,
+      "sha256": "d2d61da4344ace4b1c7b0e99e78bf05cb843251a88f12e9ac3b1cfc67ce25cd1",
       "sanitizer": {
-        "comments": 27,
+        "comments": 28,
         "strings": 3,
         "templates": 0,
         "regexps": 6,
@@ -251,8 +251,8 @@
       }
     },
     "debug": {
-      "bytes": 42338,
-      "sha256": "f1f8385fc65626e3ec674ea770c81afbcd3f1a58eb635ce3ff24ea77c7ef58ff",
+      "bytes": 42182,
+      "sha256": "b35d00fe3d8956143773ea90e0dd3e4d1a7153e36fb251a96ed4d9670a85965b",
       "sanitizer": {
         "comments": 32,
         "strings": 0,
@@ -267,12 +267,12 @@
     "scripts": 1,
     "headers": 1,
     "requires": 0,
-    "bytes": 1621417
+    "bytes": 1619613
   },
   "userscript": {
     "file": "Storage/artifacts/mse.user.js",
-    "bytes": 1626001,
-    "sha256": "c806071e3c5b96ebb1585fa0c3d71f7b2c628431257f67e9e727d71833e9b77e"
+    "bytes": 1624187,
+    "sha256": "892843f7f0a20a31b5fd44b53ec76ecf270a674d85ac1493b43e08f81fa609e1"
   },
   "sanitizer": {
     "comments": 68,

@@ -33,7 +33,9 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   if (req.url === '/v1/models') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    return res.end(JSON.stringify({ object: 'list', data: [{ id: 'mock-model', object: 'model' }] }));
+    /* the list belongs to the backend: MSE_MOCK_MODELS lets a test hand out its own */
+    const ids = String(process.env.MSE_MOCK_MODELS || 'mock-model').split(',').map((x) => x.trim()).filter(Boolean);
+    return res.end(JSON.stringify({ object: 'list', data: ids.map((id) => ({ id, object: 'model' })) }));
   }
   if (req.url !== '/v1/chat/completions' || req.method !== 'POST') {
     res.writeHead(404, { 'content-type': 'application/json' });

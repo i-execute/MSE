@@ -7,7 +7,8 @@ Three runs, each in a throwaway sandbox (PREFIX/ENV_DIR/STATE_DIR under /tmp, no
   2. a pty (a terminal): it must ask for bot token / owner id / tailscale key, validate each, write them into
      mse.env with mode 600, and accept nothing that does not look right;
   3. order: on a run that gets a tailscale key, the tunnel step must come after the files and before the router
-     restart, and the restart must only happen when a public address actually arrived.
+     restart, and the restart must only happen when a public address actually arrived;
+  4. the panel (TUI) asks for the same three keys on a clean box, so nobody installs a stack that cannot start.
 
     python3 tests/install_dialog.py
 """
@@ -19,12 +20,14 @@ import re
 import select
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALL = ROOT / "Server" / "stack" / "install.sh"
+PANEL = ROOT / "Server" / "stack" / "mse_setup.py"
 FAILS: list[str] = []
 
 
@@ -164,6 +167,73 @@ def pty_run(answers: list[str], extra_env: dict | None = None, timeout: float = 
     return output.decode("utf-8", "replace"), box
 
 
+def tui_run(keys: list[bytes] | None = None, keys_typed: list[bytes] | None = None,
+            wait_for: str = "", timeout: float = 120) -> str:
+    """Drives the panel (mse_setup.py) through a pty: the same keys a person would press, in order.
+
+    The panel draws with cursor moves, so the frames are stripped of ANSI before they are searched: what is left is
+    the text a person reads. Typed values are injected after the panel is up, one per field, the way the key reader
+    takes them.
+    """
+    import fcntl
+    import struct
+    import termios
+
+    box = sandbox()
+    env = env_of(box)
+    env.update({"TERM": "xterm-256color", "MSE_FORCE_COLOR": "1"})
+    env.pop("MSE_BOT_TOKEN", None)
+    env.pop("MSE_OWNER_ID", None)
+    env.pop("MSE_TAILSCALE_KEY", None)
+    master, slave = pty.openpty()
+    fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 100, 0, 0))
+    proc = subprocess.Popen([sys.executable, str(PANEL)], env=env, stdin=slave, stdout=slave, stderr=slave,
+                            close_fds=True, start_new_session=True)
+    os.close(slave)
+    out = b""
+    deadline = time.time() + timeout
+    pending = list(keys_typed or [])
+    keys = list(keys or [])
+    sent = False
+    while time.time() < deadline:
+        ready, _, _ = select.select([master], [], [], 0.3)
+        if ready:
+            try:
+                chunk = os.read(master, 65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            out += chunk
+            text = out.decode("utf-8", "replace")
+            if wait_for and wait_for in text and not sent:
+                sent = True
+                for key in keys:
+                    os.write(master, key)
+                    time.sleep(0.15)
+        if proc.poll() is not None:
+            break
+    try:
+        proc.wait(timeout=20)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    try:
+        while True:
+            ready, _, _ = select.select([master], [], [], 0.2)
+            if not ready:
+                break
+            chunk = os.read(master, 65536)
+            if not chunk:
+                break
+            out += chunk
+    except OSError:
+        pass
+    os.close(master)
+    shutil.rmtree(box["_base"], ignore_errors=True)
+    plain = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", out)
+    return plain.decode("utf-8", "replace")
+
+
 def calls(box: dict) -> list[str]:
     try:
         return Path(box["_log"]).read_text(encoding="utf-8").splitlines()
@@ -216,7 +286,15 @@ def main() -> int:
     check("router:    answers, with the address in /health" in text, "the installer confirms /health after the restart")
     check("mse-bot: active" in text, "the installer confirms the bot unit is active")
 
-    print("\n== 4. a dry run changes nothing and still says what it would ask")
+    print("\n== 4. the panel asks for the same three keys before it installs (bug 7)")
+    # a terminal, a clean box, nothing in the env: the panel must ask, not walk past the keys and fail later
+    # the panel is asked for the fresh install (item 2), which must lead through the key screen
+    tui = tui_run([b"\x1b[B", b"\r", b"\r", b"\x1b"], wait_for="Control Center")
+    for prompt in ("bot token", "owner id", "tailscale key"):
+        check(prompt in tui.lower(), "the panel asks for the " + prompt)
+    check("space" in tui.lower() and "enter" in tui.lower(), "and the footer says how a field is filled")
+
+    print("\n== 5. a dry run changes nothing and still says what it would ask")
     box = sandbox()
     proc = subprocess.run(["bash", str(INSTALL), "--dry-run", "--yes"], env=env_of(box),
                           capture_output=True, text=True, timeout=300)

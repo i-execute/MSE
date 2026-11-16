@@ -128,7 +128,8 @@
 .val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 .val.human{font:400 12.5px/1.4 -apple-system,sans-serif}
 .val.human .v{overflow-wrap:break-word}
-.val .copy{flex:0 0 auto;font:600 9.5px/1 -apple-system,sans-serif;color:var(--muted)}
+.val .copy{flex:0 0 auto;font:600 9.5px/1 -apple-system,sans-serif;color:var(--muted);letter-spacing:.06em}
+.val[disabled]{opacity:.55;cursor:default}
 .models{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 12px}
 .chip{padding:5px 9px;border-radius:999px;border:1px solid var(--rule-2);background:var(--paper-2);
   font:500 10.5px/1 ui-monospace,Menlo,monospace;color:var(--ink-2)}

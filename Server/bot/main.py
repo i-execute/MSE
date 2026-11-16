@@ -368,15 +368,26 @@ class Bot:
         if not model:
             return
         try:
-            env_write({"MSE_MODEL": model})
-        except OSError as exc:
-            await self.deliver_raw(chat_id, "could not write " + ENV_FILE + ": " + str(exc))
+            out = await asyncio.to_thread(self.gw.set_model, model)
+        except GatewayError as exc:
+            await self.render(chat_id, msg_id, screens.model_screen(await self.snap(), error=exc.message))
             return
+        chosen = str(out.get("model") or model)
         try:
-            await asyncio.to_thread(self.gw.set_quota, int(env_read().get("MSE_DAILY_QUOTA") or 200))
-        except Exception:  # noqa: BLE001 — the model lives in the env; the router does not need to care
-            pass
-        await self.render(chat_id, msg_id, screens.model_screen(await self.snap(), notice="chosen " + model + " · restart the backend to apply"))
+            env_write({"MSE_MODEL": chosen})
+        except OSError as exc:
+            log.debug("could not save the default model: %s", exc)
+        await self.render(chat_id, msg_id, screens.model_screen(await self.snap(), notice="now " + chosen))
+
+    async def refresh_models(self, chat_id: int, msg_id: int) -> None:
+        """Ask the backend for its list again: the router does the call, the screen shows what came back."""
+        try:
+            out = await asyncio.to_thread(self.gw.models, True)
+        except GatewayError as exc:
+            await self.render(chat_id, msg_id, screens.model_screen(await self.snap(), error=exc.message))
+            return
+        count = int(out.get("count") or len(out.get("models") or []))
+        await self.render(chat_id, msg_id, screens.model_screen(await self.snap(), notice=str(count) + " from the backend"))
 
     # ------------------------------------------------------------------ tunnel & services & update
     async def tunnel(self, chat_id: int, msg_id: int, action: str) -> None:
@@ -423,6 +434,18 @@ class Bot:
         tail = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
         await self.render(chat_id, msg_id, screens.update_screen({"ok": proc.returncode == 0, "tail": tail}))
 
+    async def live_models(self) -> list[str]:
+        """The models the local backend offers right now. The router caches them; the bot only asks."""
+        try:
+            data = await asyncio.to_thread(self.gw.models)
+            offered = [str(m) for m in (data.get("models") or []) if str(m).strip()]
+            if offered:
+                return offered
+        except Exception as exc:  # noqa: BLE001
+            log.debug("the router did not name a model: %s", exc)
+        snap = await self.snap()
+        return [str(m) for m in ((snap.get("health") or {}).get("models") or []) if str(m).strip()]
+
     # ------------------------------------------------------------------ inline input (the OBHOD way)
     async def on_inline(self, evt: object) -> None:
         """A button of type switch_inline_query_current_chat lands here: the owner is typing a value in the field."""
@@ -431,6 +454,11 @@ class Bot:
         results: list[dict[str, Any]] = []
         if inline.allowed(who, OWNER_ID):
             try:
+                # a live field is filled right here: the models of the backend are never copied into the code
+                if inline.ident_of(query) == "model":
+                    offered = await self.live_models()
+                    if offered:
+                        inline.set_options("model", offered)
                 results = inline.results_for(query, self.current_values())
             except Exception as exc:  # noqa: BLE001
                 log.debug("inline query failed: %s", exc)
@@ -584,6 +612,9 @@ class Bot:
             elif data == "model:show":
                 await self.toast(evt, "")
                 await self.render(chat_id, msg_id, screens.model_screen(await self.snap()))
+            elif data == "model:refresh":
+                await self.toast(evt, "asking the backend")
+                await self.refresh_models(chat_id, msg_id)
             elif data == "model:ask":
                 self.pending_input[chat_id] = "model"
                 await self.toast(evt, "type the name")

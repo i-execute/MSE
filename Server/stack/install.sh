@@ -327,8 +327,8 @@ MSE_ALLOW_ORIGINS=*
 MSE_UPSTREAM_HOST=127.0.0.1
 MSE_UPSTREAM_PORT=${MSE_UPSTREAM_PORT:-8799}
 MSE_UPSTREAM_KEY=
-MSE_MODEL=${MSE_MODEL:-gemini-3-flash}
-MSE_MODELS=${MSE_MODELS:-gemini-3-flash,gpt-4o-mini}
+# empty means "the default the local backend offers first": the list itself is never written down here
+MSE_MODEL=${MSE_MODEL:-}
 # tailscale instead of cloudflared
 MSE_TAILSCALE_KEY=${MSE_TAILSCALE_KEY:-}
 MSE_TAILSCALE_HOSTNAME=${MSE_TAILSCALE_HOSTNAME:-mse-gateway}

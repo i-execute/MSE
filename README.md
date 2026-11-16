@@ -130,15 +130,18 @@ iPhone / Android / Desktop
   AI-бэкенд (OpenAI-совместимый; здесь и только здесь — ключ модели)
 ```
 
-Роутер ничего не знает про модели и их ключи: он проверяет, кому можно, и стримит ответ как есть.
+Роутер не хранит ключ модели: он проверяет, кому можно, стримит ответ бэкенда и сам отвечает на `/mse/v1/agent`.
+Список моделей роутер спрашивает у бэкенда (`GET /v1/models`) при старте и по кнопке «обновить», кэширует и отдаёт
+в `/v1/models` и `/health`; `MSE_MODEL` — только дефолт, а если бэкенд такой модели не предлагает, роутер берёт
+первую доступную и пишет об этом в журнал.
 Telegram-бот (`Server/bot`) — та же админка шлюза, но в чате: заявки устройств, `/allow`, `/revoke`, квота,
 модель, журнал, включение funnel.
 
 ## Приёмка (curl)
 
 ```bash
-curl -s localhost:8788/health | jq '{name,version,role,backend,model,quota}'
-# → {"name":"MSE gateway","version":"2.0.0","role":"router","backend":"tailscale",…}
+curl -s localhost:8788/health | jq '{name,version,role,backend,model,modelsCount,modelsSource,quota}'
+# → {"name":"MSE gateway","version":"2.4.0","role":"router","backend":"tailscale","model":"…","modelsCount":3,…}
 
 KEY=mse_$(openssl rand -hex 32)
 curl -s -X POST localhost:8788/mse/v1/register -H 'content-type: application/json' \

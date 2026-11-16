@@ -1494,7 +1494,7 @@ class Setup:
         self.python = (detect_pythons() or ["python3"])[0]
         self.python_choices = detect_pythons()
         self.credentials = {"BOT_TOKEN": "", "OWNER_ID": "", "API_ID": "", "API_HASH": "", "TAILSCALE_KEY": ""}
-        self.settings = {"MODEL": self.env.get("MSE_MODEL", "gemini-3-flash"), "QUOTA": self.env.get("MSE_DAILY_QUOTA", "200"),
+        self.settings = {"MODEL": self.env.get("MSE_MODEL", ""), "QUOTA": self.env.get("MSE_DAILY_QUOTA", "200"),
                          "UPSTREAM_PORT": self.env.get("MSE_UPSTREAM_PORT", "8799")}
         self.notes: list[str] = []
         self.started = time.time()
@@ -1800,7 +1800,7 @@ class Setup:
     # ------------------------------------------------------------------ settings
     def ask_settings(self) -> bool:
         fields = [
-            Field("MODEL", "model", False, self.settings["MODEL"], "The model name on the local backend (OpenAI-compatible)"),
+            Field("MODEL", "model", False, self.settings["MODEL"], "model name on the local backend (OpenAI-compatible)"),
             Field("QUOTA", "quota", False, self.settings["QUOTA"], "Requests per day per device"),
             Field("UPSTREAM_PORT", "backend port", False, self.settings["UPSTREAM_PORT"], "127.0.0.1:<port> — where the AI backend lives"),
             Field("BOT_TOKEN", "bot token", True, self.contrib_or("BOT_TOKEN"), "Required. @BotFather -> /newbot (or /token); without it the bot stays off"),
@@ -1812,7 +1812,7 @@ class Setup:
         editor = FieldEditor(
             paint("4", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Model, Quota & Keys", theme.title),
             fields,
-            subtitle="Up/down — the row, Space — edit, Enter — save everything. Secrets are masked and never land in the shell history.",
+            subtitle="Up/down — row · Space — edit · Enter — save. Secrets are masked, never in the shell history.",
             step_note=paint("step 1", theme.muted),
         )
         if not editor.ask():
@@ -2007,6 +2007,10 @@ class Setup:
             if picked is None:
                 return 130
             self.dry_run = bool(picked.get("dry_run"))
+        # bug 7: the three keys are asked BEFORE anything is installed, on the same screens, never silently skipped
+        if not self.dry_run and self.missing_keys():
+            if not self.ask_settings():
+                return 130
         if not self.run_checks():
             self.limit = width()
             panel("stopped", [mark(BAD) + " " + paint("missing: " + "; ".join(self.notes[-2:]), theme.bad)], self.limit, theme.bad)

@@ -44,17 +44,21 @@ process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
 process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
 const PORT = Number(process.env.MSE_PORT || 8788);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.3.0';
+const VERSION = '2.4.0';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
 const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT || 8799);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
 const UPSTREAM_KEY = process.env.MSE_UPSTREAM_KEY || '';
 
+/* The one place a model name is written: MSE_MODEL is a *default*, not a list. The list itself comes from the local
+   OpenAI-compatible backend (GET /v1/models) and is cached here; nothing else in the code names a model. */
 const CFG = {
   upstreamUrl: (UPSTREAM_TLS ? 'https://' : 'http://') + UPSTREAM_HOST + ':' + UPSTREAM_PORT,
   publicUrl: String(process.env.MSE_PUBLIC_URL || '').replace(/\/+$/, ''),
-  model: process.env.MSE_MODEL || 'gemini-3-flash',
-  models: String(process.env.MSE_MODELS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  model: String(process.env.MSE_MODEL || '').trim(),
+  models: [],                       // filled from the backend, never from a file
+  modelsSource: 'unknown',          // backend | state | none
+  modelsAt: 0,
   dailyQuota: Number(process.env.MSE_DAILY_QUOTA || 200),
   allowOrigins: String(process.env.MSE_ALLOW_ORIGINS || '*').split(',').map((s) => s.trim()).filter(Boolean),
   timeoutMs: Number(process.env.MSE_TIMEOUT_MS || 120000)
@@ -90,6 +94,10 @@ function loadState() {
       };
       const q = Number(state.settings.dailyQuota);
       if (Number.isFinite(q) && q >= 0) CFG.dailyQuota = Math.floor(q);
+      const m = String(state.settings.model || '').trim();
+      if (m) CFG.model = m;
+      const cached = Array.isArray(state.settings.models) ? state.settings.models.filter((x) => typeof x === 'string' && x.trim()) : [];
+      if (cached.length) { CFG.models = cached; CFG.modelsSource = 'state'; }
     }
   } catch (e) { /* first run: the defaults above are the whole state */ }
 }
@@ -257,6 +265,164 @@ function proxyStream(req, res, bodyText, rec) {
   note('proxy ' + req.method + ' ' + req.url.slice(0, 80), rec);
 }
 
+/* ------------------------------------------------------------------ models */
+/* The backend is the only source of truth about models. Ask it, cache the answer, and keep the owner's default
+   honest: a default the backend does not offer is reported out loud and replaced by the first one it does offer. */
+function modelsFallback() {
+  const saved = Array.isArray(state.settings && state.settings.models) ? state.settings.models : [];
+  return saved.filter((m) => typeof m === 'string' && m.trim()).map((m) => m.trim());
+}
+function refreshModels() {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (list, source, reason) => {
+      if (done) return;
+      done = true;
+      if (list && list.length) {
+        CFG.models = list;
+        CFG.modelsSource = source;
+        CFG.modelsAt = now();
+        state.settings = Object.assign({}, state.settings, { models: list.slice(0, 100) });
+        const wanted = CFG.model;
+        if (!wanted) {
+          CFG.model = list[0];
+          note('model default taken from the backend: ' + CFG.model);
+        } else if (!list.includes(wanted)) {
+          const previous = wanted;
+          CFG.model = list[0];
+          console.error('model "' + previous + '" is not offered by the backend; using "' + CFG.model + '"');
+          note('model ' + previous + ' is not offered by the backend → ' + CFG.model);
+        }
+        saveState();
+      } else {
+        CFG.models = [];
+        CFG.modelsSource = 'none';
+        if (reason) console.error('the backend did not answer /v1/models:', reason);
+      }
+      resolve({ ok: !!(list && list.length), models: CFG.models, source: CFG.modelsSource, reason: reason || null });
+    };
+    const url = new URL(CFG.upstreamUrl + '/v1/models');
+    const lib = url.protocol === 'https:' ? https : http;
+    const headers = { accept: 'application/json' };
+    if (UPSTREAM_KEY) headers.authorization = 'Bearer ' + UPSTREAM_KEY;
+    const req = lib.request({
+      method: 'GET', hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname, headers, timeout: 8000
+    }, (up) => {
+      const chunks = [];
+      up.on('data', (c) => chunks.push(c));
+      up.on('end', () => {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        const parsed = parseJson(raw);
+        if (up.statusCode >= 400) return finish(null, 'none', 'the backend answered ' + up.statusCode);
+        const rows = parsed && Array.isArray(parsed.data) ? parsed.data : (Array.isArray(parsed) ? parsed : []);
+        const ids = rows.map((r) => (typeof r === 'string' ? r : r && (r.id || r.name))).filter(Boolean).map(String);
+        if (!ids.length) return finish(null, 'none', 'the backend named no model');
+        finish(Array.from(new Set(ids)), 'backend', null);
+      });
+      up.on('error', (e) => finish(null, 'none', e.message));
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', (e) => finish(null, 'none', e.message));
+    req.end();
+  });
+}
+
+/* ------------------------------------------------------------------ the agent */
+/* The extension asks "which of these options is the answer". The router does the whole job locally: it builds the
+   chat-completions call, sends it to the local backend and parses the reply against the offered options. The
+   backend never hears about /mse/*, so it cannot answer "not found: /mse/v1/agent" any more. */
+function extractJson(text) {
+  const m = /\{[\s\S]*\}/.exec(String(text || ''));
+  if (!m) return null;
+  try { return JSON.parse(m[0]); } catch (e) { return null; }
+}
+function buildAgentPrompt(body) {
+  const options = Array.isArray(body.options) ? body.options.map((o, i) => (i + 1) + '. ' + o).join('\n') : '';
+  const system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
+    '{"answer": "<exactly one of the given options, character for character>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
+    'If there is no correct option or the data is missing, return {"error": "<short reason>"}. ' +
+    'Add nothing outside the JSON.';
+  let user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
+  if (options) user += 'Options (pick exactly one):\n' + options + '\n';
+  if (body.multiple) user += 'Several may be correct: list them separated by "|" in answer.\n';
+  if (body.image) user += 'The question has an image attached, but it was not passed as text.\n';
+  return [{ role: 'system', content: system }, { role: 'user', content: user }];
+}
+function upstreamJson(method, pathname, payload) {
+  return new Promise((resolve) => {
+    const url = new URL(CFG.upstreamUrl + pathname);
+    const lib = url.protocol === 'https:' ? https : http;
+    const body = payload ? JSON.stringify(payload) : null;
+    const headers = { accept: 'application/json' };
+    if (body) { headers['content-type'] = 'application/json'; headers['content-length'] = Buffer.byteLength(body); }
+    if (UPSTREAM_KEY) headers.authorization = 'Bearer ' + UPSTREAM_KEY;
+    const req = lib.request({
+      method, hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname + url.search, headers, timeout: CFG.timeoutMs
+    }, (up) => {
+      const chunks = [];
+      up.on('data', (c) => chunks.push(c));
+      up.on('end', () => resolve({ status: up.statusCode || 502, text: Buffer.concat(chunks).toString('utf8') }));
+      up.on('error', (e) => resolve({ status: 0, text: '', error: e.message }));
+    });
+    req.on('timeout', () => req.destroy(new Error('the model did not answer in time')));
+    req.on('error', (e) => resolve({ status: 0, text: '', error: e.message }));
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+async function handleAgent(req, res, rec) {
+  const left = quotaOf(rec);
+  res.setHeader('x-quota-left', String(left));
+  if (left <= 0) {
+    res.setHeader('retry-after', '60');
+    return send(req, res, 429, { ok: false, code: 'rate_limited', retry_after: 60, message: 'the daily quota is used up' });
+  }
+  const body = parseJson(await readBody(req, 256 * 1024));
+  if (!body || !body.question) return oaiError(req, res, 400, 'question is required', 'bad_request');
+  if (!CFG.model) return send(req, res, 503, { ok: false, code: 'no_model', retry_after: 5, message: 'the backend offered no model yet' });
+
+  const payload = { model: CFG.model, temperature: 0, messages: buildAgentPrompt(body) };
+  const started = now();
+  rec.requests = (rec.requests || 0) + 1;
+  rec.quotaUsed = (rec.quotaUsed || 0) + 1;
+  saveState();
+  note('agent ' + String(body.question).slice(0, 40), rec);
+
+  const up = await upstreamJson('POST', '/v1/chat/completions', payload);
+  const ms = now() - started;
+  if (!up.status) {
+    res.setHeader('retry-after', '5');
+    return send(req, res, 502, { ok: false, code: 'upstream_down', retry_after: 5, message: 'the model is unavailable: ' + (up.error || 'network') });
+  }
+  if (up.status === 429) {
+    res.setHeader('retry-after', '5');
+    return send(req, res, 429, { ok: false, code: 'rate_limited', retry_after: 5, message: 'the model rate-limited the call' });
+  }
+  const parsed = parseJson(up.text);
+  if (!parsed || !parsed.choices || !parsed.choices[0]) {
+    return send(req, res, 502, { ok: false, code: 'upstream_bad', retry_after: 5, message: 'the model answered in an unexpected format' });
+  }
+  const prose = String((parsed.choices[0].message || {}).content || '');
+  const answerObj = extractJson(prose);
+  const options = Array.isArray(body.options) ? body.options : [];
+  if (!answerObj) return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent could not parse the task', raw: prose.slice(0, 200) });
+  if (answerObj.error) return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: String(answerObj.error).slice(0, 160) });
+  const answer = String(answerObj.answer || '').trim();
+  if (!answer) return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
+  const picked = options.filter((o) => String(o).trim().toLowerCase() === answer.toLowerCase())[0];
+  if (options.length && !picked) {
+    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
+  }
+  return send(req, res, 200, {
+    ok: true, code: 'ok', ms, answer: picked || answer,
+    confidence: typeof answerObj.confidence === 'number' ? answerObj.confidence : null,
+    reasoning: answerObj.reason || null, model: CFG.model
+  });
+}
+
 /* ------------------------------------------------------------------ admin */
 async function handleAdmin(req, res, url) {
   if (!isAdmin(req)) return oaiError(req, res, 401, 'admin token required', 'admin_denied');
@@ -274,7 +440,7 @@ async function handleAdmin(req, res, url) {
       publicUrl: CFG.publicUrl || null,
       upstream: CFG.upstreamUrl,
       model: CFG.model,
-      models: CFG.models.length ? CFG.models : [CFG.model],
+      models: CFG.models, modelsCount: CFG.models.length, modelsSource: CFG.modelsSource,
       quota: CFG.dailyQuota,
       allow: state.allow,
       devices: Object.values(state.devices).map(publicDevice),
@@ -318,6 +484,23 @@ async function handleAdmin(req, res, url) {
     note('disallow ' + moodleId);
     return send(req, res, 200, { ok: true, allow: state.allow });
   }
+  if (url.pathname === '/admin/models') {
+    /* the owner pressed "refresh" in the bot or the TUI: ask the backend again, right now */
+    const r = req.method === 'POST' ? await refreshModels() : { ok: CFG.models.length > 0, models: CFG.models, reason: null };
+    return send(req, res, 200, { ok: r.ok, models: CFG.models, count: CFG.models.length, source: CFG.modelsSource, model: CFG.model, reason: r.reason });
+  }
+  if (url.pathname === '/admin/model') {
+    const wanted = String(body.model || '').trim();
+    if (!wanted) return oaiError(req, res, 400, 'model is required', 'bad_model');
+    if (CFG.models.length && !CFG.models.includes(wanted)) {
+      return oaiError(req, res, 400, 'the backend does not offer "' + wanted + '": ' + CFG.models.slice(0, 5).join(', '), 'unknown_model');
+    }
+    CFG.model = wanted;
+    state.settings = Object.assign({}, state.settings, { model: wanted });
+    saveState();
+    note('model ' + wanted);
+    return send(req, res, 200, { ok: true, model: CFG.model, models: CFG.models });
+  }
   if (url.pathname === '/admin/quota') {
     const n = Number(body.quota);
     if (!Number.isFinite(n) || n < 0) return oaiError(req, res, 400, 'quota must be a number >= 0', 'bad_quota');
@@ -341,7 +524,8 @@ const handler = async (req, res) => {
         ok: true, name: 'MSE gateway', version: VERSION, role: 'router',
         backend: 'tailscale', publicUrl: CFG.publicUrl || null,
         upstream: { host: UPSTREAM_HOST, port: UPSTREAM_PORT, tls: UPSTREAM_TLS },
-        model: CFG.model, models: CFG.models.length ? CFG.models : [CFG.model],
+        model: CFG.model,
+        models: CFG.models, modelsCount: CFG.models.length, modelsSource: CFG.modelsSource,
         quota: CFG.dailyQuota, devices: Object.keys(state.devices).length, allow: state.allow.length,
         time: new Date().toISOString()
       });
@@ -374,8 +558,17 @@ const handler = async (req, res) => {
       /* a device that was not let in is told nothing, not even the list of models */
       const rec = deviceByKey(keyOf(req));
       if (keyOf(req) && rec && rec.status !== 'active') return oaiError(req, res, 403, 'device is ' + rec.status, 'device_' + rec.status);
-      const list = (CFG.models.length ? CFG.models : [CFG.model]).map((id) => ({ id, object: 'model', created: 1700000000, owned_by: 'mse' }));
-      return send(req, res, 200, { object: 'list', data: list });
+      /* the list is the backend's: cached at start and on every refresh, never a constant in this file */
+      const ids = CFG.models.length ? CFG.models : (CFG.model ? [CFG.model] : []);
+      return send(req, res, 200, { object: 'list', data: ids.map((id) => ({ id, object: 'model', created: 1700000000, owned_by: 'backend' })) });
+    }
+    /* the agent is served here, by the router: /mse/* does not exist behind us, and asking the backend for it was
+       the bug that answered "not found: /mse/v1/agent" on every question that had options */
+    if (url.pathname === '/mse/v1/agent' && req.method === 'POST') {
+      const rec = deviceByKey(keyOf(req));
+      if (!rec) return oaiError(req, res, 401, 'unknown key: register the device first', 'invalid_key');
+      if (rec.status !== 'active') return oaiError(req, res, 403, 'device is ' + rec.status, 'device_' + rec.status);
+      return await handleAgent(req, res, rec);
     }
     /* everything else is the model: same rule as above — nobody without an active key gets through */
     const key = keyOf(req);
@@ -399,13 +592,28 @@ const handler = async (req, res) => {
 
 loadState();
 const server = http.createServer(handler);
+/* the list belongs to the backend. As a program the router asks at start, before the first device can ask for a
+   model; as a module (`--require`-like use, a test) it asks once the server is listening, which is the same moment. */
+let modelsReady = Promise.resolve({ ok: false, models: [], source: 'none', reason: 'not asked yet' });
+if (require.main !== module) {
+  server.on('listening', () => { modelsReady = refreshModels(); });
+}
+function askModelsAtStart() {
+  modelsReady = refreshModels().then((r) => {
+    if (r.ok) console.log('  models    :', CFG.models.length, 'from the backend ·', CFG.model);
+    else console.error('  models    : the backend did not answer /v1/models (' + r.reason + ')');
+    return r;
+  });
+  return modelsReady;
+}
 if (require.main === module) {
+  askModelsAtStart();
   server.listen(PORT, HOST, () => {
     console.log('MSE router ' + VERSION + ' on http://' + HOST + ':' + PORT + '  (public: ' + (CFG.publicUrl || 'not set yet') + ')');
     console.log('  AI backend:', CFG.upstreamUrl, '(loopback only; the model key stays there)');
-    console.log('  model     :', CFG.model, '· quota', CFG.dailyQuota, '/day');
+    console.log('  model     :', CFG.model || '(the backend names it)', '· quota', CFG.dailyQuota, '/day');
     console.log('  admin     :', process.env.MSE_ADMIN_TOKEN ? 'MSE_ADMIN_TOKEN' : path.join(DATA_DIR, 'admin-token.txt'));
   console.log('  state     :', STATE_FILE);
   });
 }
-module.exports = { server, CFG, state: () => state, deviceIdOf, registerDevice, deviceByKey, ADMIN_TOKEN, handler };
+module.exports = { server, CFG, state: () => state, deviceIdOf, registerDevice, deviceByKey, ADMIN_TOKEN, handler, refreshModels, get modelsReady() { return modelsReady; }, handleAgent };

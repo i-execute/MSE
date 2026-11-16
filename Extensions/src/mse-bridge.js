@@ -449,7 +449,8 @@
       var self = this;
       var url = self.url();
       if (!url) return Promise.reject(new Error('gateway address is not set'));
-      var body = { model: 'mse', stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
+      /* no model name here: the router decides which model the backend serves, the client never names one */
+      var body = { stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
       return fetch(url + '/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },

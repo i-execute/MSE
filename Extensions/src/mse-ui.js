@@ -873,43 +873,6 @@
       return { label: String(text || '').trim(), correctness: 0, count: 0, agent: true, busy: !!busy };
     }
 
-    /* the one call to the model: only ever made for an owner, only when their service stayed silent */
-    function runAi(q, why) {
-      var br = win.MSEBridge;
-      if (!br) return;
-      state.ai = { state: 'running', text: '' };
-      render();
-      var t0 = Date.now();
-      var buf = '';
-      var finish = function (ok, text, extra) {
-        var ms = Date.now() - t0;
-        if (ok) {
-          logAdd('agent', true, 'AI: ' + String(text).slice(0, 40), { ms: ms });
-          state.ai = { state: 'ok', text: String(text), model: (extra && extra.model) || null };
-        } else {
-          logAdd('agent', false, 'AI: ' + (text || 'no answer'), { ms: ms });
-          state.ai = { state: 'error', text: String(text || 'no answer') };
-        }
-        render();
-      };
-      br.chat(aiPrompt(q), function (chunk) {
-        buf += chunk;
-        state.ai = { state: 'running', text: buf };
-        if (pop && state.route === 'answers') render();
-      }).then(function (res) {
-        /* a streaming gateway can answer with the plain OpenAI shape instead of SSE: take its content too */
-        var plain = res && res.choices && res.choices[0] && res.choices[0].message ? String(res.choices[0].message.content || '') : '';
-        var text = (buf || plain || '').trim();
-        if (!text) { finish(false, 'the model said nothing'); return; }
-        finish(true, text, { model: res && res.model });
-      }, function (e) {
-        var msg = (e && e.message) || 'network';
-        if (/40[13]/.test(msg)) finish(false, 'key not accepted');
-        else finish(false, msg.slice(0, 80));
-        state.tier = /40[13]/.test(msg) ? 'base' : state.tier;
-      });
-    }
-
     /* base: no gateway, no AI row, no request to it */
     function aiAllowed() { return state.tier === 'owner'; }
 
@@ -984,71 +947,55 @@
       body.appendChild(N(statusLine(), 1));
     }
 
-    /* the AI row: one call to the model when their base stayed silent; the text grows while it arrives */
+    /* There is ONE way to ask the model: the agent route. This row is that action, drawn in the answer list; the
+       strip at the bottom is the same action's state. Two buttons, one effect — the row is the tappable one, the
+       strip only reports and retries by itself. */
     function appendAi(q) {
-      var ai = state.ai;
-      if (!ai || ai.state === 'idle') {
-        /* nothing was tried yet: one quiet row, so the model is never called behind the user's back */
-        var ask = el('button', 'ans press ai');
-        ask.setAttribute('type', 'button');
-        ask.appendChild(el('span', 'mark', '✦'));
-        ask.appendChild(el('span', 'lbl', 'ask AI'));
-        ask.appendChild(el('span', 'tag', 'AI'));
-        ask.addEventListener('click', function () { flash(ask); runAi(q, 'asked'); });
-        body.appendChild(N(ask, 1));
-        return;
-      }
-      if (ai.state === 'running') {
+      var ai = state.agent || { state: 'idle' };
+      if (ai.state === 'running' || ai.state === 'retry') {
         var run = el('div', 'ans ai busy');
         run.appendChild(el('span', 'mark', '✦'));
-        run.appendChild(el('span', 'lbl', ai.text ? ai.text : 'AI is thinking…'));
+        run.appendChild(el('span', 'lbl', ai.state === 'retry' ? 'agent is busy, retrying in ' + ai.retryIn + ' s' : 'agent is thinking…'));
         run.appendChild(el('span', 'tag', 'AI'));
         body.appendChild(N(run, 1));
         return;
       }
-      if (ai.state === 'error') {
-        var err = el('button', 'ans press ai');
-        err.setAttribute('type', 'button');
-        err.appendChild(el('span', 'mark', '✦'));
-        err.appendChild(el('span', 'lbl', 'AI: ' + (ai.text || 'no answer')));
-        err.appendChild(el('span', 'tag', 'AI'));
-        err.addEventListener('click', function () { flash(err); runAi(q, 'again'); });
-        body.appendChild(N(err, 1));
-        return;
-      }
-      var row = aiRow(ai.text);
-      row.ai = true;
-      row.label = ai.text;
-      var a = el('button', 'ans press ai best');
+      var label = ai.state === 'ok' ? ai.answer
+        : ai.state === 'error' ? 'agent: ' + (ai.text || 'error')
+        : 'ask the agent';
+      var a = el('button', 'ans press ai' + (ai.state === 'ok' ? ' best' : ''));
       a.setAttribute('type', 'button');
       a.appendChild(el('span', 'mark', '✦'));
-      a.appendChild(el('span', 'lbl', ai.text));
+      a.appendChild(el('span', 'lbl', label));
       a.appendChild(el('span', 'tag', 'AI' + (ai.model ? ' · ' + ai.model : '')));
       a.addEventListener('click', function () {
         flash(a);
-        win.setTimeout(function () {
-          var res = applyAnswer(q, row);
-          if (res.ok) { toast(res.how === 'text' ? 'filled in' : 'selected: ' + ai.text.slice(0, 40)); setBadge(0); win.setTimeout(closePop, 420); }
-          else toast('the AI answered with something not in the form');
-        }, 70);
+        if (ai.state === 'ok' && ai.answer) {
+          win.setTimeout(function () {
+            var res = applyAnswer(q, { label: ai.answer, correctness: 0, count: 0, agent: true });
+            if (res.ok) { toast(res.how === 'text' ? 'filled in' : 'selected: ' + String(ai.answer).slice(0, 40)); setBadge(0); win.setTimeout(closePop, 420); }
+            else toast('not in the form');
+          }, 70);
+          return;
+        }
+        runAgent(false);
       });
       body.appendChild(N(a, 1));
     }
 
-    /* the agent: one row, its state on it, retries by itself when the limit is hit */
+    /* the agent's state, one line, no button: the action is the row in the list above */
     function agentStrip() {
       var st = state.agent || { state: 'idle' };
       var row = el('div', 'row');
       row.appendChild(el('span', 'dot ' + (st.state === 'ok' ? 'ok' : st.state === 'error' ? 'bad' : st.state === 'retry' || st.state === 'running' ? 'warn' : '')));
       var txt;
-      if (st.state === 'idle') txt = 'agent: ask';
+      if (st.state === 'idle') txt = 'agent: not asked';
       else if (st.state === 'running') txt = 'agent is thinking…';
-      else if (st.state === 'ok') txt = 'agent: ' + (st.answer || '—') + (st.model ? ' · ' + st.model : '');
+      else if (st.state === 'ok') txt = 'agent: ' + (st.answer || '—');
       else if (st.state === 'retry') txt = 'agent is busy, retrying in ' + st.retryIn + ' s';
       else txt = 'agent: ' + (st.text || 'error');
       row.appendChild(el('span', 'txt', txt));
-      row.appendChild(el('span', 'more', st.state === 'ok' ? 'again' : st.state === 'running' ? '…' : 'run'));
-      return press(row, function () { runAgent(false); });
+      return row;
     }
 
     function runAgent(automatic) {
@@ -1074,7 +1021,9 @@
           logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
           state.agent = { state: 'ok', answer: res.answer, model: res.model };
           var row = { label: res.answer, correctness: 0, count: 0, agent: true };
-          state.rows = [row].concat(state.rows || []);
+          if (!(state.rows || []).some(function (r) { return r.label === row.label && r.agent; })) {
+            state.rows = [row].concat(state.rows || []);
+          }
           render();
           var applied = applyAnswer(q, row);
           if (applied.ok) toast('agent picked: ' + String(res.answer).slice(0, 40));
@@ -1117,6 +1066,7 @@
       if (!q) { render(); return; }
       state.loading = true;
       state.ai = null;
+      state.agent = null;
       render();
       /* who we are for the gateway comes first: a base user must not see a single request towards it */
       var tier = refreshTier();
@@ -1140,14 +1090,14 @@
         setBadge(state.rows.length);
         return tier.then(function () {
           /* their base came back empty: for an owner the model answers in a row of its own, by itself */
-          if (!state.rows.length && aiAllowed() && (!state.ai || state.ai.state === 'idle')) runAi(q, 'empty');
+          if (!state.rows.length && aiAllowed() && (!state.agent || state.agent.state === 'idle')) runAgent(true);
           render();
         });
       }, function (e) {
         state.loading = false;
         state.error = e.message;
         return tier.then(function () {
-          if (aiAllowed() && (!state.ai || state.ai.state === 'idle')) runAi(q, 'error');
+          if (aiAllowed() && (!state.agent || state.agent.state === 'idle')) runAgent(true);
           render();
         });
       });
@@ -1173,6 +1123,8 @@
       var hint = el('span', 'copy', '');
       row.appendChild(hint);
       if (!copyable) { row.classList.remove('press'); row.disabled = true; return row; }
+      /* a row that copies says so before it is tapped: one icon, the same meaning everywhere in the panel */
+      hint.textContent = 'copy';
       row.addEventListener('click', function () {
         flash(row);
         win.MSEBridge.copy(value).then(function (ok) {
@@ -1199,7 +1151,7 @@
       var good = st && st.state === 'active';
       line.appendChild(el('span', 'dot ' + (good ? 'ok' : st ? 'warn' : '')));
       line.appendChild(el('span', 'txt', good ? 'key accepted' : st ? (st.message || 'key not checked') : 'key not checked'));
-      line.appendChild(el('span', 'more', 'AI gateway'));
+      line.appendChild(el('span', 'more', 'open'));
       body.appendChild(N(press(line, function () { state.route = 'gateway'; render(); }), 1));
       var net = el('div', 'row');
       net.appendChild(el('span', 'dot'));
@@ -1444,7 +1396,11 @@
           rows: state.rows,
           error: state.error,
           agent: state.agent,
-          ai: state.ai,
+          /* one name for the outside: the agent's answer, whichever row drew it */
+          ai: state.agent && state.agent.state === 'ok' ? { state: 'ok', text: state.agent.answer, model: state.agent.model }
+            : state.agent && state.agent.state === 'error' ? { state: 'error', text: state.agent.text }
+            : state.agent && state.agent.state === 'running' ? { state: 'running', text: '' }
+            : null,
           tier: state.tier,
           meta: state.meta,
           identity: identity(),

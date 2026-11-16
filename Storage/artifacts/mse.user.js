@@ -2,7 +2,7 @@
 // @name         MSE
 // @name:ru      MSE — Moodle Solver Extension
 // @namespace    https://github.com/mse
-// @version      2.3.0
+// @version      2.4.0
 // @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @description Answers and hints for Moodle quizzes: the MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @author       MSE
@@ -2264,7 +2264,8 @@ var __ssW=window,__msePageWindow=window;
       var self = this;
       var url = self.url();
       if (!url) return Promise.reject(new Error('gateway address is not set'));
-      var body = { model: 'mse', stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
+       
+      var body = { stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
       return fetch(url + '/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
@@ -3180,7 +3181,7 @@ var __ssW=window,__msePageWindow=window;
         if (simple) { var r2 = el('div', 'row'); r2.appendChild(el('span', 'k', 'id')); r2.appendChild(el('span', 'v', simple.value)); c.appendChild(r2); }
         if (best) { var r3 = el('div', 'row'); r3.appendChild(el('span', 'k', 'most often')); r3.appendChild(el('span', 'v', best.value + '  × ' + best.count)); c.appendChild(r3); }
       }
-      c.appendChild(el('div', 'note', 'Sources: the page (M.cfg, profile links, avatar) and the server responses captured by the sniffer. The full list is on the “Who am I” tab.'));
+      c.appendChild(el('div', 'note', 'Sources: the page · M.cfg, profile links, avatar. Server responses: the sniffer. Full list: “Who am I”.'));
       return c;
     }
 
@@ -3196,7 +3197,7 @@ var __ssW=window,__msePageWindow=window;
       r2.appendChild(el('span', 'k', 'pages with the key'));
       r2.appendChild(el('span', 'v', String(K.pages || (K.value ? 1 : 0))));
       c.appendChild(r2);
-      c.appendChild(el('div', 'note', 'Enter the key once on the “Key” tab and reload the page: it must stay. This checks that the extension remembers it.'));
+      c.appendChild(el('div', 'note', 'Key entered on “Key”, page reloaded: it must survive. This checks that the script remembers it.'));
       return c;
     }
 
@@ -3212,7 +3213,7 @@ var __ssW=window,__msePageWindow=window;
       r2.appendChild(el('span', 'k', 'with a JSON response'));
       r2.appendChild(el('span', 'v', String(withJson)));
       c.appendChild(r2);
-      c.appendChild(el('div', 'note', 'Requests made before the script was installed show up by timing only (no status codes) — that is expected.'));
+      c.appendChild(el('div', 'note', 'Requests from before the script was installed carry timing only, no status.'));
       return c;
     }
 
@@ -3325,7 +3326,7 @@ var __ssW=window,__msePageWindow=window;
 
       var c = el('div', 'card');
       c.appendChild(el('h2', null, 'Secret key'));
-      c.appendChild(el('div', 'note', 'Enter the key once. It is kept in the script storage and in the site localStorage, survives reloads and navigation. The check uses SHA-256: the key itself is never stored in the script — the server will work the same way.'));
+      c.appendChild(el('div', 'note', 'The key lives in script storage and site localStorage, survives reloads and navigation. The check is SHA-256: the key itself never lands in the script.'));
 
       var input = doc.createElement('input');
       input.type = 'text';
@@ -3539,7 +3540,7 @@ var __ssW=window,__msePageWindow=window;
   }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
 
    
-  var CSS = ":host,*{box-sizing:border-box}\n/\* MSE theme: black and white, nothing else.\n   The panel is a sheet of dark glass over a page we do not own: one paper, one rule, one ink, one accent.\n   The accent is white — a border that lights up — so no hue is ever introduced by us. *\/\n.mse{\n  --paper:#0a0a0a;--paper-2:#111111;--paper-3:#161616;\n  --ink:#f2f2f2;--ink-2:#c8c8c8;--muted:#8a8a8a;\n  --rule:#2a2a2a;--rule-2:#3a3a3a;--rule-3:#4d4d4d;\n  --accent:#ffffff;--accent-soft:rgba(255,255,255,.14);--accent-line:rgba(255,255,255,.6);\n  --r:10px;--r-panel:14px;--pill:999px;\n  --ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);\n  --sp-1:6px;--sp-2:10px;--sp-3:14px;\n  font:13.5px/1.45 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif;\n  color:var(--ink);-webkit-font-smoothing:antialiased;\n}\n\n/\* ---------- the pill: tiny, quiet; only the letters carry any light ---------- *\/\n.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;\n  height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);\n  background:var(--paper-2);border:1px solid var(--rule-2);color:var(--ink);\n  font:700 10.5px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.16em;text-indent:.16em;\n  text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);\n  cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;\n  transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}\n.pill.dragging{opacity:.9}\n.pill:active{transform:scale(.97)}\n.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;\n  background:var(--accent);color:#000;font:700 9px/14px -apple-system,sans-serif;text-align:center;text-indent:0;text-shadow:none}\n.pill.lit{animation:pill-press .9s linear}\n@keyframes pill-press{\n  0%,100%{text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);border-color:var(--rule-2)}\n  8%{text-shadow:0 0 12px rgba(255,255,255,.95),0 0 26px rgba(255,255,255,.5);border-color:var(--accent-line)}\n  40%{text-shadow:0 0 10px rgba(255,255,255,.62),0 0 20px rgba(255,255,255,.3);border-color:var(--rule-2)}}\n\n/\* ---------- the press: a white edge that flashes and goes down slowly, no colour, no fill ---------- *\/\n.press{position:relative;isolation:isolate}\n.press::before,.press::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;\n  opacity:0;transition:opacity .2s var(--ease-out)}\n.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 0 1px rgba(255,255,255,.85),0 0 14px 2px rgba(255,255,255,.22)}\n.press::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px rgba(255,255,255,.28)}\n.press.hot{animation:press-light 1.5s linear forwards}\n@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}\n  4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}\n  18%{--press:.5;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.28}74%{--press:.12}to{--press:0}}\n.press.hot::before{opacity:var(--press)}\n.press.hot::after{opacity:calc(var(--press) * .9)}\n/\* the chosen row: a hairline that stays, no glow, no colour *\/\n.press.lit{border-color:var(--accent-line)!important}\n.press.lit::before{opacity:.5}\n.press.lit::after{opacity:.2}\n.press:active{transform:scale(.99)}\n\n/\* ---------- the panel ---------- *\/\n.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:300px;max-width:calc(100vw - 16px);\n  background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r-panel);\n  box-shadow:0 18px 48px rgba(0,0,0,.7);overflow:hidden;\n  transform-origin:var(--ox,100%) var(--oy,100%);\n  opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);\n  transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}\n.pop.in{opacity:1;transform:none;filter:none}\n.pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}\n.pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}\n@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}\n\n/\* the head: the name, the view, three buttons — with air, and a rule under it *\/\n.ph{display:flex;align-items:center;gap:8px;padding:12px 12px 11px;border-bottom:1px solid var(--rule)}\n.ph .t{flex:1 1 auto;min-width:0;font:700 11px/1 -apple-system,sans-serif;letter-spacing:.16em;\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 0 9px rgba(255,255,255,.28)}\n.ph .t em{font:400 10.5px/1 -apple-system,sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none;display:block;margin-top:5px}\n.ib{flex:0 0 auto;width:28px;height:28px;display:flex;align-items:center;justify-content:center;\n  border-radius:9px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);\n  font:600 13px/1 Georgia,serif;cursor:pointer;transition:border-color .18s var(--ease),color .18s var(--ease)}\n.ib:hover{border-color:var(--rule-3);color:var(--ink)}\n.ib.x{font:400 15px/1 -apple-system,sans-serif}\n.ib.back{font:400 14px/1 -apple-system,sans-serif}\n\n/\* the body: air between rows and inside them, a group is separated by a rule and a name *\/\n.pb{max-height:min(46vh,300px);overflow:auto;-webkit-overflow-scrolling:touch;padding:12px}\n.pb::-webkit-scrollbar{width:0}\n.sec{font:700 9.5px/1 -apple-system,sans-serif;letter-spacing:.18em;color:var(--muted);margin:16px 0 9px}\n.sec:first-child{margin-top:0}\n.group{display:flex;flex-direction:column;gap:8px}\n.group + .sec{margin-top:16px}\n\n/\* ---------- answers: one row a tap wide, a box on the left, a letter, the text, the share ---------- *\/\n.ans{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;margin:0;padding:10px 11px;\n  border-radius:var(--r);border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:400 13px/1.35 inherit;text-align:left;cursor:pointer;\n  transition:border-color .18s var(--ease),background .18s var(--ease)}\n.ans:hover{border-color:var(--rule-3)}\n.ans .mark{flex:0 0 auto;width:18px;height:18px;border-radius:5px;border:1px solid var(--rule-3);\n  display:flex;align-items:center;justify-content:center;font:700 10px/1 inherit;color:#000}\n.ans.best .mark{background:var(--accent);border-color:var(--accent)}\n.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}\n.ans .pct{flex:0 0 auto;font:600 10.5px/1 -apple-system,sans-serif;color:var(--muted)}\n.ans.agent,.ans.ai{border-style:dashed}\n.ans.ai.busy .lbl{color:var(--muted)}\n.tag{font:600 9px/1 -apple-system,sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:5px}\n\n/\* ---------- one status line, never a paragraph ---------- *\/\n.row{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink-2);\n  font:400 11.5px/1.35 inherit;text-align:left;cursor:pointer;margin:12px 0 8px}\n/\* the status line closes the panel: a rule above it, the last line of the sheet *\/\n.pb > .row:last-child{margin-bottom:0}\n.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--rule-3)}\n.row .dot.ok{background:var(--accent)}\n.row .dot.warn,.row .dot.bad{background:var(--muted)}\n.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.row .more{flex:0 0 auto;font-size:10.5px;color:var(--muted)}\n\n/\* ---------- the controls of the gateway view: a stack, one gap, never two buttons glued ---------- *\/\n.frow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}\n.btn{flex:1 1 auto;min-width:0;height:34px;padding:0 12px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:600 12px/1 inherit;cursor:pointer;white-space:nowrap;\n  transition:border-color .18s var(--ease),color .18s var(--ease)}\n.btn:hover{border-color:var(--rule-3)}\n.btn.solid{background:transparent;color:var(--ink);border-color:var(--accent-line)}\n.btn.solid:hover{border-color:var(--accent)}\n.inp{flex:1 1 auto;min-width:0;width:100%;height:34px;padding:0 11px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:12.5px/1 -apple-system,sans-serif;outline:none;margin:0 0 10px}\n.inp:focus{border-color:var(--accent-line)}\n\n/\* the copy value: a row that is a tap target, the key above the value, never a run-on line *\/\n.val{display:flex;align-items:center;gap:10px;width:100%;padding:10px 11px;margin:0 0 8px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink);\n  font:400 12px/1.4 ui-monospace,Menlo,monospace;text-align:left;cursor:pointer}\n.val .k{flex:0 0 46px;font:600 9.5px/1.4 -apple-system,sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}\n.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}\n.val.human{font:400 12.5px/1.4 -apple-system,sans-serif}\n.val.human .v{overflow-wrap:break-word}\n.val .copy{flex:0 0 auto;font:600 9.5px/1 -apple-system,sans-serif;color:var(--muted)}\n.models{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 12px}\n.chip{padding:5px 9px;border-radius:999px;border:1px solid var(--rule-2);background:var(--paper-2);\n  font:500 10.5px/1 ui-monospace,Menlo,monospace;color:var(--ink-2)}\n\n/\* ---------- the journal: lines with air, a mark on the left ---------- *\/\n.log{font:400 10.5px/1.5 ui-monospace,Menlo,monospace;color:var(--ink-2);display:flex;flex-direction:column;gap:2px}\n.log .ln{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--rule);word-break:break-word}\n.log .ln:last-child{border-bottom:0}\n.log .ln .g{flex:0 0 auto;width:6px;height:6px;margin-top:5px;border-radius:50%;background:var(--rule-3)}\n.log .ln.ok .g{background:var(--accent)}\n.log .ln.warn,.log .ln.bad{color:var(--muted)}\n.log .ln .t{flex:0 0 auto;color:var(--muted)}\n.log .ln .m{flex:1 1 auto;min-width:0}\n.empty{padding:14px 6px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5}\n.spin{width:14px;height:14px;margin:10px auto;border-radius:50%;border:1.5px solid var(--rule-2);border-top-color:var(--ink);animation:sp .7s linear infinite}\n@keyframes sp{to{transform:rotate(360deg)}}\n.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:9px 14px;\n  border-radius:999px;background:var(--paper-3);border:1px solid var(--rule-3);color:var(--ink);\n  font:12px/1.35 inherit;text-align:center;opacity:0;pointer-events:none;\n  transition:opacity .2s,transform .2s;z-index:2147483647}\n.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}\n@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}\n";
+  var CSS = ":host,*{box-sizing:border-box}\n/\* MSE theme: black and white, nothing else.\n   The panel is a sheet of dark glass over a page we do not own: one paper, one rule, one ink, one accent.\n   The accent is white — a border that lights up — so no hue is ever introduced by us. *\/\n.mse{\n  --paper:#0a0a0a;--paper-2:#111111;--paper-3:#161616;\n  --ink:#f2f2f2;--ink-2:#c8c8c8;--muted:#8a8a8a;\n  --rule:#2a2a2a;--rule-2:#3a3a3a;--rule-3:#4d4d4d;\n  --accent:#ffffff;--accent-soft:rgba(255,255,255,.14);--accent-line:rgba(255,255,255,.6);\n  --r:10px;--r-panel:14px;--pill:999px;\n  --ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);\n  --sp-1:6px;--sp-2:10px;--sp-3:14px;\n  font:13.5px/1.45 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif;\n  color:var(--ink);-webkit-font-smoothing:antialiased;\n}\n\n/\* ---------- the pill: tiny, quiet; only the letters carry any light ---------- *\/\n.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;\n  height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);\n  background:var(--paper-2);border:1px solid var(--rule-2);color:var(--ink);\n  font:700 10.5px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.16em;text-indent:.16em;\n  text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);\n  cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;\n  transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}\n.pill.dragging{opacity:.9}\n.pill:active{transform:scale(.97)}\n.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;\n  background:var(--accent);color:#000;font:700 9px/14px -apple-system,sans-serif;text-align:center;text-indent:0;text-shadow:none}\n.pill.lit{animation:pill-press .9s linear}\n@keyframes pill-press{\n  0%,100%{text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);border-color:var(--rule-2)}\n  8%{text-shadow:0 0 12px rgba(255,255,255,.95),0 0 26px rgba(255,255,255,.5);border-color:var(--accent-line)}\n  40%{text-shadow:0 0 10px rgba(255,255,255,.62),0 0 20px rgba(255,255,255,.3);border-color:var(--rule-2)}}\n\n/\* ---------- the press: a white edge that flashes and goes down slowly, no colour, no fill ---------- *\/\n.press{position:relative;isolation:isolate}\n.press::before,.press::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;\n  opacity:0;transition:opacity .2s var(--ease-out)}\n.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 0 1px rgba(255,255,255,.85),0 0 14px 2px rgba(255,255,255,.22)}\n.press::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px rgba(255,255,255,.28)}\n.press.hot{animation:press-light 1.5s linear forwards}\n@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}\n  4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}\n  18%{--press:.5;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.28}74%{--press:.12}to{--press:0}}\n.press.hot::before{opacity:var(--press)}\n.press.hot::after{opacity:calc(var(--press) * .9)}\n/\* the chosen row: a hairline that stays, no glow, no colour *\/\n.press.lit{border-color:var(--accent-line)!important}\n.press.lit::before{opacity:.5}\n.press.lit::after{opacity:.2}\n.press:active{transform:scale(.99)}\n\n/\* ---------- the panel ---------- *\/\n.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:300px;max-width:calc(100vw - 16px);\n  background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r-panel);\n  box-shadow:0 18px 48px rgba(0,0,0,.7);overflow:hidden;\n  transform-origin:var(--ox,100%) var(--oy,100%);\n  opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);\n  transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}\n.pop.in{opacity:1;transform:none;filter:none}\n.pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}\n.pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}\n@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}\n\n/\* the head: the name, the view, three buttons — with air, and a rule under it *\/\n.ph{display:flex;align-items:center;gap:8px;padding:12px 12px 11px;border-bottom:1px solid var(--rule)}\n.ph .t{flex:1 1 auto;min-width:0;font:700 11px/1 -apple-system,sans-serif;letter-spacing:.16em;\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 0 9px rgba(255,255,255,.28)}\n.ph .t em{font:400 10.5px/1 -apple-system,sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none;display:block;margin-top:5px}\n.ib{flex:0 0 auto;width:28px;height:28px;display:flex;align-items:center;justify-content:center;\n  border-radius:9px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);\n  font:600 13px/1 Georgia,serif;cursor:pointer;transition:border-color .18s var(--ease),color .18s var(--ease)}\n.ib:hover{border-color:var(--rule-3);color:var(--ink)}\n.ib.x{font:400 15px/1 -apple-system,sans-serif}\n.ib.back{font:400 14px/1 -apple-system,sans-serif}\n\n/\* the body: air between rows and inside them, a group is separated by a rule and a name *\/\n.pb{max-height:min(46vh,300px);overflow:auto;-webkit-overflow-scrolling:touch;padding:12px}\n.pb::-webkit-scrollbar{width:0}\n.sec{font:700 9.5px/1 -apple-system,sans-serif;letter-spacing:.18em;color:var(--muted);margin:16px 0 9px}\n.sec:first-child{margin-top:0}\n.group{display:flex;flex-direction:column;gap:8px}\n.group + .sec{margin-top:16px}\n\n/\* ---------- answers: one row a tap wide, a box on the left, a letter, the text, the share ---------- *\/\n.ans{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;margin:0;padding:10px 11px;\n  border-radius:var(--r);border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:400 13px/1.35 inherit;text-align:left;cursor:pointer;\n  transition:border-color .18s var(--ease),background .18s var(--ease)}\n.ans:hover{border-color:var(--rule-3)}\n.ans .mark{flex:0 0 auto;width:18px;height:18px;border-radius:5px;border:1px solid var(--rule-3);\n  display:flex;align-items:center;justify-content:center;font:700 10px/1 inherit;color:#000}\n.ans.best .mark{background:var(--accent);border-color:var(--accent)}\n.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}\n.ans .pct{flex:0 0 auto;font:600 10.5px/1 -apple-system,sans-serif;color:var(--muted)}\n.ans.agent,.ans.ai{border-style:dashed}\n.ans.ai.busy .lbl{color:var(--muted)}\n.tag{font:600 9px/1 -apple-system,sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:5px}\n\n/\* ---------- one status line, never a paragraph ---------- *\/\n.row{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink-2);\n  font:400 11.5px/1.35 inherit;text-align:left;cursor:pointer;margin:12px 0 8px}\n/\* the status line closes the panel: a rule above it, the last line of the sheet *\/\n.pb > .row:last-child{margin-bottom:0}\n.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--rule-3)}\n.row .dot.ok{background:var(--accent)}\n.row .dot.warn,.row .dot.bad{background:var(--muted)}\n.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.row .more{flex:0 0 auto;font-size:10.5px;color:var(--muted)}\n\n/\* ---------- the controls of the gateway view: a stack, one gap, never two buttons glued ---------- *\/\n.frow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}\n.btn{flex:1 1 auto;min-width:0;height:34px;padding:0 12px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:600 12px/1 inherit;cursor:pointer;white-space:nowrap;\n  transition:border-color .18s var(--ease),color .18s var(--ease)}\n.btn:hover{border-color:var(--rule-3)}\n.btn.solid{background:transparent;color:var(--ink);border-color:var(--accent-line)}\n.btn.solid:hover{border-color:var(--accent)}\n.inp{flex:1 1 auto;min-width:0;width:100%;height:34px;padding:0 11px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:12.5px/1 -apple-system,sans-serif;outline:none;margin:0 0 10px}\n.inp:focus{border-color:var(--accent-line)}\n\n/\* the copy value: a row that is a tap target, the key above the value, never a run-on line *\/\n.val{display:flex;align-items:center;gap:10px;width:100%;padding:10px 11px;margin:0 0 8px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink);\n  font:400 12px/1.4 ui-monospace,Menlo,monospace;text-align:left;cursor:pointer}\n.val .k{flex:0 0 46px;font:600 9.5px/1.4 -apple-system,sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}\n.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}\n.val.human{font:400 12.5px/1.4 -apple-system,sans-serif}\n.val.human .v{overflow-wrap:break-word}\n.val .copy{flex:0 0 auto;font:600 9.5px/1 -apple-system,sans-serif;color:var(--muted);letter-spacing:.06em}\n.val[disabled]{opacity:.55;cursor:default}\n.models{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 12px}\n.chip{padding:5px 9px;border-radius:999px;border:1px solid var(--rule-2);background:var(--paper-2);\n  font:500 10.5px/1 ui-monospace,Menlo,monospace;color:var(--ink-2)}\n\n/\* ---------- the journal: lines with air, a mark on the left ---------- *\/\n.log{font:400 10.5px/1.5 ui-monospace,Menlo,monospace;color:var(--ink-2);display:flex;flex-direction:column;gap:2px}\n.log .ln{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--rule);word-break:break-word}\n.log .ln:last-child{border-bottom:0}\n.log .ln .g{flex:0 0 auto;width:6px;height:6px;margin-top:5px;border-radius:50%;background:var(--rule-3)}\n.log .ln.ok .g{background:var(--accent)}\n.log .ln.warn,.log .ln.bad{color:var(--muted)}\n.log .ln .t{flex:0 0 auto;color:var(--muted)}\n.log .ln .m{flex:1 1 auto;min-width:0}\n.empty{padding:14px 6px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5}\n.spin{width:14px;height:14px;margin:10px auto;border-radius:50%;border:1.5px solid var(--rule-2);border-top-color:var(--ink);animation:sp .7s linear infinite}\n@keyframes sp{to{transform:rotate(360deg)}}\n.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:9px 14px;\n  border-radius:999px;background:var(--paper-3);border:1px solid var(--rule-3);color:var(--ink);\n  font:12px/1.35 inherit;text-align:center;opacity:0;pointer-events:none;\n  transition:opacity .2s,transform .2s;z-index:2147483647}\n.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}\n@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}\n";
 
    
    
@@ -4365,43 +4366,6 @@ var __ssW=window,__msePageWindow=window;
     }
 
      
-    function runAi(q, why) {
-      var br = win.MSEBridge;
-      if (!br) return;
-      state.ai = { state: 'running', text: '' };
-      render();
-      var t0 = Date.now();
-      var buf = '';
-      var finish = function (ok, text, extra) {
-        var ms = Date.now() - t0;
-        if (ok) {
-          logAdd('agent', true, 'AI: ' + String(text).slice(0, 40), { ms: ms });
-          state.ai = { state: 'ok', text: String(text), model: (extra && extra.model) || null };
-        } else {
-          logAdd('agent', false, 'AI: ' + (text || 'no answer'), { ms: ms });
-          state.ai = { state: 'error', text: String(text || 'no answer') };
-        }
-        render();
-      };
-      br.chat(aiPrompt(q), function (chunk) {
-        buf += chunk;
-        state.ai = { state: 'running', text: buf };
-        if (pop && state.route === 'answers') render();
-      }).then(function (res) {
-         
-        var plain = res && res.choices && res.choices[0] && res.choices[0].message ? String(res.choices[0].message.content || '') : '';
-        var text = (buf || plain || '').trim();
-        if (!text) { finish(false, 'the model said nothing'); return; }
-        finish(true, text, { model: res && res.model });
-      }, function (e) {
-        var msg = (e && e.message) || 'network';
-        if (/40[13]/.test(msg)) finish(false, 'key not accepted');
-        else finish(false, msg.slice(0, 80));
-        state.tier = /40[13]/.test(msg) ? 'base' : state.tier;
-      });
-    }
-
-     
     function aiAllowed() { return state.tier === 'owner'; }
 
      
@@ -4475,53 +4439,37 @@ var __ssW=window,__msePageWindow=window;
       body.appendChild(N(statusLine(), 1));
     }
 
-     
+    
+
     function appendAi(q) {
-      var ai = state.ai;
-      if (!ai || ai.state === 'idle') {
-         
-        var ask = el('button', 'ans press ai');
-        ask.setAttribute('type', 'button');
-        ask.appendChild(el('span', 'mark', '✦'));
-        ask.appendChild(el('span', 'lbl', 'ask AI'));
-        ask.appendChild(el('span', 'tag', 'AI'));
-        ask.addEventListener('click', function () { flash(ask); runAi(q, 'asked'); });
-        body.appendChild(N(ask, 1));
-        return;
-      }
-      if (ai.state === 'running') {
+      var ai = state.agent || { state: 'idle' };
+      if (ai.state === 'running' || ai.state === 'retry') {
         var run = el('div', 'ans ai busy');
         run.appendChild(el('span', 'mark', '✦'));
-        run.appendChild(el('span', 'lbl', ai.text ? ai.text : 'AI is thinking…'));
+        run.appendChild(el('span', 'lbl', ai.state === 'retry' ? 'agent is busy, retrying in ' + ai.retryIn + ' s' : 'agent is thinking…'));
         run.appendChild(el('span', 'tag', 'AI'));
         body.appendChild(N(run, 1));
         return;
       }
-      if (ai.state === 'error') {
-        var err = el('button', 'ans press ai');
-        err.setAttribute('type', 'button');
-        err.appendChild(el('span', 'mark', '✦'));
-        err.appendChild(el('span', 'lbl', 'AI: ' + (ai.text || 'no answer')));
-        err.appendChild(el('span', 'tag', 'AI'));
-        err.addEventListener('click', function () { flash(err); runAi(q, 'again'); });
-        body.appendChild(N(err, 1));
-        return;
-      }
-      var row = aiRow(ai.text);
-      row.ai = true;
-      row.label = ai.text;
-      var a = el('button', 'ans press ai best');
+      var label = ai.state === 'ok' ? ai.answer
+        : ai.state === 'error' ? 'agent: ' + (ai.text || 'error')
+        : 'ask the agent';
+      var a = el('button', 'ans press ai' + (ai.state === 'ok' ? ' best' : ''));
       a.setAttribute('type', 'button');
       a.appendChild(el('span', 'mark', '✦'));
-      a.appendChild(el('span', 'lbl', ai.text));
+      a.appendChild(el('span', 'lbl', label));
       a.appendChild(el('span', 'tag', 'AI' + (ai.model ? ' · ' + ai.model : '')));
       a.addEventListener('click', function () {
         flash(a);
-        win.setTimeout(function () {
-          var res = applyAnswer(q, row);
-          if (res.ok) { toast(res.how === 'text' ? 'filled in' : 'selected: ' + ai.text.slice(0, 40)); setBadge(0); win.setTimeout(closePop, 420); }
-          else toast('the AI answered with something not in the form');
-        }, 70);
+        if (ai.state === 'ok' && ai.answer) {
+          win.setTimeout(function () {
+            var res = applyAnswer(q, { label: ai.answer, correctness: 0, count: 0, agent: true });
+            if (res.ok) { toast(res.how === 'text' ? 'filled in' : 'selected: ' + String(ai.answer).slice(0, 40)); setBadge(0); win.setTimeout(closePop, 420); }
+            else toast('not in the form');
+          }, 70);
+          return;
+        }
+        runAgent(false);
       });
       body.appendChild(N(a, 1));
     }
@@ -4532,14 +4480,13 @@ var __ssW=window,__msePageWindow=window;
       var row = el('div', 'row');
       row.appendChild(el('span', 'dot ' + (st.state === 'ok' ? 'ok' : st.state === 'error' ? 'bad' : st.state === 'retry' || st.state === 'running' ? 'warn' : '')));
       var txt;
-      if (st.state === 'idle') txt = 'agent: ask';
+      if (st.state === 'idle') txt = 'agent: not asked';
       else if (st.state === 'running') txt = 'agent is thinking…';
-      else if (st.state === 'ok') txt = 'agent: ' + (st.answer || '—') + (st.model ? ' · ' + st.model : '');
+      else if (st.state === 'ok') txt = 'agent: ' + (st.answer || '—');
       else if (st.state === 'retry') txt = 'agent is busy, retrying in ' + st.retryIn + ' s';
       else txt = 'agent: ' + (st.text || 'error');
       row.appendChild(el('span', 'txt', txt));
-      row.appendChild(el('span', 'more', st.state === 'ok' ? 'again' : st.state === 'running' ? '…' : 'run'));
-      return press(row, function () { runAgent(false); });
+      return row;
     }
 
     function runAgent(automatic) {
@@ -4565,7 +4512,9 @@ var __ssW=window,__msePageWindow=window;
           logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
           state.agent = { state: 'ok', answer: res.answer, model: res.model };
           var row = { label: res.answer, correctness: 0, count: 0, agent: true };
-          state.rows = [row].concat(state.rows || []);
+          if (!(state.rows || []).some(function (r) { return r.label === row.label && r.agent; })) {
+            state.rows = [row].concat(state.rows || []);
+          }
           render();
           var applied = applyAnswer(q, row);
           if (applied.ok) toast('agent picked: ' + String(res.answer).slice(0, 40));
@@ -4608,6 +4557,7 @@ var __ssW=window,__msePageWindow=window;
       if (!q) { render(); return; }
       state.loading = true;
       state.ai = null;
+      state.agent = null;
       render();
        
       var tier = refreshTier();
@@ -4631,14 +4581,14 @@ var __ssW=window,__msePageWindow=window;
         setBadge(state.rows.length);
         return tier.then(function () {
            
-          if (!state.rows.length && aiAllowed() && (!state.ai || state.ai.state === 'idle')) runAi(q, 'empty');
+          if (!state.rows.length && aiAllowed() && (!state.agent || state.agent.state === 'idle')) runAgent(true);
           render();
         });
       }, function (e) {
         state.loading = false;
         state.error = e.message;
         return tier.then(function () {
-          if (aiAllowed() && (!state.ai || state.ai.state === 'idle')) runAi(q, 'error');
+          if (aiAllowed() && (!state.agent || state.agent.state === 'idle')) runAgent(true);
           render();
         });
       });
@@ -4664,6 +4614,8 @@ var __ssW=window,__msePageWindow=window;
       var hint = el('span', 'copy', '');
       row.appendChild(hint);
       if (!copyable) { row.classList.remove('press'); row.disabled = true; return row; }
+       
+      hint.textContent = 'copy';
       row.addEventListener('click', function () {
         flash(row);
         win.MSEBridge.copy(value).then(function (ok) {
@@ -4690,7 +4642,7 @@ var __ssW=window,__msePageWindow=window;
       var good = st && st.state === 'active';
       line.appendChild(el('span', 'dot ' + (good ? 'ok' : st ? 'warn' : '')));
       line.appendChild(el('span', 'txt', good ? 'key accepted' : st ? (st.message || 'key not checked') : 'key not checked'));
-      line.appendChild(el('span', 'more', 'AI gateway'));
+      line.appendChild(el('span', 'more', 'open'));
       body.appendChild(N(press(line, function () { state.route = 'gateway'; render(); }), 1));
       var net = el('div', 'row');
       net.appendChild(el('span', 'dot'));
@@ -4935,7 +4887,11 @@ var __ssW=window,__msePageWindow=window;
           rows: state.rows,
           error: state.error,
           agent: state.agent,
-          ai: state.ai,
+           
+          ai: state.agent && state.agent.state === 'ok' ? { state: 'ok', text: state.agent.answer, model: state.agent.model }
+            : state.agent && state.agent.state === 'error' ? { state: 'error', text: state.agent.text }
+            : state.agent && state.agent.state === 'running' ? { state: 'running', text: '' }
+            : null,
           tier: state.tier,
           meta: state.meta,
           identity: identity(),

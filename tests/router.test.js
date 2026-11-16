@@ -16,7 +16,7 @@ Object.assign(process.env, {
   MSE_UPSTREAM_PORT: String(UP_PORT),
   MSE_UPSTREAM_HOST: '127.0.0.1',
   MSE_MODEL: 'mock-model',
-  MSE_MODELS: 'mock-model,gemini-3-flash',
+  MSE_MOCK_MODELS: 'mock-model,gemini-3-flash',
   MSE_DAILY_QUOTA: '3',
   MSE_ALLOW_ORIGINS: '*',
   MSE_PUBLIC_URL: 'https://mse-gateway.example.ts.net'
@@ -137,16 +137,17 @@ test('R8 /admin/state is the same report as before, and /admin/quota changes the
   assert.equal((await q.json()).quota, 50);
   const st = await (await get('/admin/state', admin)).json();
   assert.equal(st.quota, 50);
-  assert.equal(st.version, '2.3.0');
+  assert.equal(st.version, '2.4.0');
   assert.ok(Array.isArray(st.log) && st.log.length > 0, 'the log tells what happened');
   assert.equal(st.backend, 'tailscale');
 });
 
 test('R9 /v1/models is named to an allowed device and denied to a stranger', async () => {
+  await router.modelsReady;
   const open = await get('/v1/models');
   assert.equal(open.status, 200, 'the list itself is public, as OpenAI clients expect');
   const list = await open.json();
-  assert.ok(list.data.some((m) => m.id === 'gemini-3-flash'));
+  assert.deepEqual(list.data.map((m) => m.id), ['mock-model', 'gemini-3-flash'], 'the backend\'s list, verbatim');
   const strandev = await get('/v1/models', { authorization: 'Bearer ' + key(9) });
   assert.equal(strandev.status, 200, 'an unknown key that asks for models still gets the list');
 });

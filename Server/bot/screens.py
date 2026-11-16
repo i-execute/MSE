@@ -80,7 +80,7 @@ def home(snap: dict[str, Any], notice: str = "") -> Rich:
     subtitle = muted("Moodle answer panel " + SEP + " router, AI backend, tailscale, telegram")
     if not router_ok:
         subtitle = status_chip(False, "router is not answering") + " " + muted(SEP + " everything below may be stale")
-    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.3.0"), icon="bot")
+    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.4.0"), icon="bot")
 
 
 def _pending_list(devices: list[dict[str, Any]]) -> str:
@@ -150,26 +150,49 @@ def people(snap: dict[str, Any], notice: str = "", only: str = "") -> Rich:
 
 # ------------------------------------------------------------------ model
 def model_screen(snap: dict[str, Any], notice: str = "", error: str = "") -> Rich:
+    """Pick the model, the OBHOD way: a numbered table of what the backend offers, the live one marked, and one
+    numbered button per row — a tap switches, nothing is typed unless the owner wants to type it."""
     health = _health(snap)
     offered = [str(m) for m in (health.get("models") or [])]
-    current = str(health.get("model") or "—")
-    blocks = [
-        facts([("now", code(current)), ("offered by the backend", code(str(len(offered))))], icon="cpu"),
-    ]
+    current = str(health.get("model") or "")
+    source = str(health.get("modelsSource") or "")
+    blocks: list[str] = []
     if notice:
         blocks.append(f"<p>{status_chip(True, notice)}</p>")
     if error:
         blocks.append(quote(esc(error), "the router did not take it"))
-    if offered:
-        blocks.append(heading("pick one", 3, icon="cpu"))
-        buttons = [row(button(m, "model:set:" + m, icon="ok" if m == current else "cpu")) for m in offered[:8]]
-    else:
-        blocks.append(quote(muted("the backend did not name a single model"), "empty"))
-        buttons = []
-    buttons.append(input_row("type a name", "model", icon="tag"))
+
+    if not offered:
+        blocks.append(quote(muted("the backend named no model"), "nothing to pick"))
+        return screen(
+            "model", muted("the local backend is not answering"),
+            blocks,
+            [row(button("ask the backend", "model:refresh", icon="refresh"),
+                 input_row("type a name", "model", icon="tag")),
+             row(button("back", "home", icon="back"))],
+            icon="cpu",
+        )
+
+    rows: list[tuple[str, str, str]] = []
+    for idx, name in enumerate(offered[:10], start=1):
+        live = "is on" if name == current else "off"
+        rows.append(("ok" if name == current else "cpu", f"{idx} · {name}", code(live)))
+    blocks.append(table(rows, ("model of the backend", "now")))
+    blocks.append(muted("source: " + (source or "unknown") + " · " + str(len(offered)) + " offered"))
+
+    numbers = [button(str(idx), "model:set:" + name, icon="ok" if name == current else "cpu")
+               for idx, name in enumerate(offered[:10], start=1)]
+    buttons = [row(*numbers[:5])]
+    if len(numbers) > 5:
+        buttons.append(row(*numbers[5:10]))
+    buttons.append(
+        row(
+            button("ask the backend again", "model:refresh", icon="refresh"),
+            input_row("type a name", "model", icon="tag"),
+        )
+    )
     buttons.append(row(button("back", "home", icon="back")))
-    return screen("model", muted("the model belongs to the local AI backend; the router only reports what it offers"),
-                  blocks, buttons, icon="cpu")
+    return screen("model", muted("the list is the backend's; the router only reports it"), blocks, buttons, icon="cpu")
 
 
 # ------------------------------------------------------------------ quota

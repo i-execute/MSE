@@ -110,6 +110,15 @@ class Gateway:
     def disallow(self, moodle_id: str) -> dict[str, Any]:
         return self._call("POST", "/admin/disallow", {"moodleId": str(moodle_id)})
 
+    def models(self, refresh: bool = False) -> dict[str, Any]:
+        """The models of the local backend. refresh=True asks the backend again (the router does the call)."""
+        if refresh:
+            return self._call("POST", "/admin/models", {"refresh": True})
+        return self._call("GET", "/admin/models")
+
+    def set_model(self, model: str) -> dict[str, Any]:
+        return self._call("POST", "/admin/model", {"model": str(model)})
+
     def set_quota(self, quota: int) -> dict[str, Any]:
         return self._call("POST", "/admin/quota", {"quota": int(quota)})
 

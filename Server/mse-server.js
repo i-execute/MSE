@@ -39,7 +39,7 @@ const CFG = {
   upstreamKey: process.env.MSE_UPSTREAM_KEY || '',
   upstreamHeader: process.env.MSE_UPSTREAM_AUTH_HEADER || 'authorization',
   upstreamPrefix: process.env.MSE_UPSTREAM_AUTH_PREFIX === undefined ? 'Bearer ' : process.env.MSE_UPSTREAM_AUTH_PREFIX,
-  model: process.env.MSE_MODEL || 'gpt-4o-mini',
+  model: process.env.MSE_MODEL || '',
   models: (process.env.MSE_MODELS || '').split(',').map((s) => s.trim()).filter(Boolean),
   dailyQuota: Number(process.env.MSE_DAILY_QUOTA || 200),
   registerPerHour: Number(process.env.MSE_REGISTER_PER_HOUR || 20),
