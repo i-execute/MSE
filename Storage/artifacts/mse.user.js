@@ -4458,7 +4458,8 @@ var __ssW=window,__msePageWindow=window;
       a.setAttribute('type', 'button');
       a.appendChild(el('span', 'mark', '✦'));
       a.appendChild(el('span', 'lbl', label));
-      a.appendChild(el('span', 'tag', 'AI' + (ai.model ? ' · ' + ai.model : '')));
+       
+      a.appendChild(el('span', 'tag', 'AI'));
       a.addEventListener('click', function () {
         flash(a);
         if (ai.state === 'ok' && ai.answer) {
@@ -4510,7 +4511,8 @@ var __ssW=window,__msePageWindow=window;
         var ms = Date.now() - t0;
         if (res.ok && res.answer) {
           logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
-          state.agent = { state: 'ok', answer: res.answer, model: res.model };
+           
+          state.agent = { state: 'ok', answer: res.answer };
           var row = { label: res.answer, correctness: 0, count: 0, agent: true };
           if (!(state.rows || []).some(function (r) { return r.label === row.label && r.agent; })) {
             state.rows = [row].concat(state.rows || []);
@@ -4675,6 +4677,7 @@ var __ssW=window,__msePageWindow=window;
           gw.models = out[0];
           gw.check = out[1];
           gw.busy = null;
+           
           logAdd('gateway', true, 'AI gateway is up · ' + (out[0].models.length || 0) + ' models', { ms: r.ms });
           render();
           return r;
@@ -4745,14 +4748,6 @@ var __ssW=window,__msePageWindow=window;
             });
           }), 1));
         }
-      }
-      if (gw.models && gw.models.models.length) {
-        body.appendChild(N(el('div', 'sec', 'models'), 1));
-        var list = el('div', 'models');
-        gw.models.models.forEach(function (m) { list.appendChild(el('span', 'chip', m)); });
-        body.appendChild(N(list, 1));
-      } else if (gw.models && !gw.models.ok) {
-        body.appendChild(N(el('div', 'empty', gw.models.message), 1));
       }
       body.appendChild(N(statusLine(), 1));
     }

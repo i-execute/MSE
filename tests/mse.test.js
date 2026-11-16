@@ -451,8 +451,12 @@ test('M11 the gateway and the agent: check, models, allow by ID, and the agent f
     await page.waitForTimeout(2500);
     const checked = await page.evaluate(() => window.__mse.state());
     assert.match(checked.pop.text, /AI gateway answered/, 'the gateway answers');
-    assert.match(checked.pop.text, /mock-model/, 'the model that will help is named');
-    assert.match(checked.pop.text, /gpt-4o-mini/, 'and the other one it offers');
+    /* 2.4: the panel does not name models any more — the router answers for them; the check reports the address
+       and the key, and the journal keeps the count of models the gateway offers */
+    assert.doesNotMatch(checked.pop.text, /mock-model|gpt-4o-mini/, 'the panel names no model: the router decides');
+    const gwLog = await page.evaluate(() => window.__mse.log());
+    assert.ok(gwLog.some((l) => /AI gateway is up/.test(l.text)), 'the journal says the gateway is up');
+    assert.ok(gwLog.some((l) => /\d+ models/.test(l.text)), 'and how many models it offers');
     await page.screenshot({ path: path.join(EVID, '5-gateway.png') });
 
     /* 3. the registration is pending, and the agent refuses until the owner allows the id */

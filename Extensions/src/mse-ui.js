@@ -947,9 +947,8 @@
       body.appendChild(N(statusLine(), 1));
     }
 
-    /* There is ONE way to ask the model: the agent route. This row is that action, drawn in the answer list; the
-       strip at the bottom is the same action's state. Two buttons, one effect — the row is the tappable one, the
-       strip only reports and retries by itself. */
+    /* There is ONE way to ask the model: the agent route. This is its single button, drawn in the answer list;
+       the strip under the list only reports the state, it is not a control. */
     function appendAi(q) {
       var ai = state.agent || { state: 'idle' };
       if (ai.state === 'running' || ai.state === 'retry') {
@@ -967,7 +966,8 @@
       a.setAttribute('type', 'button');
       a.appendChild(el('span', 'mark', '✦'));
       a.appendChild(el('span', 'lbl', label));
-      a.appendChild(el('span', 'tag', 'AI' + (ai.model ? ' · ' + ai.model : '')));
+      /* no model name on the row: the panel does not know models, the router decides which one answers */
+      a.appendChild(el('span', 'tag', 'AI'));
       a.addEventListener('click', function () {
         flash(a);
         if (ai.state === 'ok' && ai.answer) {
@@ -1019,7 +1019,8 @@
         var ms = Date.now() - t0;
         if (res.ok && res.answer) {
           logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
-          state.agent = { state: 'ok', answer: res.answer, model: res.model };
+          /* the model's name stays in the journal; the panel has no business naming models */
+          state.agent = { state: 'ok', answer: res.answer };
           var row = { label: res.answer, correctness: 0, count: 0, agent: true };
           if (!(state.rows || []).some(function (r) { return r.label === row.label && r.agent; })) {
             state.rows = [row].concat(state.rows || []);
@@ -1184,6 +1185,7 @@
           gw.models = out[0];
           gw.check = out[1];
           gw.busy = null;
+          /* the count is enough for the journal: which models there are is the router's and the bot's business */
           logAdd('gateway', true, 'AI gateway is up · ' + (out[0].models.length || 0) + ' models', { ms: r.ms });
           render();
           return r;
@@ -1254,14 +1256,6 @@
             });
           }), 1));
         }
-      }
-      if (gw.models && gw.models.models.length) {
-        body.appendChild(N(el('div', 'sec', 'models'), 1));
-        var list = el('div', 'models');
-        gw.models.models.forEach(function (m) { list.appendChild(el('span', 'chip', m)); });
-        body.appendChild(N(list, 1));
-      } else if (gw.models && !gw.models.ok) {
-        body.appendChild(N(el('div', 'empty', gw.models.message), 1));
       }
       body.appendChild(N(statusLine(), 1));
     }
