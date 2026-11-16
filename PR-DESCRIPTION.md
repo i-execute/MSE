@@ -96,6 +96,7 @@
 | `Server/stack/mse_setup.py` | `Model name on the local backend (OpenAI-compatible)` | `model name on the local backend (OpenAI-compatible)` |
 | `Extensions/src/mse-ui.js` | `AI: …` / строка-кнопка `agent: ask` | одна строка `ask the agent`, состояние — `agent is thinking…` / `agent is busy, retrying in N s` |
 | `Extensions/src/mse-ui.js` | `ask AI`, `AI is thinking…`, `agent failed: …` | `ask the agent`, `agent is thinking…`, `agent: <причина>` |
+| экран шлюза в расширении | блок `models` со списком имён чипами | списка нет: панель о моделях не знает, в журнале только «N models» |
 | `tools/preview_rich.py` | демо-данные с реальными именами моделей | `demo-model-a`, `demo-model-b` |
 
 ## Баг 6 — одна кнопка на действие
