@@ -22,24 +22,26 @@ OUT = ROOT.parent / "deliverables"   # "out" is not kept in a snapshot; "deliver
 API = "https://api.telegram.org/bot%s/%s"
 LIMIT = 3900
 
-REPORT = """<b>MSE 2.3 — сервер и расширение переделаны, всё проверено запуском</b>
+REPORT = """<b>MSE 2.4 — агент отвечает, модели приходят из бэкенда, одна кнопка на действие</b>
 
-<b>A1/A2 — установка сама поднимает туннель и ЖДЁТ внешний https.</b> Было: tailscale не залогинен, url null, а снаружи <code>SSL routines::unexpected eof</code>. Теперь <code>mse-tunnel.sh wait --timeout 60</code> (повтор на eof/handshake/сертификат, понятная причина отказа) вызывается после <code>funnel</code> и до рестарта роутера, а адрес после ожидания принимается только если он <code>https://…</code>. Проверка запуском: <code>tests/tunnel_test.sh</code> — 10/10 (локальный TLS-сервер, отказ в бюджете, порядок строк install.sh).
+<b>Баг 1 (критический) — <code>/mse/v1/agent</code> обслуживает роутер.</b> Было: путь целиком уходил в прокси на <code>127.0.0.1:8799</code>, и на каждый вопрос с вариантами приходило <code>not found: /mse/v1/agent</code> да ещё три ретрая подряд. Теперь <code>handleAgent</code> в <code>mse-router.js</code> сам строит <code>POST /v1/chat/completions</code> к локальному бэкенду, разбирает ответ и сверяет его с вариантами: 401 чужой ключ, 403 не active, 429 квота с <code>retry-after</code>, 503 «бэкенд не назвал модель», 502 бэкенд молчит/мусор, 200 с <code>answer</code> из списка, а вариант «не из задачи» — честный <code>agent_error</code>. Проверка: <code>tests/agent_models.test.js</code> — мок-бэкенд знает только <code>/v1/*</code>, дальше register → allow → agent; <code>answer</code> из предложенных, ни один путь <code>/mse/*</code> до бэкенда не дошёл.
 
-<b>A3/A4 — один каталог данных.</b> Было <code>state not saved: ENOENT mkdir /opt/mse/data</code> и vault в <code>/opt/mse</code>. Теперь <code>/var/lib/mse</code> (режим 700, создаётся до старта юнитов): state.json, admin-token.txt и vault goygram. По ходу нашёлся и починен настоящий баг потери настроек — квота из панели не попадала в состояние и рестарт её откатывал. Проверка: <code>tests/state_persistence.py</code> на настоящем роутере — 24/24 (создал каталог сам, три цикла старт/стоп/старт, «обновление» сносит код и данные на месте).
+<b>Баг 3 — ноль хардкода моделей.</b> Было <code>MSE_MODEL || 'gemini-3-flash'</code> в роутере, список в <code>install.sh</code>, дефолт в TUI, <code>model: 'mse'</code> в расширении. Теперь источник истины — бэкенд: роутер спрашивает <code>GET /v1/models</code> при старте и по кнопке (<code>POST /admin/models</code>), кэширует в состоянии, отдаёт в <code>/v1/models</code>, <code>/health</code> (<code>models</code>, <code>modelsCount</code>, <code>modelsSource</code>) и <code>/admin/models</code>. <code>MSE_MODEL</code> — только дефолт: нет в списке → предупреждение в журнал и первая доступная модель. Расширение о моделях не знает вовсе. Проверка: тот же тест, второй сценарий — бэкенд A даёт три модели, бэкенд B одну, список меняется БЕЗ правки кода, а дефолт не из списка заменяется с записью в лог.
 
-<b>A5 — инлайн проверяется при старте.</b> <code>check_inline_mode()</code>: off → строка в журнал, одно сообщение тебе в чат, то же в self_check и на панели; сервер молчит → тревоги нет. <code>tests/inline_mode_check.py</code> — 16/16.
+<b>Баг 4 — экран модели в боте в манере обхода.</b> Список как CheckMenu: иконка на активной строке, <code>is on/is off</code>, подпись «source: … · N offered», кнопки <code>model:set:&lt;имя&gt;</code> по пять в ряд, «ask the backend again» и ручной ввод. Живые значения из <code>/v1/models</code>: <code>gw.models()</code>, <code>gw.models(True)</code>, <code>gw.set_model()</code>. Проверка: <code>tests/bot_selftest.py</code> — 14 экранов, 29 колбэков, все отвечают.
 
-<b>B1 — новый адрес заменяет старый во всех хранилищах.</b> Новый адрес пишется в оба хранилища, затем сканируются все ключи, похожие на адрес (localStorage сайта, хранилище расширения через рантайм, зеркало, старый ключ), и всё чужое удаляется; сохраняется только ПРОВЕРЕННЫЙ адрес, а список вычищенного уходит строкой в журнал панели. Проверка: <code>tests/b1_address.test.js</code> — 2/2 против двух настоящих https-шлюзов со счётчиками: старый не получает ни одного запроса, после перезагрузки старого нет нигде.
+<b>Баг 5 — тексты без слопа.</b> Прошёл все строки расширения, бота, TUI и установщика: без «please note», «that is expected», канцелярита и смеси языков. Таблица «было → стало» — в <code>PR-DESCRIPTION.md</code>.
 
-<b>B2 — воздух.</b> 8 px между строками, паддинги внутри строк, именованные группы (address/connection/answer, account/this device, journal), шапка в две строки вместо стены текста, ширина панели от реального вьюпорта и всегда внутри экрана (это нашлось на скриншоте — панель вылезала за правый край). Проверка: <code>tests/b2_b3_theme.test.js</code> измеряет всё это на живой панели.
+<b>Баг 6 — одна кнопка на действие.</b> Таблица кнопок снята с живого DOM: <code>evidence/b6-buttons.md</code>. Слито/удалено: второй путь к модели <code>ask AI</code> (целая функция <code>runAi</code>, ~60 строк) — остался один <code>/mse/v1/agent</code>; нижняя полоса агента больше не кнопка (действие уже есть строкой выше); название «AI» → «agent» везде; значение в аккаунте получило значок <code>copy</code> вместо неявного тапа; <code>AI gateway</code> → <code>open</code>. Проверка: <code>tests/b6_buttons.test.js</code> обходит все четыре экрана, вычисляет ключ действия и падает, если два элемента делают одно; отдельно — «check» ровно один, в шапке не больше двух кнопок.
 
-<b>B3 — строго ч/б.</b> Один файл темы <code>Extensions/src/theme.css</code> вставляется сборкой (второй копии нет, старая палитра удалена): бумага #0a0a0a, чернила #f2f2f2, единственный акцент — белая рамка выбранной строки, свечение только на буквах «MSE», системный шрифт. Ключ устройства на экране аккаунта теперь замаскирован. Проверка: тест обходит ВСЕ элементы всех четырёх экранов и требует ни одного цветного значения; скриншоты в <code>Storage/screenshots/</code> (приложены).
+<b>Баг 7 — установка и TUI спрашивают ключи.</b> Без терминала install.sh печатает точную команду с <code>MSE_BOT_TOKEN=…</code>, <code>MSE_OWNER_ID=…</code>, <code>MSE_TAILSCALE_KEY=…</code> и говорит, что спросить не может. С терминалом спрашивает все три с проверкой формата и тремя попытками. Порядок по журналу вызовов: файлы → <code>up</code> → <code>funnel</code> → <code>wait</code> → адрес в <code>MSE_PUBLIC_URL</code> → рестарт роутера последним. TUI на чистой машине перед установкой открывает «Model, Quota &amp; Keys», где пустые ключи помечены и обязательны. Проверка: <code>tests/install_dialog.py</code> — 28/28.
 
-<b>Прогоны:</b> расширение M1–M13 13/13, one-file 4/4, B1 2/2, B2/B3 2/2, роутер 9/9, шлюз 14/14, состояние 24/24, туннель 10/10, инлайн 16/16, бот 14 экранов/28 callback, формат инлайна ok, установка 24/24, TUI 19/19, <code>audit --strict</code> 0 hits ×3 — и всё это ещё раз с нуля из архива после свежего <code>npm install</code>.
+<b>Прогоны 2.4:</b> агент/модели 2/2, кнопки 2/2, роутер 9/9, шлюз 14/14, one-file 4/4, M1–M13 по одному 13/13, B1 2/2, B2/B3 2/2, состояние 24/24, туннель 10/10, инлайн зелёный, формат инлайна ok, установка 28/28, TUI 19/19, бот 14 экранов/29 колбэков, <code>audit --strict</code> 0 hits ×3 — и всё это ещё раз с нуля из архива после <code>npm install</code>. Версия 2.4.0, <code>mse.user.js</code> 2.4.0.
 
-<b>Ветка:</b> <code>release/2.3</code> (от <code>release/2.2</code>), коммиты <code>37d4b6e</code>, <code>a683d8f</code>, <code>a76e850</code>.
-<b>Не проверено живьём:</b> настоящий tailnet (нужен рабочий ключ tailscale и разрешённый Funnel) и реальный Telegram — всё остальное шло настоящим кодом. Прогон всего mse.test.js одним процессом падает по памяти песочницы (2 ГБ без swap) — каждый тест по отдельности зелёный.
+<b>Что осталось тебе (живой стенд):</b> настоящий tailnet и Telegram — за мной только код. Сценарий: <code>sudo mse</code> → Install, доставить <code>MSE-2.4-source.tar.gz</code>, открыть страницу попытки, нажать пилюлю «MSE», посмотреть строки базы и ответ агента, тапнуть по ответу и убедиться, что он встал в форму; затем <code>sudo mse</code> → Model, Quota &amp; Keys → «ask the backend again» и переключить модель тапом в боте.
+
+<b>Ветка:</b> <code>release/2.4</code> (от <code>44affc2</code>), коммит <code>12666a1</code>.
+<b>Чего не проверить здесь:</b> настоящий tailnet (нужен рабочий ключ и разрешённый Funnel) и живой Telegram. Полный прогон <code>mse.test.js</code> одним процессом падает по памяти песочницы (2 ГБ без swap) — каждый тест по отдельности зелёный.
 """
 
 
@@ -113,7 +115,7 @@ def main() -> int:
     good = send_text(REPORT)
     print("report: " + ("sent" if good else "failed"))
 
-    files = [OUT / "MSE-2.3-source.tar.gz", OUT / "MSE-release-2.3.bundle", ROOT / "PR-DESCRIPTION.md"]
+    files = [OUT / "MSE-2.4-source.tar.gz", OUT / "MSE-release-2.4.bundle", ROOT / "PR-DESCRIPTION.md"]
     files += sorted((ROOT / "Storage" / "screenshots").glob("*-bw.png"))
     for path in files:
         if args.text or not path.exists():
