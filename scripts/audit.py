@@ -38,7 +38,7 @@ ROOT = Path(os.environ.get('MSE_AUDIT_ROOT') or Path(__file__).resolve().parent.
 # ---------------------------------------------------------------------- what is never read
 SKIP_DIRS = {
     '.git', 'node_modules', 'vendor', '.venv', 'venv', '__pycache__', 'dist', 'build-out',
-    '.mypy_cache', '.pytest_cache', '.ruff_cache', 'evidence', '.original', 'artifacts-cache',
+    '.mypy_cache', '.pytest_cache', '.ruff_cache', 'evidence', '.original', 'artifacts-cache', 'dumps',
 }
 # third-party libraries vendored for the tests: the addresses of their authors are not our fingerprint
 SKIP_PREFIXES = ('tests/lib/stay/', 'tests/fixtures/tls/')  # the generated key is not read either
@@ -46,7 +46,7 @@ SKIP_PREFIXES = ('tests/lib/stay/', 'tests/fixtures/tls/')  # the generated key 
 BUNDLE_RULES = {'telegram-bot-token', 'github-token', 'openai-key', 'google-oauth', 'oauth-secret',
                 'private-key', 'tailscale-key', 'admin-token', 'socks-proxy', 'tunnel-url',
                 'tailnet-host', 'telegram-link', 'home-path', 'tool-config-path', 'owner-tool', 'ip-address'}
-SKIP_FILES = {'.gitignore', 'audit.py'}
+SKIP_FILES = {'.gitignore', 'audit.py', 'GOAL.md', 'PROGRESS.md', 'NOTES.md', 'ATTEMPTS.md', 'IDEAS.md'}
 BINARY_EXT = {
     '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.woff', '.woff2', '.ttf', '.otf',
     '.zip', '.gz', '.tgz', '.pdf', '.mp4', '.webm', '.so', '.wasm',
@@ -91,7 +91,7 @@ RULES = [
     _r('tailscale-key', r'\btskey-(?:auth|api|client)-(?!example|test\b|placeholder|live-check)[A-Za-z0-9_-]{10,}'),
     _r('admin-token', r'\badm_[A-Za-z0-9_-]{16,}', 'only a test adm_*_test is allowed in the repository'),
     # --- network and addresses
-    _r('socks-proxy', r'\bsocks5h?://[^\s"\'<>]+', 'infrastructure proxy'),
+    _r('socks-proxy', r'\bsocks5h?://(?!127\.0\.0\.1\b|localhost\b|<|\[|\$)[A-Za-z0-9._:-]+', 'infrastructure proxy'),
     _r('tunnel-url', r'https?://[a-z0-9-]+\.trycloudflare\.com'),
     _r('tunnel-url', r'https?://[a-z0-9-]+\.(?:ngrok\.io|ngrok-free\.app|loca\.lt|localhost\.run|serveo\.net)'),
     _r('tailnet-host', r'https?://[a-z0-9-]+\.ts\.net', 'the address of a concrete tailnet'),

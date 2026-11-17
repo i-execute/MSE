@@ -46,6 +46,9 @@ for(const [index,name] of [[3,'mse-ui'],[0,'mse-bridge']]) {
  report.pageScripts[name]={bytes:clean.code.length,sha256:sha(clean.code),sanitizer:clean.stats};
 }
 script=script.replace(/^(\/\/ @version\s+)\S+/m,'$1'+version);
+if(!script.includes('*://*/course/view.php*')){
+ script=script.replace('// @match        *://*/my/index.php*\n','// @match        *://*/my/index.php*\n// @match        *://*/course/view.php*\n// @match        *://*/course/index.php*\n');
+}
 report.version=version;report.oneFile.bytes=script.length;report.userscript.bytes=Buffer.byteLength(script);report.userscript.sha256=sha(script);
 fs.writeFileSync(artifact,script);fs.writeFileSync(reportPath,JSON.stringify(report,null,2)+'\n');
 console.log('repacked one-file artifact',version,report.userscript.sha256);

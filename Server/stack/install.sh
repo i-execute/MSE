@@ -358,6 +358,9 @@ MSE_ALLOW_ORIGINS=*
 MSE_UPSTREAM_HOST=127.0.0.1
 MSE_UPSTREAM_PORT=${MSE_UPSTREAM_PORT}
 MSE_UPSTREAM_KEY=
+# SOCKS5 proxy for the AI backend when datacenter IPs are geo-blocked by the provider (empty = direct)
+# Format: socks5://<host>:<port> (e.g. socks5://127.0.0.1:1080)
+AI_PROXY=${AI_PROXY:-}
 # empty means "the default the local backend offers first": the list itself is never written down here
 MSE_MODEL=${MSE_MODEL:-}
 # tailscale instead of cloudflared
@@ -383,7 +386,7 @@ ENV
 merge_env_from_environment() {
   if [ "$DRY" = "1" ]; then return 0; fi
   [ -f "$ENV_FILE" ] || return 0
-  for key in MSE_BOT_TOKEN MSE_OWNER_ID MSE_OWNER_USERNAME MSE_API_ID MSE_API_HASH MSE_TAILSCALE_KEY MSE_MODEL MSE_DAILY_QUOTA MSE_UPSTREAM_PORT MSE_PORT MSE_EMOJI; do
+  for key in MSE_BOT_TOKEN MSE_OWNER_ID MSE_OWNER_USERNAME MSE_API_ID MSE_API_HASH MSE_TAILSCALE_KEY MSE_MODEL MSE_DAILY_QUOTA MSE_UPSTREAM_PORT MSE_PORT MSE_EMOJI AI_PROXY; do
     val="${!key:-}"
     [ -n "$val" ] || continue
     [ "$(env_get "$key")" = "$val" ] && continue

@@ -353,12 +353,13 @@ function extractJson(text) {
 function buildAgentPrompt(body) {
   var options = Array.isArray(body.options) ? body.options.map(function (o, i) { return (i + 1) + '. ' + o; }).join('\n') : '';
   var system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
-    '{"answer": "<exactly one of the given options, character for character>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
+    '{"answer": "<verbatim option text>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
     'If there is no correct option or the data is missing, return {"error": "<short reason>"}. ' +
-    'Add nothing outside the JSON.';
+    'Add nothing outside the JSON. ' +
+    'MANDATORY: Return the EXACT VERBATIM text of the option as listed. Do NOT return numbers, digits, indexes, or letters. Numbering is strictly forbidden.';
   var user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
-  if (options) user += 'Options (pick exactly one):\n' + options + '\n';
-  if (body.multiple) user += 'Several may be correct: list them separated by "|" in answer.\n';
+  if (options) user += 'Options (pick exactly one; return exact verbatim text, numbers forbidden):\n' + options + '\n';
+  if (body.multiple) user += 'Several may be correct: list them separated by "|" in answer (verbatim text only, no numbers).\n';
   if (body.image) user += 'The question has an image attached, but it was not passed as text.\n';
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
@@ -419,7 +420,11 @@ async function handleAgent(req, res) {
     return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
   }
   /* the answer must be one of the options, character for character (after trimming): otherwise it is an error */
-  const picked = options.filter((o) => String(o).trim().toLowerCase() === answer.toLowerCase())[0];
+  let picked = options.filter((o) => String(o).trim().toLowerCase() === answer.toLowerCase())[0];
+  if (!picked && /^\d+$/.test(answer)) {
+    const idx = parseInt(answer, 10);
+    if (idx >= 1 && idx <= options.length) picked = options[idx - 1];
+  }
   if (options.length && !picked) {
     return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
   }

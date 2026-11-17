@@ -26,6 +26,7 @@
  */
 const http = require('http');
 const https = require('https');
+const net = require('net');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -46,11 +47,56 @@ process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
 process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
 const PORT = Number(process.env.MSE_PORT);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.6.1';
+const VERSION = '2.7.0';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
 const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
 const UPSTREAM_KEY = process.env.MSE_UPSTREAM_KEY || '';
+
+/* SOCKS5 proxy client helper for AI_PROXY (format: socks5://<host>:<port>) */
+function createSocksConnection(proxyUrlStr, targetHost, targetPort, timeoutMs, onConnect) {
+  let proxyUrl;
+  try { proxyUrl = new URL(proxyUrlStr); } catch (e) { return onConnect(e); }
+  const s = net.connect({ host: proxyUrl.hostname, port: Number(proxyUrl.port) || 1080 });
+  let done = false;
+  function finish(err, sock) {
+    if (done) return;
+    done = true;
+    s.removeAllListeners('error');
+    s.removeAllListeners('timeout');
+    if (err) { try { s.destroy(); } catch (_) {} onConnect(err); }
+    else onConnect(null, sock);
+  }
+  s.setTimeout(timeoutMs || 15000, () => finish(new Error('SOCKS5 proxy connection timeout')));
+  s.on('error', (e) => finish(e));
+  s.once('connect', () => {
+    // 1. SOCKS5 greeting: VER=5, NMETHODS=1, METHODS=[0 (no auth)]
+    s.write(Buffer.from([0x05, 0x01, 0x00]));
+    s.once('data', (greetingResp) => {
+      if (greetingResp[0] !== 0x05 || greetingResp[1] !== 0x00) {
+        return finish(new Error('SOCKS5 proxy authentication rejected: ' + greetingResp[1]));
+      }
+      // 2. CONNECT request: VER=5, CMD=1, RSV=0, ATYP=3 (domain), DOMAIN, PORT
+      const hostBuf = Buffer.from(targetHost, 'utf8');
+      const reqBuf = Buffer.alloc(4 + 1 + hostBuf.length + 2);
+      reqBuf[0] = 0x05;
+      reqBuf[1] = 0x01;
+      reqBuf[2] = 0x00;
+      reqBuf[3] = 0x03; // domain name
+      reqBuf[4] = hostBuf.length;
+      hostBuf.copy(reqBuf, 5);
+      reqBuf.writeUInt16BE(targetPort, 5 + hostBuf.length);
+      s.write(reqBuf);
+      s.once('data', (connectResp) => {
+        if (connectResp[0] !== 0x05 || connectResp[1] !== 0x00) {
+          return finish(new Error('SOCKS5 connection failed, status: ' + connectResp[1]));
+        }
+        s.setTimeout(0);
+        finish(null, s);
+      });
+    });
+  });
+}
 
 /* The one place a model name is written: MSE_MODEL is a *default*, not a list. The list itself comes from the local
    OpenAI-compatible backend (GET /v1/models) and is cached here; nothing else in the code names a model. */
@@ -63,7 +109,8 @@ const CFG = {
   modelsAt: 0,
   dailyQuota: Number(process.env.MSE_DAILY_QUOTA || 200),
   allowOrigins: String(process.env.MSE_ALLOW_ORIGINS || '*').split(',').map((s) => s.trim()).filter(Boolean),
-  timeoutMs: Number(process.env.MSE_TIMEOUT_MS || 120000)
+  timeoutMs: Number(process.env.MSE_TIMEOUT_MS || 120000),
+  aiProxy: String(process.env.AI_PROXY || '').trim()
 };
 
 /* ------------------------------------------------------------------ state */
@@ -97,8 +144,13 @@ function loadState() {
       };
       const q = Number(state.settings.dailyQuota);
       if (Number.isFinite(q) && q >= 0) CFG.dailyQuota = Math.floor(q);
-      const m = String(state.settings.model || '').trim();
-      if (m) CFG.model = m;
+      const envModel = String(process.env.MSE_MODEL || '').trim();
+      if (envModel) {
+        CFG.model = envModel;
+      } else {
+        const m = String(state.settings.model || '').trim();
+        if (m) CFG.model = m;
+      }
       const cached = Array.isArray(state.settings.models) ? state.settings.models.filter((x) => typeof x === 'string' && x.trim()) : [];
       if (cached.length) { CFG.models = cached; CFG.modelsSource = 'state'; }
     }
@@ -245,35 +297,87 @@ function registerDevice(body) {
   return { device: rec };
 }
 
+function getCandidateModels(requestedModel) {
+  const envModel = String(process.env.MSE_MODEL || '').trim();
+  const primary = requestedModel || envModel || CFG.model || (CFG.models && CFG.models[0]) || '';
+  const candidates = [];
+  if (primary) candidates.push(primary);
+  (CFG.models || []).forEach((m) => {
+    if (m && !candidates.includes(m)) candidates.push(m);
+  });
+  return candidates;
+}
+
 /* ------------------------------------------------------------------ the proxy */
 function proxyStream(req, res, bodyText, rec) {
-  const url = new URL(CFG.upstreamUrl + req.url);
-  const lib = url.protocol === 'https:' ? https : http;
-  const headers = { 'content-type': req.headers['content-type'] || 'application/json', accept: req.headers.accept || '*/*' };
-  if (UPSTREAM_KEY) headers.authorization = 'Bearer ' + UPSTREAM_KEY;
-  const upstream = lib.request({
-    method: req.method, hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80),
-    path: url.pathname + url.search, headers, timeout: CFG.timeoutMs
-  }, (up) => {
-    const pass = {};
-    for (const [k, v] of Object.entries(up.headers)) {
-      if (['connection', 'keep-alive', 'transfer-encoding', 'content-length', 'content-encoding'].includes(k)) continue;
-      pass[k] = v;
+  let bodyObj = null;
+  if (bodyText && req.method === 'POST' && req.url.startsWith('/v1/chat/completions')) {
+    bodyObj = parseJson(bodyText);
+  }
+  const isChat = !!(bodyObj && typeof bodyObj === 'object');
+  const envModel = String(process.env.MSE_MODEL || '').trim();
+  if (isChat && (!bodyObj.model || !String(bodyObj.model).trim())) {
+    bodyObj.model = envModel || CFG.model || (CFG.models && CFG.models[0]) || '';
+  }
+  const candidates = isChat ? getCandidateModels(bodyObj.model) : [null];
+  let candidateIdx = 0;
+
+  function trySend() {
+    const activeModel = candidates[candidateIdx];
+    let activeBody = bodyText;
+    if (isChat && activeModel) {
+      bodyObj.model = activeModel;
+      activeBody = JSON.stringify(bodyObj);
     }
-    pass['x-quota-left'] = String(quotaOf(rec));
-    res.writeHead(up.statusCode || 502, pass);
-    up.pipe(res);
-    up.on('end', () => { try { res.end(); } catch (e) {} });
-    up.on('error', () => { try { res.end(); } catch (e) {} });
-  });
-  upstream.on('timeout', () => upstream.destroy(new Error('upstream timeout')));
-  upstream.on('error', (e) => {
-    if (!res.headersSent) return oaiError(req, res, 502, 'AI backend is unreachable: ' + e.message, 'upstream_down');
-    try { res.end(); } catch (x) {}
-  });
-  req.on('close', () => { try { upstream.destroy(); } catch (e) {} });
-  if (bodyText) upstream.write(bodyText);
-  upstream.end();
+    const url = new URL(CFG.upstreamUrl + req.url);
+    const lib = url.protocol === 'https:' ? https : http;
+    const headers = { 'content-type': req.headers['content-type'] || 'application/json', accept: req.headers.accept || '*/*' };
+    if (UPSTREAM_KEY) headers.authorization = 'Bearer ' + UPSTREAM_KEY;
+    if (activeBody) headers['content-length'] = Buffer.byteLength(activeBody);
+
+    const reqOpts = {
+      method: req.method, hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname + url.search, headers, timeout: CFG.timeoutMs
+    };
+    if (CFG.aiProxy) {
+      reqOpts.createConnection = (options, cb) => {
+        createSocksConnection(CFG.aiProxy, options.hostname || url.hostname, Number(options.port) || (url.protocol === 'https:' ? 443 : 80), CFG.timeoutMs, cb);
+      };
+    }
+
+    const upstream = lib.request(reqOpts, (up) => {
+      if (isChat && up.statusCode === 503 && candidateIdx + 1 < candidates.length) {
+        candidateIdx++;
+        note('chat model ' + activeModel + ' 503 → fallback to ' + candidates[candidateIdx], rec);
+        up.resume();
+        return trySend();
+      }
+      const pass = {};
+      for (const [k, v] of Object.entries(up.headers)) {
+        if (['connection', 'keep-alive', 'transfer-encoding', 'content-length', 'content-encoding'].includes(k)) continue;
+        pass[k] = v;
+      }
+      pass['x-quota-left'] = String(quotaOf(rec));
+      res.writeHead(up.statusCode || 502, pass);
+      up.pipe(res);
+      up.on('end', () => { try { res.end(); } catch (e) {} });
+      up.on('error', () => { try { res.end(); } catch (e) {} });
+    });
+    upstream.on('timeout', () => upstream.destroy(new Error('upstream timeout')));
+    upstream.on('error', (e) => {
+      if (isChat && candidateIdx + 1 < candidates.length) {
+        candidateIdx++;
+        return trySend();
+      }
+      if (!res.headersSent) return oaiError(req, res, 502, 'AI backend is unreachable: ' + e.message, 'upstream_down');
+      try { res.end(); } catch (x) {}
+    });
+    req.on('close', () => { try { upstream.destroy(); } catch (e) {} });
+    if (activeBody) upstream.write(activeBody);
+    upstream.end();
+  }
+
+  trySend();
   rec.requests = (rec.requests || 0) + 1;
   rec.seen = now();
   /* the quota is counted here, where the bytes actually leave for the model: every proxied call is one */
@@ -301,11 +405,14 @@ function refreshModels() {
         CFG.modelsSource = source;
         CFG.modelsAt = now();
         state.settings = Object.assign({}, state.settings, { models: list.slice(0, 100) });
-        const wanted = CFG.model;
-        if (!wanted) {
+        const envModel = String(process.env.MSE_MODEL || '').trim();
+        const wanted = envModel || CFG.model;
+        if (wanted && list.includes(wanted)) {
+          CFG.model = wanted;
+        } else if (!wanted) {
           CFG.model = list[0];
           note('model default taken from the backend: ' + CFG.model);
-        } else if (!list.includes(wanted)) {
+        } else {
           const previous = wanted;
           CFG.model = list[0];
           console.error('model "' + previous + '" is not offered by the backend; using "' + CFG.model + '"');
@@ -323,10 +430,16 @@ function refreshModels() {
     const lib = url.protocol === 'https:' ? https : http;
     const headers = { accept: 'application/json' };
     if (UPSTREAM_KEY) headers.authorization = 'Bearer ' + UPSTREAM_KEY;
-    const req = lib.request({
+    const reqOpts = {
       method: 'GET', hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80),
       path: url.pathname, headers, timeout: 8000
-    }, (up) => {
+    };
+    if (CFG.aiProxy) {
+      reqOpts.createConnection = (options, cb) => {
+        createSocksConnection(CFG.aiProxy, options.hostname || url.hostname, Number(options.port) || (url.protocol === 'https:' ? 443 : 80), 8000, cb);
+      };
+    }
+    const req = lib.request(reqOpts, (up) => {
       const chunks = [];
       up.on('data', (c) => chunks.push(c));
       up.on('end', () => {
@@ -358,13 +471,17 @@ function extractJson(text) {
 function buildAgentPrompt(body) {
   const options = Array.isArray(body.options) ? body.options.map((o, i) => (i + 1) + '. ' + o).join('\n') : '';
   const system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
-    '{"answer": "<answer>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
-    'If there is no correct answer or data is missing, return {"error": "<short reason>"}. Add nothing outside the JSON.';
+    '{"answer": "<verbatim option text>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
+    'If there is no correct answer or data is missing, return {"error": "<short reason>"}. Add nothing outside the JSON. ' +
+    'MANDATORY: Return the EXACT VERBATIM text of the option as listed. Do NOT return numbers, digits, indexes, or letters. Numbering is strictly forbidden.';
   let user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
-  if (options) user += (body.multiple ? 'Options (pick all that apply):\n' : 'Options (pick exactly one):\n') + options + '\n';
-  if (body.multiple) user += 'Return selected option captions joined by |, exactly as listed.\n';
+  if (options) {
+    user += (body.multiple ? 'Options (pick all that apply):\n' : 'Options (pick exactly one):\n') + options + '\n';
+    user += 'Return the exact verbatim text of the chosen option as listed. Do NOT return numbers or option indexes; numbers are strictly forbidden.\n';
+  }
+  if (body.multiple) user += 'Return selected option captions joined by |, exactly as listed (verbatim text only, no numbers).\n';
   if (Array.isArray(body.selects) && body.selects.length) {
-    user += 'For each numbered dropdown choose one option, in order, joined by |:\n';
+    user += 'For each numbered dropdown choose one option, in order, joined by | (exact verbatim option text, no numbers):\n';
     body.selects.forEach((values,i) => { user += (i+1) + ': ' + (Array.isArray(values) ? values.join(' / ') : '') + '\n'; });
   }
   if (Number(body.textCount) > 1) user += 'Give one value for each of the ' + Math.min(20, Number(body.textCount)) + ' text fields, in order, joined by |.\n';
@@ -387,10 +504,16 @@ function upstreamJson(method, pathname, payload, onContent) {
     if (UPSTREAM_KEY) headers.authorization = 'Bearer ' + UPSTREAM_KEY;
     let finished = false;
     function finish(result) { if (!finished) { finished = true; resolve(result); } }
-    const req = lib.request({
+    const reqOpts = {
       method, hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80),
       path: url.pathname + url.search, headers, timeout: CFG.timeoutMs
-    }, (up) => {
+    };
+    if (CFG.aiProxy) {
+      reqOpts.createConnection = (options, cb) => {
+        createSocksConnection(CFG.aiProxy, options.hostname || url.hostname, Number(options.port) || (url.protocol === 'https:' ? 443 : 80), CFG.timeoutMs, cb);
+      };
+    }
+    const req = lib.request(reqOpts, (up) => {
       const streaming = onContent && /text\/event-stream/i.test(String(up.headers['content-type'] || ''));
       const decoder = new StringDecoder('utf8'); let raw = '', pending = '', content = '', backendModel = null;
       function lines(chunk) {
@@ -438,10 +561,11 @@ async function handleAgent(req, res, rec) {
   const body = parseJson(await readBody(req, 256 * 1024));
   if (!body || !body.question) return oaiError(req, res, 400, 'question is required', 'bad_request');
   if (body.image && (!Array.isArray(body.image) || body.image.length > 5 || body.image.some((x) => !x || !/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(String(x.data || ''))) || body.image.reduce((n,x) => n + String(x.data).length, 0) > 180000)) return oaiError(req, res, 400, 'image format or size unsupported', 'bad_image');
-  if (!CFG.model) return send(req, res, 503, { ok: false, code: 'no_model', retry_after: 5, message: 'the backend offered no model yet' });
+  const candidateModels = getCandidateModels(CFG.model);
+  if (!candidateModels.length) return send(req, res, 503, { ok: false, code: 'no_model', retry_after: 5, message: 'the backend offered no model yet' });
 
   const streaming = /text\/event-stream/i.test(String(req.headers.accept || ''));
-  const payload = { model: CFG.model, temperature: 0, messages: buildAgentPrompt(body) };
+  const payload = { model: candidateModels[0], temperature: 0, messages: buildAgentPrompt(body) };
   if (streaming) {
     payload.stream = true;
     res.writeHead(200, { 'content-type':'text/event-stream; charset=utf-8', 'cache-control':'no-cache', 'x-accel-buffering':'no' });
@@ -460,7 +584,18 @@ async function handleAgent(req, res, rec) {
   saveState();
   note('agent ' + String(body.question).slice(0, 40), rec);
 
-  const up = await upstreamJson('POST', '/v1/chat/completions', payload, onContent);
+  let up = null;
+  let chosenModel = candidateModels[0];
+  for (let ci = 0; ci < candidateModels.length; ci++) {
+    chosenModel = candidateModels[ci];
+    payload.model = chosenModel;
+    up = await upstreamJson('POST', '/v1/chat/completions', payload, onContent);
+    if (up && up.status === 503 && ci + 1 < candidateModels.length) {
+      note('agent model ' + chosenModel + ' 503 → fallback to ' + candidateModels[ci + 1], rec);
+      continue;
+    }
+    break;
+  }
   const ms = now() - started;
   if (!up.status) {
     if (!streaming) res.setHeader('retry-after', '5');
@@ -492,12 +627,30 @@ async function handleAgent(req, res, rec) {
   let picked = answer;
   if (Array.isArray(body.selects) && body.selects.length) {
     if (parts.length !== body.selects.length) return reply(200, {ok:false, code:'agent_error', ms, message:'wrong number of dropdown answers'});
-    const matches = body.selects.map((group,i) => Array.isArray(group) ? group.filter((o) => String(o).trim().toLowerCase() === parts[i].toLowerCase()) : []);
+    const matches = body.selects.map((group,i) => {
+      if (!Array.isArray(group)) return [];
+      const part = parts[i];
+      let m = group.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
+      if (m.length === 1) return m;
+      if (/^\d+$/.test(part)) {
+        const idx = parseInt(part, 10);
+        if (idx >= 1 && idx <= group.length) return [group[idx - 1]];
+      }
+      return [];
+    });
     if (matches.some((xs) => xs.length !== 1)) return reply(200, {ok:false, code:'agent_error', ms, message:'dropdown answer not in the task'});
     picked = matches.map((xs) => xs[0]).join(' | ');
   } else if (options.length) {
     if (!body.multiple && parts.length !== 1) return reply(200, {ok:false, code:'agent_error', ms, message:'agent picked multiple options'});
-    const matches = parts.map((part) => options.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase()));
+    const matches = parts.map((part) => {
+      let m = options.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
+      if (m.length === 1) return m;
+      if (/^\d+$/.test(part)) {
+        const idx = parseInt(part, 10);
+        if (idx >= 1 && idx <= options.length) return [options[idx - 1]];
+      }
+      return [];
+    });
     if (matches.some((xs) => xs.length !== 1)) return reply(200, {ok:false, code:'agent_error', ms, message:'the agent named an option that is not in the task', answer});
     picked = matches.map((xs) => xs[0]).join(' | ');
   } else if (Number(body.textCount) > 1 && parts.length !== Number(body.textCount)) {
@@ -506,7 +659,7 @@ async function handleAgent(req, res, rec) {
   return reply(200, {
     ok: true, code: 'ok', ms, answer: picked || answer,
     confidence: typeof answerObj.confidence === 'number' ? answerObj.confidence : null,
-    reasoning: answerObj.reason || null, model: typeof parsed.model === 'string' && parsed.model ? parsed.model : payload.model
+    reasoning: answerObj.reason || null, model: typeof parsed.model === 'string' && parsed.model ? parsed.model : chosenModel
   });
 }
 
@@ -537,6 +690,7 @@ async function handleAdmin(req, res, url) {
       backend: 'tailscale',
       publicUrl: CFG.publicUrl || null,
       upstream: CFG.upstreamUrl,
+      proxy: CFG.aiProxy || null,
       model: CFG.model,
       models: CFG.models, modelsCount: CFG.models.length, modelsSource: CFG.modelsSource,
       quota: CFG.dailyQuota,
@@ -625,6 +779,7 @@ const handler = async (req, res) => {
         ok: true, name: 'MSE gateway', version: VERSION, role: 'router',
         backend: 'tailscale', publicUrl: CFG.publicUrl || null,
         upstream: { host: UPSTREAM_HOST, port: UPSTREAM_PORT, tls: UPSTREAM_TLS },
+        proxy: CFG.aiProxy || null,
         model: CFG.model,
         models: CFG.models, modelsCount: CFG.models.length, modelsSource: CFG.modelsSource,
         quota: CFG.dailyQuota, devices: Object.keys(state.devices).length, allow: state.allow.length,

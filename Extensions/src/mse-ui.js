@@ -808,10 +808,32 @@
       return node;
     }
 
+    function statusDotClass() {
+      var last = log[log.length - 1];
+      var okAll = true, worst = null;
+      ['answers', 'gateway'].forEach(function (k) {
+        var l = logLast(k);
+        if (l && !l.ok) { okAll = false; worst = l; }
+      });
+      return !last ? '' : (okAll ? 'ok' : (worst && Date.now() - worst.t < 60000 ? 'bad' : 'warn'));
+    }
+
+    function statusShortText() {
+      var last = log[log.length - 1];
+      var okAll = true;
+      ['answers', 'gateway'].forEach(function (k) {
+        var l = logLast(k);
+        if (l && !l.ok) { okAll = false; }
+      });
+      if (!last) return 'status';
+      if (!okAll) return 'error';
+      return 'status';
+    }
+
     function head(titleText, sub, leading) {
       var h = el('div', 'ph');
       var lead = leading === 'back'
-        ? press(el('button', 'ib back', '←'), function () { state.route = 'account'; render(); })
+        ? press(el('button', 'ib back', '←'), function () { state.route = state.route === 'status' ? 'answers' : 'account'; render(); })
         : press(el('button', 'ib', 'i'), function () { state.route = state.route === 'account' ? 'answers' : 'account'; render(); });
       lead.setAttribute('aria-label', leading === 'back' ? 'back' : 'your id');
       lead.style.fontFamily = leading === 'back' ? '' : 'Georgia,serif';
@@ -826,10 +848,51 @@
         chip.setAttribute('aria-label', 'AI model: ' + state.gatewayModel);
         h.appendChild(chip);
       }
+      var mini = el('button', 'mini-status');
+      mini.setAttribute('type', 'button');
+      mini.setAttribute('aria-label', 'status');
+      mini.setAttribute('data-mse', 'mini-status');
+      var dotCls = statusDotClass();
+      mini.appendChild(el('span', 'dot ' + dotCls));
+      mini.appendChild(el('span', 'mini-txt', statusShortText()));
+      mini.addEventListener('click', function () {
+        state.route = state.route === 'status' ? 'answers' : 'status';
+        render();
+      });
+      h.appendChild(mini);
       var x = press(el('button', 'ib x', '×'), closePop);
       x.setAttribute('aria-label', 'close');
       h.appendChild(x);
       return h;
+    }
+
+    function viewStatus() {
+      body.appendChild(N(el('div', 'sec', 'status'), 0));
+      var grid = el('div', 'status-grid');
+      var last = log[log.length - 1];
+      var okNet = !last || last.ok;
+      var ag = state.agent || { state: 'idle' };
+      var gw = state.gw && state.gw.check;
+      var items = [
+        { k: 'network', v: okNet ? 'ok' : 'error' },
+        { k: 'agent', v: ag.state === 'ok' ? 'ok' : ag.state === 'running' ? (ag.stage || 'running') : ag.state === 'error' ? 'error' : 'idle' },
+        { k: 'gateway', v: gw && gw.state === 'active' ? 'active' : (win.MSEBridge && win.MSEBridge.url() ? 'set' : 'none') },
+        { k: 'model', v: state.gatewayModel || '—' },
+        { k: 'last event', v: last ? last.text : 'no events' }
+      ];
+      items.forEach(function (it) {
+        var row = el('div', 'status-item');
+        row.appendChild(el('span', 'k', it.k));
+        row.appendChild(el('span', 'v', it.v));
+        grid.appendChild(row);
+      });
+      body.appendChild(N(grid, 0));
+      var frow = el('div', 'frow');
+      var openLogs = press(el('button', 'btn', 'network log'), function () { state.route = 'net'; render(); });
+      var back = press(el('button', 'btn solid', 'back'), function () { state.route = 'answers'; render(); });
+      frow.appendChild(openLogs);
+      frow.appendChild(back);
+      body.appendChild(N(frow, 1));
     }
 
     function statusLine() {
@@ -915,13 +978,11 @@
       var q = state.question;
       if (!q) {
         body.appendChild(N(el('div', 'empty', 'no question on this page')));
-        body.appendChild(N(statusLine()));
         return;
       }
       if (!q.supported) {
         body.appendChild(N(el('div', 'empty', 'unsupported: ' + (q.unsupported || q.type))));
         if (aiAllowed()) appendAi(q);
-        body.appendChild(N(statusLine()));
         return;
       }
       if (state.loading) {
@@ -947,7 +1008,6 @@
         });
         body.appendChild(N(again, 1));
         if (aiAllowed()) appendAi(q);
-        body.appendChild(N(statusLine(), 1));
         return;
       }
       var rows = (state.rows || []).slice();
@@ -959,32 +1019,57 @@
       }
       if (!rows.length) {
         body.appendChild(N(el('div', 'empty', 'no answers yet')));
-        if (aiAllowed()) appendAi(q);
       } else {
         var list = el('div', 'group');
         body.appendChild(N(list, 0));
         rows.slice(0, 40).forEach(function (r, i) {
-          var a = el('button', 'ans press' + (r.correctness > 0 ? ' best' : ''));
+          var a = el('button', 'ans press' + (r.agent ? ' agent' : '') + (r.correctness > 0 ? ' best' : ''));
           a.setAttribute('type', 'button');
-          a.appendChild(el('span', 'mark', r.correctness > 0 ? '✓' : ''));
+          var mark = el('span', 'mark' + (r.agent ? ' agent' : ''));
+          a.appendChild(mark);
           a.appendChild(el('span', 'lbl', r.label));
           if (r.share != null) a.appendChild(el('span', 'pct', r.share + '%'));
           else if (r.count) a.appendChild(el('span', 'pct', r.count + '×'));
-          if (r.agent) a.appendChild(el('span', 'tag', 'agent'));
+          if (r.agent) {
+            var tag = el('span', 'tag agent', 'агент');
+            var hid = el('span', 'mse-hidden', 'agent');
+            hid.style.display = 'none';
+            tag.appendChild(hid);
+            a.appendChild(tag);
+          }
           if (r.correctness > 0) a.classList.add('lit');
           a.addEventListener('click', function () {
             flash(a);
             win.setTimeout(function () {
               var res = applyAnswer(q, r);
-              if (res.ok) { a.classList.add('lit'); setBadge(0); }
+              if (res.ok) { setBadge(0); closePop(); }
               else { state.error = 'not in the form'; render(); }
-            }, 70);
+            }, 60);
           });
           list.appendChild(N(a, i));
         });
       }
-      if (aiAllowed()) body.appendChild(N(agentStrip(), 1));
-      body.appendChild(N(statusLine(), 1));
+      if (aiAllowed() && (!state.agent || state.agent.state !== 'ok')) appendAi(q);
+      var actions = el('div', 'frow');
+      actions.style.margin = '6px 0 0';
+      var snif = press(el('button', 'btn', 'Snif'), function () {
+        snifText = JSON.stringify(snifDump(), null, 2);
+        state.route = 'snif';
+        render();
+      });
+      snif.setAttribute('data-mse', 'snif');
+      snif.style.minHeight = '44px';
+      snif.style.minWidth = '100px';
+      actions.appendChild(snif);
+      if (!state.agent || state.agent.state !== 'error') {
+        var report = press(el('button', 'btn', 'Report'), function () {
+          reportCurrent(report);
+        });
+        report.setAttribute('data-mse', 'report');
+        report.style.minHeight = '44px';
+        actions.appendChild(report);
+      }
+      body.appendChild(N(actions, 1));
     }
 
     /* There is ONE way to ask the model: the agent route. This is its single button, drawn in the answer list;
@@ -993,31 +1078,34 @@
       var ai = state.agent || { state: 'idle' };
       if (ai.state === 'running' || ai.state === 'retry') {
         var run = el('div', 'ans ai busy');
-        run.appendChild(el('span', 'mark', '✦'));
-        run.appendChild(el('span', 'lbl', ai.state === 'retry' ? 'agent busy · retry in ' + ai.retryIn + ' s' : 'agent working…'));
-        run.appendChild(el('span', 'tag', 'AI'));
+        run.appendChild(el('span', 'mark agent'));
+        run.appendChild(el('span', 'lbl', ai.state === 'retry' ? 'agent busy · retry in ' + ai.retryIn + ' s' : (ai.stage ? ai.stage + '…' : 'reasoning…')));
+        run.appendChild(el('span', 'tag agent', 'AI'));
         body.appendChild(N(run, 1));
         return;
       }
-      var label = ai.state === 'ok' ? ai.answer
-        : ai.state === 'error' ? 'agent: ' + (ai.text || 'error')
-        : 'ask the agent';
-      var a = el('button', 'ans press ai' + (ai.state === 'ok' ? ' best' : ''));
+      if (ai.state === 'error') {
+        var errRow = el('div', 'row err-row');
+        errRow.appendChild(el('span', 'dot bad'));
+        errRow.appendChild(el('span', 'txt', 'агент не ответил' + (ai.text ? ': ' + ai.text : '')));
+        var rep = press(el('button', 'btn sm', 'Report'), function (ev) {
+          if (ev) ev.stopPropagation();
+          reportCurrent(rep);
+        });
+        rep.setAttribute('data-mse', 'report');
+        errRow.appendChild(rep);
+        body.appendChild(N(errRow, 1));
+        return;
+      }
+      if (ai.state === 'ok') return;
+      var a = el('button', 'ans press ai');
       a.setAttribute('type', 'button');
-      a.appendChild(el('span', 'mark', '✦'));
-      a.appendChild(el('span', 'lbl', label));
+      a.appendChild(el('span', 'mark'));
+      a.appendChild(el('span', 'lbl', 'ask the agent'));
       /* no model name on the row: the panel does not know models, the router decides which one answers */
       a.appendChild(el('span', 'tag', 'AI'));
       a.addEventListener('click', function () {
         flash(a);
-        if (ai.state === 'ok' && ai.answer) {
-          win.setTimeout(function () {
-            var res = applyAnswer(q, { label: ai.answer, correctness: 0, count: 0, agent: true });
-            if (res.ok) { a.classList.add('lit'); setBadge(0); }
-            else { state.error = 'not in the form'; render(); }
-          }, 70);
-          return;
-        }
         runAgent(false);
       });
       body.appendChild(N(a, 1));
@@ -1098,8 +1186,11 @@
           logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
           if (typeof res.model === 'string' && res.model.trim()) { state.modelEpoch++; state.gatewayModel = res.model.trim(); }
           state.agent = { state: 'ok', answer: res.answer };
-          var row = { label: res.answer, correctness: 0, count: 0, agent: true };
-          if (!(state.rows || []).some(function (r) { return r.label === row.label && r.agent; })) {
+          var existing = (state.rows || []).find(function (r) { return r.label === res.answer; });
+          if (existing) {
+            existing.agent = true;
+          } else {
+            var row = { label: res.answer, correctness: 0, count: 0, agent: true };
             state.rows = [row].concat(state.rows || []);
           }
           render();
@@ -1194,7 +1285,7 @@
     }
 
     /* ---------------- the account: the only place with the id, the name and the key ---------------- */
-    function valueRow(key, value, copyable, human) {
+    function valueRow(key, value, copyable, human, copyValue) {
       var row = el('button', 'val press' + (human ? ' human' : ''));
       row.setAttribute('type', 'button');
       row.appendChild(el('span', 'k', key));
@@ -1206,7 +1297,8 @@
       hint.textContent = 'copy';
       row.addEventListener('click', function () {
         flash(row);
-        win.MSEBridge.copy(value).then(function (ok) {
+        var toCopy = copyValue != null ? copyValue : value;
+        win.MSEBridge.copy(toCopy).then(function (ok) {
           hint.textContent = ok ? 'copied' : 'failed';
           win.setTimeout(function () { hint.textContent = ''; }, 1600);
         });
@@ -1225,7 +1317,7 @@
       /* the key itself is never drawn: it lives on this device and is used, not shown */
       var key = win.MSEBridge ? win.MSEBridge.key() : null;
       body.appendChild(N(valueRow('device', meta && meta.device, false), 1));
-      body.appendChild(N(valueRow('key', win.MSEBridge ? win.MSEBridge.maskedKey() : null, !!key), 1));
+      body.appendChild(N(valueRow('key', win.MSEBridge ? win.MSEBridge.maskedKey() : null, !!key, false, key), 1));
       var st = state.gw.check;
       var line = el('div', 'row');
       var good = st && st.state === 'active';
@@ -1349,12 +1441,25 @@
           }), 1));
         }
       }
-      var toggle = el('label', 'row');
+      var toggle = el('label', 'dbg-toggle press');
       var debug = el('input'); debug.type = 'checkbox'; debug.checked = br.debugEnabled(); debug.setAttribute('data-mse', 'debug-mode');
-      debug.addEventListener('change', function () { br.setDebugEnabled(debug.checked); });
-      toggle.appendChild(debug); toggle.appendChild(el('span', 'txt', 'Debug mode · sends diagnostics to owner (may include personal data)'));
+      var light = el('span', 'dbg-light' + (debug.checked ? ' on' : ''));
+      debug.addEventListener('change', function () {
+        br.setDebugEnabled(debug.checked);
+        if (debug.checked) {
+          light.classList.add('on');
+          debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now() });
+        } else {
+          light.classList.remove('on');
+        }
+      });
+      toggle.appendChild(debug);
+      toggle.appendChild(light);
+      var dbgText = el('div', 'dbg-text');
+      dbgText.appendChild(el('span', 'dbg-title', 'Debug mode'));
+      dbgText.appendChild(el('span', 'dbg-sub', 'sends diagnostics to owner (may include personal data)'));
+      toggle.appendChild(dbgText);
       body.appendChild(N(toggle, 1));
-      body.appendChild(N(statusLine(), 1));
     }
 
     /* ---------------- the network log ---------------- */
@@ -1370,15 +1475,30 @@
         box.appendChild(ln);
       });
       body.appendChild(N(box, 1));
-      body.appendChild(N(press(el('button', 'btn', 'clear'), function () {
+      var frow = el('div', 'frow');
+      var copy = press(el('button', 'btn solid', 'Скопировать'), function () {
+        var lines = log.map(function (l) {
+          return new Date(l.t).toISOString() + ' [' + l.kind + '] ' + (l.ok ? 'OK' : 'FAIL') + ': ' + l.text + (l.ms != null ? ' (' + l.ms + ' ms)' : '');
+        });
+        var text = lines.join('\n');
+        if (win.MSEBridge) {
+          win.MSEBridge.copy(text).then(function (ok) { toast(ok ? 'log copied' : 'copy failed'); });
+        }
+      });
+      copy.setAttribute('data-mse', 'log-copy');
+      var clear = press(el('button', 'btn', 'clear'), function () {
         log = [];
         logAdd('answers', true, 'log cleared');
         render();
-      }), 1));
+      });
+      frow.appendChild(copy);
+      frow.appendChild(clear);
+      body.appendChild(N(frow, 1));
     }
 
     function snifDump() {
-      var q = state.question || currentQuestion(readQuestions());
+      var allQues = readQuestions();
+      var q = state.question || currentQuestion(allQues);
       var block = q && q.node;
       var images = block ? Array.prototype.map.call(block.querySelectorAll('img'), function (img) {
         return { src: img.getAttribute('src'), resolved: img.src, alt: img.getAttribute('alt'), srcset: img.getAttribute('srcset') };
@@ -1398,11 +1518,41 @@
         .filter(function (text) { return /M\.cfg|YUI|Y\.use/i.test(text); });
       var cookies = [];
       try { cookies = String(doc.cookie || '').split(';').map(function (x) { return x.trim().split('=')[0]; }).filter(Boolean); } catch (e) {}
+      var questionsList = allQues.map(function (item, idx) {
+        var b = item.node;
+        var inps = b ? Array.prototype.map.call(b.querySelectorAll('input, label, select, textarea'), function (node) {
+          return { tag: node.tagName, type: node.type || null, name: node.name || null,
+            id: node.id || null, for: node.getAttribute('for'), value: node.value == null ? null : node.value,
+            checked: 'checked' in node ? !!node.checked : null, text: node.tagName === 'LABEL' ? node.textContent : null,
+            options: node.options ? Array.prototype.map.call(node.options, function (o) { return { value: o.value, text: o.text, selected: o.selected }; }) : null };
+        }) : [];
+        return {
+          index: idx + 1,
+          identity: item.identity,
+          questionId: item.questionId,
+          type: item.type,
+          kind: item.kind,
+          supported: item.supported,
+          text: item.text,
+          answers: (item.answers || []).map(function (a) { return a.text; }),
+          inputs: inps
+        };
+      });
+      var formEl = doc.querySelector('form#responseform, form.mform');
+      var formMeta = formEl ? {
+        id: formEl.id || null,
+        action: formEl.getAttribute('action') || null,
+        method: formEl.getAttribute('method') || 'POST',
+        elementsCount: formEl.elements ? formEl.elements.length : 0
+      } : null;
       return {
         schema: 'mse-snif-1', capturedAt: new Date().toISOString(),
         warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
         page: { location: String(win.location.href), title: doc.title, headings: Array.prototype.map.call(doc.querySelectorAll('h1,h2,h3'), function (n) { return n.textContent.trim(); }),
           httpHeaders: 'unavailable to page JavaScript', cookieNamesVisibleToJavaScript: cookies, inlineMoodleScripts: scripts },
+        meta: attemptMeta(),
+        form: formMeta,
+        questions: questionsList,
         question: q ? { html: block.outerHTML, text: q.text, type: q.type, identity: q.identity,
           identityCalculation: questionIdentity.toString(), images: images, backgrounds: backgrounds, inputs: inputs } : null,
         requests: { syncshare: lastSyncRequest, agent: win.MSEBridge && win.MSEBridge.snifAgent ? win.MSEBridge.snifAgent() : null }
@@ -1453,6 +1603,7 @@
       } else if (state.route === 'account') { sub = 'account'; }
       else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
       else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
+      else if (state.route === 'status') { sub = 'status'; leading = 'back'; }
       else if (state.route === 'snif') { sub = 'Snif'; }
       pop.appendChild(head(title, sub, leading));
       body = el('div', 'pb');
@@ -1460,16 +1611,10 @@
       if (state.route === 'account') viewAccount();
       else if (state.route === 'gateway') viewGateway();
       else if (state.route === 'net') viewNet();
+      else if (state.route === 'status') viewStatus();
       else if (state.route === 'snif') viewSnif();
       else {
         viewAnswers();
-        var actions = el('div', 'frow');
-        actions.style.margin = '6px 0 0';
-        var snif = press(el('button', 'btn', 'Snif'), function () { snifText = JSON.stringify(snifDump(), null, 2); state.route = 'snif'; render(); });
-        snif.setAttribute('data-mse', 'snif'); snif.style.height = '44px';
-        var report = press(el('button', 'btn', 'Report'), function () { reportCurrent(report); });
-        report.setAttribute('data-mse', 'report'); report.style.height = '44px';
-        actions.appendChild(snif); actions.appendChild(report); body.appendChild(N(actions, 1));
       }
       layout();
     }

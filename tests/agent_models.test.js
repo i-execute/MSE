@@ -235,3 +235,79 @@ test('503 from the selected model is reported as unavailable, not malformed JSON
     assert.match(out.json.message, /model unavailable.*another model/i);
   } finally { r.child.kill(); bg.server.close(); }
 });
+
+test('B1: model answers with 1-based index (e.g. answer: "3") and resolves to third option', { timeout: 60000 }, async () => {
+  const bg = await backend({
+    models: ['model-claude'],
+    answer: () => '{"answer": "3", "confidence": 0.9, "reason": "chosen option 3"}'
+  });
+  const r = await startRouter(bg.port, { MSE_MODEL: 'model-claude' });
+  try {
+    await call(r.port, 'POST', '/mse/v1/register', { key: KEY, moodleId: '5555', name: 'Indexer' });
+    await fetch('http://127.0.0.1:' + r.port + '/admin/allow', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-token': TOKEN },
+      body: JSON.stringify({ moodleId: '5555' })
+    });
+    const options = ['Option Alpha', 'Option Beta', 'Option Gamma', 'Option Delta'];
+    const out = await call(r.port, 'POST', '/mse/v1/agent', { question: 'Pick one', options }, KEY);
+    assert.equal(out.status, 200);
+    assert.equal(out.json.ok, true);
+    assert.equal(out.json.answer, 'Option Gamma', 'answer "3" was resolved to 1-based index 3: Option Gamma');
+  } finally {
+    r.child.kill();
+    bg.server.close();
+  }
+});
+
+test('B2: auto-fallback to next live model on 503 for both agent and chat', { timeout: 60000 }, async () => {
+  // Mock backend: model-flaky returns 503, model-backup returns 200
+  const server = http.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      const body = Buffer.concat(chunks).toString('utf8');
+      const json = (status, obj) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
+      if (req.method === 'GET' && req.url === '/v1/models') {
+        return json(200, { object: 'list', data: [{ id: 'model-flaky' }, { id: 'model-backup' }] });
+      }
+      if (req.method === 'POST' && req.url === '/v1/chat/completions') {
+        let parsed = {};
+        try { parsed = JSON.parse(body); } catch (_) {}
+        if (parsed.model === 'model-flaky') {
+          return json(503, { error: { message: 'flaky model 503' } });
+        }
+        return json(200, {
+          id: 'chatcmpl-backup', object: 'chat.completion', model: 'model-backup',
+          choices: [{ index: 0, message: { role: 'assistant', content: '{"answer": "Option Beta"}' }, finish_reason: 'stop' }]
+        });
+      }
+      return json(404, { error: { message: 'not found' } });
+    });
+  });
+
+  const bgPort = await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server.address().port)));
+  const r = await startRouter(bgPort, { MSE_MODEL: 'model-flaky' });
+  try {
+    await call(r.port, 'POST', '/mse/v1/register', { key: KEY, moodleId: '7777' });
+    await fetch('http://127.0.0.1:' + r.port + '/admin/allow', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-token': TOKEN },
+      body: JSON.stringify({ moodleId: '7777' })
+    });
+
+    // 1. Agent call with default MSE_MODEL = model-flaky falls back to model-backup
+    const options = ['Option Alpha', 'Option Beta'];
+    const agentOut = await call(r.port, 'POST', '/mse/v1/agent', { question: 'Which one?', options }, KEY);
+    assert.equal(agentOut.status, 200, 'agent succeeded via fallback: ' + JSON.stringify(agentOut.json));
+    assert.equal(agentOut.json.ok, true);
+    assert.equal(agentOut.json.answer, 'Option Beta');
+    assert.equal(agentOut.json.model, 'model-backup');
+
+    // 2. Chat call without model in body defaults to MSE_MODEL and also falls back on 503
+    const chatOut = await call(r.port, 'POST', '/v1/chat/completions', { messages: [{ role: 'user', content: 'hello' }] }, KEY);
+    assert.equal(chatOut.status, 200, 'chat without model succeeded via fallback: ' + JSON.stringify(chatOut.json));
+    assert.equal(chatOut.json.model, 'model-backup');
+  } finally {
+    r.child.kill();
+    server.close();
+  }
+});

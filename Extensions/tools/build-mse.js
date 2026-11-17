@@ -29,7 +29,7 @@ const VENDOR = LAYOUT.VENDOR;
 const OUT = LAYOUT.OUT;
 const SRC = LAYOUT.SRC;
 const BRAND = 'MSE';
-const VERSION = '2.6.1';
+const VERSION = '2.7.0';
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const read = (p) => fs.readFileSync(path.join(VENDOR, p), 'utf8');
@@ -294,6 +294,8 @@ const MATCHES = [
   '*://*/my/',
   '*://*/my/*',
   '*://*/my/index.php*',
+  '*://*/course/view.php*',
+  '*://*/course/index.php*',
 ];
 
 const header = [

@@ -1495,7 +1495,7 @@ class Setup:
         self.python_choices = detect_pythons()
         self.credentials = {"BOT_TOKEN": "", "OWNER_ID": "", "API_ID": "", "API_HASH": "", "TAILSCALE_KEY": ""}
         self.settings = {"MODEL": self.env.get("MSE_MODEL", ""), "QUOTA": self.env.get("MSE_DAILY_QUOTA", "200"),
-                         "UPSTREAM_PORT": self.env.get("MSE_UPSTREAM_PORT", "")}
+                         "UPSTREAM_PORT": self.env.get("MSE_UPSTREAM_PORT", ""), "AI_PROXY": self.env.get("AI_PROXY", "")}
         self.notes: list[str] = []
         self.started = time.time()
         self.limit = width()
@@ -1618,6 +1618,7 @@ class Setup:
             "MSE_MODEL": self.settings.get("MODEL") or self.env.get("MSE_MODEL", ""),
             "MSE_DAILY_QUOTA": self.settings.get("QUOTA") or self.env.get("MSE_DAILY_QUOTA", ""),
             "MSE_UPSTREAM_PORT": self.settings.get("UPSTREAM_PORT") or self.env.get("MSE_UPSTREAM_PORT", ""),
+            "AI_PROXY": self.settings.get("AI_PROXY") or self.env.get("AI_PROXY", ""),
             "MSE_PREFIX": self.prefix,
         }
         for key, value in pairs.items():
@@ -1813,6 +1814,7 @@ class Setup:
             Field("MODEL", "model", False, current_model, model_hint, choices=models),
             Field("QUOTA", "quota", False, self.settings["QUOTA"], "Requests per day per device"),
             Field("UPSTREAM_PORT", "backend port", False, self.settings["UPSTREAM_PORT"], "127.0.0.1:<port> — where the AI backend lives"),
+            Field("AI_PROXY", "ai proxy", False, self.settings.get("AI_PROXY", ""), "SOCKS5 proxy (socks5://<host>:<port>, empty = direct)"),
             Field("BOT_TOKEN", "bot token", True, self.contrib_or("BOT_TOKEN"), "Required. @BotFather -> /newbot (or /token); without it the bot stays off"),
             Field("OWNER_ID", "owner id", False, self.contrib_or("OWNER_ID"), "Your numeric Telegram id (the person the bot answers)"),
             Field("API_ID", "api id", False, self.contrib_or("API_ID"), "my.telegram.org → App api_id (optional, for the MTProto transport)"),
@@ -1830,11 +1832,12 @@ class Setup:
         self.settings["MODEL"] = fields[0].value.strip()
         self.settings["QUOTA"] = fields[1].value.strip()
         self.settings["UPSTREAM_PORT"] = fields[2].value.strip()
-        self.credentials["BOT_TOKEN"] = fields[3].value.strip()
-        self.credentials["OWNER_ID"] = fields[4].value.strip()
-        self.credentials["API_ID"] = fields[5].value.strip()
-        self.credentials["API_HASH"] = fields[6].value.strip()
-        self.credentials["TAILSCALE_KEY"] = fields[7].value.strip()
+        self.settings["AI_PROXY"] = fields[3].value.strip()
+        self.credentials["BOT_TOKEN"] = fields[4].value.strip()
+        self.credentials["OWNER_ID"] = fields[5].value.strip()
+        self.credentials["API_ID"] = fields[6].value.strip()
+        self.credentials["API_HASH"] = fields[7].value.strip()
+        self.credentials["TAILSCALE_KEY"] = fields[8].value.strip()
         if self.dry_run:
             self.notes.append("dry run: the settings were not written")
             return True
