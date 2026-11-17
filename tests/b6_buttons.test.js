@@ -17,7 +17,7 @@ const h = require('./lib/harness.js');
 const pw = require('playwright');
 
 const SOURCE = path.join(h.ROOT, 'Storage', 'artifacts', 'mse.user.js');
-const OUT = path.join(h.ROOT, 'evidence', 'b6-buttons.md');
+const OUT = path.join(process.env.MSE_EVIDENCE_DIR || require('os').tmpdir(), 'mse-b6-buttons.md');
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 
 let shared = null;

@@ -30,6 +30,20 @@ class Gateway:
         """The queue of new device applications. `take=True` drains it, so the owner is pinged once per person."""
         return self._call("GET", "/admin/applications?take=" + ("1" if take else "0"))
 
+    def dumps(self) -> dict[str, Any]:
+        return self._call("GET", "/admin/dumps")
+
+    def dump(self, dump_id: str) -> dict[str, Any]:
+        if len(dump_id) != 32 or any(c not in "0123456789abcdef" for c in dump_id):
+            raise GatewayError("invalid dump id")
+        return self._call("GET", "/admin/dumps/" + dump_id)
+
+    def dump_notifications(self) -> dict[str, Any]:
+        return self._call("GET", "/admin/dump-notifications")
+
+    def acknowledge_dump(self, dump_id: str) -> dict[str, Any]:
+        return self._call("POST", "/admin/dump-notifications/ack", {"id": dump_id})
+
     # ------------------------------------------------------------------ plumbing
     def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -148,10 +162,10 @@ def tunnel_status(script: str = "/usr/local/bin/mse-tunnel.sh", timeout: float =
         return {"backend": "tailscale", "error": "mse-tunnel.sh answered with something that is not JSON"}
 
 
-def tunnel_do(action: str, script: str = "/usr/local/bin/mse-tunnel.sh", port: int = 8788, timeout: float = 120.0) -> tuple[bool, str]:
+def tunnel_do(action: str, script: str = "/usr/local/bin/mse-tunnel.sh", port: int | None = None, timeout: float = 120.0) -> tuple[bool, str]:
     """funnel | serve | off. Returns (ok, text): the address when it came up, the reason when it did not."""
     args = [script, action]
-    if action in ("funnel", "serve"):
+    if action in ("funnel", "serve") and port:
         args.append(str(port))
     try:
         out = subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)

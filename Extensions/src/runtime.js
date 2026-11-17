@@ -1039,8 +1039,19 @@ function createSyncShareRuntime(env) {
       try { url = typeof input === 'string' ? input : input && typeof input.url === 'string' ? input.url : String(input); }
       catch (e) { url = ''; }
       if (url.indexOf(EXT_BASE) === 0) return resourceResponse(R, url);
-      if (kind === 'background') return backgroundFetch(R, nativeFetch, input, init);
-      return nativeFetch(input, init);
+      var debug = false;
+      try { debug = win.localStorage.getItem('mse.debug.enabled') === '1'; } catch (_) {}
+      var result = kind === 'background' ? backgroundFetch(R, nativeFetch, input, init) : nativeFetch(input, init);
+      if (!debug) return result;
+      var request = {url:url, method:String((init && init.method) || (input && input.method) || 'GET'), body:init && typeof init.body === 'string' ? init.body : null};
+      function publish(record) {
+        if (win.__mse && win.__mse.onDebugTraffic) win.__mse.onDebugTraffic(record);
+        else { win.__msePendingTraffic = win.__msePendingTraffic || []; if (win.__msePendingTraffic.length < 20) win.__msePendingTraffic.push(record); }
+      }
+      return result.then(function (response) {
+        try { response.clone().text().then(function (body) { publish({request:request,response:{status:response.status,body:body}}); }, function () {}); } catch (_) {}
+        return response;
+      }, function (err) { publish({request:request,error:String(err && err.message || 'network')}); throw err; });
     };
   }
 
@@ -1310,16 +1321,7 @@ function createSyncShareRuntime(env) {
     return ctx;
   }
 
-  function contentScriptsFor(loc) {
-    var pathAndQuery = String(loc.pathname || '') + String(loc.search || '');
-    var has = function (s) { return pathAndQuery.indexOf(s) >= 0; };
-    if (!/^https?:$/.test(String(loc.protocol))) return null;
-    if (has('mod/quiz/attempt.php') || has('mod/quiz/review.php')) return { js: ['commons', 'quiz_attempt'], css: ['css/widgets/context_menu.css'] };
-    if (has('mod/quiz/summary.php')) return { js: ['commons', 'quiz_overview'], css: [] };
-    /* quiz/view.php is where the original draws its own floating widget: MSE does not load it (CONFIG.hideHostWidget) */
-    if (has('mod/quiz/view.php')) return CONFIG.hideHostWidget ? null : { js: ['commons', 'quiz_board'], css: [] };
-    return null;
-  }
+  function contentScriptsFor(loc) { return null; }
   function whenIdle() {
     return new Promise(function (resolve) {
       if (doc.readyState === 'complete') { resolve(); return; }
@@ -1456,6 +1458,7 @@ function createSyncShareRuntime(env) {
     }
   }
   function openExtensionPage(path) {
+    if (CONFIG.hideHostWidget) return Promise.resolve(null);
     var page = PAGES[path];
     if (!page) {
       /* the consent page is not packaged when the gate is off: its opening is a no-op, not an error */
@@ -1555,11 +1558,7 @@ function createSyncShareRuntime(env) {
     return kvSetJson(DISABLED_KEY, { at: Date.now() }).then(function () {
       Object.keys(openPages).forEach(closeExtensionPage);
       contexts.forEach(function (c) { c.alive = false; });
-      try {
-        win.alert(uiLanguage().toLowerCase().indexOf('ru') === 0
-          ? 'SyncShare is switched off. To turn it on again, choose “SyncShare: enable” in the Stay menu or remove the script in the Stay app.'
-          : 'SyncShare is now disabled. Use "SyncShare: enable" in the Stay menu to turn it on again, or remove the script in the Stay app.');
-      } catch (e) {}
+
     });
   }
   function enableSelf() {
@@ -1705,9 +1704,7 @@ function createSyncShareRuntime(env) {
           bgReady.promise.then(function () { return rawGet('local', 'settings'); }).then(function (st) {
             if (hasConsent(st) || !CONFIG.consentGate) return journalReplay();
           }).then(null, function (e) { warn('journal: replay failed', e); });
-          registerMenu(MANIFEST.name, function () {
-            openExtensionPage('html/popup/popup.html').then(null, function () {});
-          });
+          registerMenu(MANIFEST.name, function () { if (win.__mse) win.__mse.open(); });
           watchHash();
 
           if (CONFIG.welcomePage) showWelcome();

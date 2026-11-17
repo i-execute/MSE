@@ -1186,7 +1186,7 @@ class FieldEditor:
         elif self.editing:
             edit_hint = "Type or paste value, Enter to save, Esc to revert"
             if cur.choices:
-                edit_hint = "Type path, Tab to cycle interpreters, Enter to save"
+                edit_hint = "Type or Tab to cycle choices, Enter to save"
             lines.append(frame_line(paint(g.rail, theme.accent) + " " + paint(edit_hint, theme.accent), limit, tone))
         elif cur.hint:
             lines.append(frame_line(paint(g.rail, theme.accent) + " " + paint(cur.hint, theme.muted), limit, tone))
@@ -1415,8 +1415,8 @@ class Stack:
         self.prefix = Path(env.get("MSE_PREFIX", DEFAULT_PREFIX))
         self.env_file = Path(os.environ.get("MSE_ENV_FILE", DEFAULT_ENV))
         self.state_dir = Path(env.get("MSE_STATE_DIR", DEFAULT_STATE))
-        self.port = env.get("MSE_PORT", "8788")
-        self.upstream_port = env.get("MSE_UPSTREAM_PORT", "8799")
+        self.port = env.get("MSE_PORT", "")
+        self.upstream_port = env.get("MSE_UPSTREAM_PORT", "")
         self.upstream_host = env.get("MSE_UPSTREAM_HOST", "127.0.0.1")
         self.tunnel = env.get("MSE_TUNNEL_SCRIPT", "/usr/local/bin/mse-tunnel.sh")
 
@@ -1495,7 +1495,7 @@ class Setup:
         self.python_choices = detect_pythons()
         self.credentials = {"BOT_TOKEN": "", "OWNER_ID": "", "API_ID": "", "API_HASH": "", "TAILSCALE_KEY": ""}
         self.settings = {"MODEL": self.env.get("MSE_MODEL", ""), "QUOTA": self.env.get("MSE_DAILY_QUOTA", "200"),
-                         "UPSTREAM_PORT": self.env.get("MSE_UPSTREAM_PORT", "8799")}
+                         "UPSTREAM_PORT": self.env.get("MSE_UPSTREAM_PORT", "")}
         self.notes: list[str] = []
         self.started = time.time()
         self.limit = width()
@@ -1799,8 +1799,18 @@ class Setup:
 
     # ------------------------------------------------------------------ settings
     def ask_settings(self) -> bool:
+        models: list[str] = []
+        current_model = self.settings["MODEL"]
+        try:
+            health = http_json(f"http://127.0.0.1:{self.stack.port}/health", timeout=2)
+            models = [str(item) for item in health.get("models", []) if isinstance(item, str) and item.strip()]
+            if health.get("model"):
+                current_model = str(health["model"])
+        except Exception:  # noqa: BLE001 — manual input remains available if the router is offline
+            pass
+        model_hint = "model name · Space to edit, Tab cycles backend models" if models else "model name on the local backend (OpenAI-compatible)"
         fields = [
-            Field("MODEL", "model", False, self.settings["MODEL"], "model name on the local backend (OpenAI-compatible)"),
+            Field("MODEL", "model", False, current_model, model_hint, choices=models),
             Field("QUOTA", "quota", False, self.settings["QUOTA"], "Requests per day per device"),
             Field("UPSTREAM_PORT", "backend port", False, self.settings["UPSTREAM_PORT"], "127.0.0.1:<port> — where the AI backend lives"),
             Field("BOT_TOKEN", "bot token", True, self.contrib_or("BOT_TOKEN"), "Required. @BotFather -> /newbot (or /token); without it the bot stays off"),
@@ -1876,8 +1886,18 @@ class Setup:
                 pass
         except Exception as exc:  # noqa: BLE001
             return False, "the router did not accept the quota (%s), it applies after a restart" % type(exc).__name__
+        model = self.settings["MODEL"].strip()
+        if model:
+            body = json.dumps({"model": model}).encode()
+            req = urllib.request.Request(f"http://127.0.0.1:{self.stack.port}/admin/model", data=body, method="POST",
+                                         headers={"content-type": "application/json", "x-admin-token": token})
+            try:
+                with urllib.request.urlopen(req, timeout=8):
+                    pass
+            except Exception as exc:  # noqa: BLE001
+                return False, "quota applied; model not accepted (%s)" % type(exc).__name__
         subprocess.run(["systemctl", "restart", "mse-bot"], capture_output=True, text=True, timeout=60)
-        return True, "quota applied, the bot restarted"
+        return True, "quota and model applied; bot restarted" if model else "quota applied; bot restarted"
 
     # ------------------------------------------------------------------ removal
     def ask_uninstall(self) -> bool:

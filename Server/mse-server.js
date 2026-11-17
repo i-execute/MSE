@@ -10,7 +10,7 @@
  * the record decides whose quota is spent and whose name is in the log.
  *
  * Zero dependencies: node:http, node:crypto, a JSON file for state. Meant to sit behind
- * `cloudflared tunnel --url http://127.0.0.1:8788`, so it binds to 127.0.0.1 by default.
+ * a tunnel pointing at the configured MSE_PORT, so it binds to 127.0.0.1 by default.
  *
  *   node server-mse/mse-server.js
  *   MSE_ADMIN_TOKEN=... MSE_UPSTREAM_URL=https://api.openai.com/v1 MSE_UPSTREAM_KEY=sk-... node mse-server.js
@@ -25,9 +25,9 @@ const { URL } = require('url');
 
 /* ------------------------------------------------------------------ config */
 const here = __dirname;
-const DATA_DIR = path.resolve(process.env.MSE_DATA_DIR || process.env.MSE_STATE_DIR || path.join(here, 'data'));
+const DATA_DIR = path.resolve(process.env.MSE_DATA_DIR || process.env.MSE_STATE_DIR || path.join(require('os').homedir(), '.local', 'share', 'mse'));
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
-const PORT = Number(process.env.MSE_PORT || 8788);
+const PORT = Number(process.env.MSE_PORT);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
 const VERSION = '1.0.0';
 
@@ -181,7 +181,8 @@ function registerDevice(body) {
     moodleId,
     name,
     site,
-    status: CFG.autoApprove || allowed ? 'active' : 'pending',
+    status: 'pending',
+    note: allowed ? 'another device requires explicit approval' : null,
     created: now(),
     seen: now(),
     quotaDay: day(),
@@ -260,14 +261,13 @@ async function handleAdmin(req, res, url) {
     if (!state.allow.some((a) => String(a.moodleId) === moodleId)) {
       state.allow.push({ moodleId, name: String(body.name || '').trim().slice(0, 120), added: now(), deviceId: null });
     }
-    /* switching an existing pending device on right away */
-    Object.values(state.devices).forEach((d) => {
-      if (String(d.moodleId) === moodleId && d.status !== 'active' && !d.banned) {
-        d.status = 'active';
-        const slot = state.allow.find((a) => String(a.moodleId) === moodleId);
-        if (slot && !slot.deviceId) slot.deviceId = d.deviceId;
-      }
-    });
+    const pending = Object.values(state.devices).filter((d) => String(d.moodleId) === moodleId && d.status === 'pending' && !d.banned);
+    if (pending.length > 1) return oaiError(req, res, 409, 'multiple pending devices: approve by deviceId', 'ambiguous_device');
+    if (pending.length === 1) {
+      pending[0].status = 'active';
+      const slot = state.allow.find((a) => String(a.moodleId) === moodleId);
+      if (slot && !slot.deviceId) slot.deviceId = pending[0].deviceId;
+    }
     saveState();
     note('allow ' + moodleId);
     return send(req, res, 200, { ok: true, allow: state.allow });
@@ -277,6 +277,7 @@ async function handleAdmin(req, res, url) {
     const rec = state.devices[deviceId];
     if (!rec) return oaiError(req, res, 404, 'no such device', 'no_device');
     rec.status = 'active';
+    delete rec.banned;
     delete rec.note;
     saveState();
     note('approve ' + deviceId, rec);
@@ -488,6 +489,7 @@ const handler = async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   try {
     if (url.pathname === '/health' || url.pathname === '/') {
+      res.setHeader('cache-control', 'no-store');
       const body = {
         ok: true,
         name: 'MSE gateway',
@@ -531,6 +533,10 @@ const server = (TLS_CERT && TLS_KEY)
   : http.createServer(handler);
 
 if (require.main === module) {
+  if (!Number.isInteger(PORT) || PORT <= 0 || PORT > 65535) {
+    console.error('MSE_PORT must be a valid port');
+    process.exit(1);
+  }
   server.listen(PORT, HOST, () => {
     console.log('MSE gateway ' + VERSION + ' on ' + ((TLS_CERT && TLS_KEY) ? 'https' : 'http') + '://' + HOST + ':' + PORT);
     console.log('  upstream:', CFG.upstreamUrl, CFG.upstreamKey ? '(key set)' : '(NO KEY: chat will fail)');

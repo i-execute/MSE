@@ -27,6 +27,12 @@ jobs:
         run: node --test --test-concurrency=1 tests/router.test.js
       - name: gateway (G1–G14)
         run: node --test --test-concurrency=1 tests/gateway.test.js
+      - name: agent models and random ports
+        run: node --test --test-concurrency=1 tests/agent_models.test.js tests/random_ports.test.js tests/multi_device.test.js tests/dumps.test.js tests/agent_types.test.js tests/agent_stream.test.js
+      - name: TUI live model
+        run: python3 tests/tui_live_model.py
+      - name: state persistence
+        run: python3 tests/state_persistence.py
       - name: install --dry-run
         run: bash Server/stack/install.sh --dry-run --no-tunnel --yes
       - name: install --dry-run (update mode)
@@ -37,6 +43,8 @@ jobs:
         run: python3 Server/stack/mse_setup.py --status || true
       - name: panel renders with a pty
         run: python3 tests/tui_smoke.py
+      - name: installer dialogue and port persistence (pty)
+        run: python3 tests/install_dialog.py
 
   bot:
     name: telegram panel
@@ -50,7 +58,9 @@ jobs:
       - name: goygram
         run: pip install goygram
       - name: self-test
-        run: python3 tests/bot_selftest.py
+        run: |
+          python3 tests/bot_selftest.py
+          python3 tests/bot_dumps.py
 
   extension:
     name: extension (WebKit, iPhone)
@@ -66,3 +76,6 @@ jobs:
       - name: M1–M13
         env: { SS_BROWSER: webkit }
         run: node --test --test-concurrency=1 tests/mse.test.js
+      - name: Snif, image guard, checkbox payload and one-file
+        env: { SS_BROWSER: webkit }
+        run: node --test --test-concurrency=1 tests/snif.test.js tests/image_guard.test.js tests/checkbox_payload.test.js tests/onefile.test.js tests/vendor_ui.test.js tests/report_webkit.test.js tests/agent_stream_webkit.test.js tests/question_types.test.js tests/parallel_silence.test.js tests/model_chip.test.js tests/address_race.test.js

@@ -25,7 +25,7 @@ set -euo pipefail
 
 ENV_FILE="${MSE_ENV_FILE:-/etc/mse/mse.env}"
 STATE_DIR="${MSE_STATE_DIR:-/var/lib/mse}"
-GATEWAY_PORT="${MSE_GATEWAY_PORT:-8788}"
+GATEWAY_PORT="${MSE_GATEWAY_PORT:-${MSE_PORT:-}}"
 TUNNEL_BACKEND_FILE="$STATE_DIR/tunnel.json"
 TS_BIN="${MSE_TAILSCALE_BIN:-tailscale}"
 TS_SOCK="${MSE_TAILSCALE_SOCKET:-}"
@@ -48,6 +48,9 @@ env_get() {
   if [ -z "$value" ]; then value="${!key:-$fallback}"; fi
   printf '%s' "$value"
 }
+
+# Prefer the explicit override; otherwise use the router port persisted by the installer.
+GATEWAY_PORT="${GATEWAY_PORT:-$(env_get MSE_PORT)}"
 
 ts() {
   if [ -n "$TS_SOCK" ]; then "$TS_BIN" --socket="$TS_SOCK" "$@"; else "$TS_BIN" "$@"; fi
@@ -137,6 +140,7 @@ PY
 
 cmd_funnel() {
   local port="${1:-$GATEWAY_PORT}"
+  [ -n "$port" ] || die "MSE_PORT is not configured"
   have "$TS_BIN" || die "tailscale is not installed"
   ts funnel --bg --yes "$port" >/dev/null 2>&1 || ts funnel --bg "$port" || die "funnel did not turn on: check that Funnel is allowed in the tailnet ACL"
   local host url
@@ -149,6 +153,7 @@ cmd_funnel() {
 
 cmd_serve() {
   local port="${1:-$GATEWAY_PORT}"
+  [ -n "$port" ] || die "MSE_PORT is not configured"
   have "$TS_BIN" || die "tailscale is not installed"
   ts serve --bg --https=443 "http://127.0.0.1:$port" >/dev/null 2>&1 || ts serve --bg "http://127.0.0.1:$port" || die "serve did not turn on"
   local host url
@@ -162,6 +167,7 @@ cmd_serve() {
 cmd_off() {
   have "$TS_BIN" || { say "tailscale is not installed"; return 0; }
   local port="${1:-$GATEWAY_PORT}"
+  [ -n "$port" ] || die "MSE_PORT is not configured"
   ts funnel --bg "$port" off >/dev/null 2>&1 || ts funnel off >/dev/null 2>&1 || true
   ts serve --bg "$port" off >/dev/null 2>&1 || ts serve off >/dev/null 2>&1 || true
   write_state off "$port" ""
@@ -235,7 +241,7 @@ import json,sys
 installed,running,backend,url,ip,expiry,port=sys.argv[1:8]
 print(json.dumps({"backend":"tailscale","installed":installed=="1","running":running=="1",
   "mode":backend or None,"url":url or None,"ip":ip or None,"expiry":expiry or None,
-  "gateway_port":int(port)},indent=1))
+  "gateway_port":int(port) if port.isdigit() else None},indent=1))
 PY
     return 0
   fi

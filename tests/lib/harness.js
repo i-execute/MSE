@@ -19,10 +19,10 @@ function fixtureHtml(name) { return fs.readFileSync(path.join(FIX, name + '.html
  */
 async function launch(opts = {}) {
   const browserName = opts.browser || process.env.SS_BROWSER || 'webkit';
-  const browser = await pw[browserName].launch();
+  const browser = opts.context ? opts.context.browser() : await pw[browserName].launch();
   const device = pw.devices[opts.device || 'iPhone 13'];
   const ctxOpts = Object.assign({}, browserName === 'webkit' ? device : { viewport: device.viewport, userAgent: device.userAgent, deviceScaleFactor: 2, hasTouch: true, isMobile: true }, { locale: opts.locale || 'en-US' });
-  let context = await browser.newContext(ctxOpts);
+  let context = opts.context || await browser.newContext(ctxOpts);
   let source = opts.source || fs.readFileSync(USERJS, 'utf8');
   const script = emu.installScript(source, { forceMode: opts.mode, commentVariant: opts.commentVariant });
   const state = opts.state || {};
@@ -55,7 +55,6 @@ async function launch(opts = {}) {
     /* iOS Safari does not fire "beforeunload": nobody gets it here either */
     await context.addInitScript(() => { window.addEventListener('beforeunload', (e) => { e.stopImmediatePropagation(); }, true); });
   }
-  if (opts.context) context = opts.context;
   await emu.installStay(context, [script], state);
   /* page fetch path */
   await context.route('https://syncshare.ru/api/**', async (route) => {

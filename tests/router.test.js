@@ -45,7 +45,9 @@ const key = (n) => 'mse_' + String(n).repeat(48);
 const admin = { 'x-admin-token': 'adm_router_token' };
 
 test('R1 /health says it is a router behind tailscale, and where the backend is', async () => {
-  const h = await (await get('/health')).json();
+  const response = await get('/health');
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const h = await response.json();
   assert.equal(h.ok, true);
   assert.equal(h.name, 'MSE gateway');
   assert.equal(h.role, 'router');
@@ -137,7 +139,7 @@ test('R8 /admin/state is the same report as before, and /admin/quota changes the
   assert.equal((await q.json()).quota, 50);
   const st = await (await get('/admin/state', admin)).json();
   assert.equal(st.quota, 50);
-  assert.equal(st.version, '2.4.0');
+  assert.equal(st.version, '2.6.1');
   assert.ok(Array.isArray(st.log) && st.log.length > 0, 'the log tells what happened');
   assert.equal(st.backend, 'tailscale');
 });

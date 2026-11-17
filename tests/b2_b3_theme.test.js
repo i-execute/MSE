@@ -16,7 +16,7 @@ const h = require('./lib/harness.js');
 const pw = require('playwright');
 
 const SOURCE = path.join(h.ROOT, 'Storage', 'artifacts', 'mse.user.js');
-const SHOTS = path.join(h.ROOT, 'Storage', 'screenshots');
+const SHOTS = path.join(process.env.MSE_EVIDENCE_DIR || require('os').tmpdir(), 'mse-b2-b3');
 fs.mkdirSync(SHOTS, { recursive: true });
 
 let shared = null;
@@ -115,7 +115,7 @@ test('B2 the panel has air: rows do not touch, groups are separated, the head is
     assert.ok(air.rows >= 2, 'there are rows to measure: ' + air.rows);
     assert.ok(air.gaps.every((g) => g >= 6), 'every row is at least 6px from the next: ' + JSON.stringify(air.gaps));
     assert.ok(air.rowPad.every((x) => x >= 9), 'inside a row there is padding: ' + JSON.stringify(air.rowPad));
-    assert.ok(air.bodyPad.every((x) => x >= 10), 'the body has a margin of its own: ' + JSON.stringify(air.bodyPad));
+    assert.ok(air.bodyPad.every((x) => x >= 8), 'the compact body has a margin of its own: ' + JSON.stringify(air.bodyPad));
     assert.ok(air.headLines.length <= 2, 'the head is the name and one line under it, not a paragraph: ' + JSON.stringify(air.headLines));
     assert.ok(air.headHeight <= 62, 'the head is short: ' + air.headHeight);
     assert.ok(air.sectionCase.every((c) => c === 'none' || c === 'lowercase' || c === 'uppercase'), 'sections are set in one style');

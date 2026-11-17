@@ -21,6 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { sanitize, verifySanitized } = require('./sanitize.js');
+const { patchBundle, stripLocales } = require('./silence-vendor.js');
 
 const LAYOUT = require('./env.js');
 const ROOT = LAYOUT.ROOT;
@@ -28,7 +29,7 @@ const VENDOR = LAYOUT.VENDOR;
 const OUT = LAYOUT.OUT;
 const SRC = LAYOUT.SRC;
 const BRAND = 'MSE';
-const VERSION = '2.4.0';
+const VERSION = '2.6.1';
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const read = (p) => fs.readFileSync(path.join(VENDOR, p), 'utf8');
@@ -71,6 +72,7 @@ for (const loc of Object.keys(locales)) {
     if (DROP_MESSAGES.some((re) => re.test(k))) { delete locales[loc][k]; dropped++; }
   }
 }
+stripLocales(locales);
 report.branding.droppedMessages = dropped;
 
 /* Settings the extension starts with. installationMessage is kept away from "none", so getInstallationMessage()
@@ -122,6 +124,7 @@ function bundleBody(name) {
   for (const [k, v] of Object.entries(SERVICE)) {
     if (name === 'background' && !out.includes(v)) throw new Error('background.js lost the answer service URL: ' + v);
   }
+  out = patchBundle(name, out);
   report.bundles[name] = { file: BUNDLES[name], bytes: Buffer.byteLength(out), sha256: sha(out), assets };
   return out + (SUFFIX[name] || '');
 }

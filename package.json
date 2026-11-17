@@ -1,6 +1,6 @@
 {
   "name": "mse",
-  "version": "2.4.0",
+  "version": "2.6.1",
   "private": true,
   "description": "MSE — Moodle answer panel (userscript) and the gateway/router stack behind it",
   "license": "UNLICENSED",
@@ -9,7 +9,8 @@
     "build": "bash Extensions/tools/build.sh",
     "test": "node --test --test-concurrency=1 tests/gateway.test.js tests/router.test.js",
     "test:ext": "SS_BROWSER=webkit node --test --test-concurrency=1 tests/mse.test.js",
-    "test:bot": "python3 tests/bot_selftest.py"
+    "test:bot": "python3 tests/bot_selftest.py",
+    "build:onefile": "node Extensions/tools/repack-artifact.js"
   },
   "devDependencies": {
     "acorn": "^8.19.0",

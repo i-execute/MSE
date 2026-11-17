@@ -87,7 +87,8 @@ MSE_BOT_TOKEN=1234567890:AAH... bash install.sh        # всё остально
 sudo mse                          # панель: Health, Install/Self-Heal, Services, Tunnel, Model & Keys, Uninstall
 sudo mse update                   # обновить код и зависимости, не трогая устройства и allow-лист
 sudo mse --status                 # то же без вопросов: таблица здоровья (для скриптов)
-curl -s localhost:8788/health     # что шлюз о себе думает
+MSE_PORT=$(sudo sed -n 's/^MSE_PORT=//p' /etc/mse/mse.env)
+curl -s "localhost:$MSE_PORT/health"     # что шлюз о себе думает
 ```
 
 Панель — порт установщика [OBHOD](https://github.com/i-execute/OBHOD): стрелки двигают выбор, Space отмечает,
@@ -124,13 +125,17 @@ iPhone / Android / Desktop
         │  https  (tailscale funnel, стабильный адрес)
         ▼
   <host>.<tailnet>.ts.net
-        │  127.0.0.1:8788
+        │  127.0.0.1:$MSE_PORT
   mse-router.js ──── ключ устройства, allow-лист по Moodle ID, квота, журнал
-        │  127.0.0.1:8799 (только loopback)
+        │  127.0.0.1:$MSE_UPSTREAM_PORT (только loopback)
   AI-бэкенд (OpenAI-совместимый; здесь и только здесь — ключ модели)
 ```
 
 Роутер не хранит ключ модели: он проверяет, кому можно, стримит ответ бэкенда и сам отвечает на `/mse/v1/agent`.
+При чистой установке два свободных loopback-порта выбираются автоматически и записываются в `mse.env`;
+при обновлении прежние значения сохраняются. AI-бэкенд должен слушать порт `MSE_UPSTREAM_PORT`: сам бэкенд
+не входит в этот репозиторий и настраивается отдельно.
+
 Список моделей роутер спрашивает у бэкенда (`GET /v1/models`) при старте и по кнопке «обновить», кэширует и отдаёт
 в `/v1/models` и `/health`; `MSE_MODEL` — только дефолт, а если бэкенд такой модели не предлагает, роутер берёт
 первую доступную и пишет об этом в журнал.
@@ -140,24 +145,25 @@ Telegram-бот (`Server/bot`) — та же админка шлюза, но в 
 ## Приёмка (curl)
 
 ```bash
-curl -s localhost:8788/health | jq '{name,version,role,backend,model,modelsCount,modelsSource,quota}'
-# → {"name":"MSE gateway","version":"2.4.0","role":"router","backend":"tailscale","model":"…","modelsCount":3,…}
+MSE_PORT=$(sudo sed -n 's/^MSE_PORT=//p' /etc/mse/mse.env)
+curl -s localhost:$MSE_PORT/health | jq '{name,version,role,backend,model,modelsCount,modelsSource,quota}'
+# → {"name":"MSE gateway","version":"2.6.1","role":"router","backend":"tailscale","model":"…","modelsCount":3,…}
 
 KEY=mse_$(openssl rand -hex 32)
-curl -s -X POST localhost:8788/mse/v1/register -H 'content-type: application/json' \
+curl -s -X POST localhost:$MSE_PORT/mse/v1/register -H 'content-type: application/json' \
   -d "{\"key\":\"$KEY\",\"moodleId\":\"12345\",\"name\":\"Test User\"}" | jq '.device.status'
 # → "pending"
 
-curl -s -o /dev/null -w '%{http_code}\n' localhost:8788/v1/chat/completions \
+curl -s -o /dev/null -w '%{http_code}\n' localhost:$MSE_PORT/v1/chat/completions \
   -H "authorization: Bearer $KEY" -H 'content-type: application/json' \
   -d '{"messages":[{"role":"user","content":"hi"}]}'
 # → 403  (никто не пустил — модель недоступна)
 
 TOKEN=$(grep '^MSE_ADMIN_TOKEN=' /etc/mse/mse.env | cut -d= -f2)
-curl -s -X POST localhost:8788/admin/allow -H "x-admin-token: $TOKEN" \
+curl -s -X POST localhost:$MSE_PORT/admin/allow -H "x-admin-token: $TOKEN" \
   -H 'content-type: application/json' -d '{"moodleId":"12345"}' | jq '.allow'
 
-curl -s localhost:8788/v1/chat/completions -H "authorization: Bearer $KEY" \
+curl -s localhost:$MSE_PORT/v1/chat/completions -H "authorization: Bearer $KEY" \
   -H 'content-type: application/json' -d '{"stream":true,"messages":[{"role":"user","content":"hi"}]}' | head -3
 # → data: {"choices":[{"delta":{"content":"…"}}]} …
 ```
@@ -193,3 +199,7 @@ tests/           роутер, шлюз, расширение (WebKit), бот
 ## Лицензия
 
 См. [`LICENSE`](LICENSE).
+
+### One-file repack
+
+`npm install && npm run build:onefile` обновляет собственные части и применяет проверенные отключения vendor UI к уже включённому `Storage/artifacts/mse.user.js`. Оригинальные vendor-исходники отдельно не входят в репозиторий; полная пересборка `Extensions/tools/build.sh` требует пакет SyncShare 2.22.0.

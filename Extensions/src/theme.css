@@ -62,10 +62,14 @@
 @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
 
 /* the head: the name, the view, three buttons — with air, and a rule under it */
-.ph{display:flex;align-items:center;gap:8px;padding:12px 12px 11px;border-bottom:1px solid var(--rule)}
+.ph{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--rule)}
 .ph .t{flex:1 1 auto;min-width:0;font:700 11px/1 -apple-system,sans-serif;letter-spacing:.16em;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 0 9px rgba(255,255,255,.28)}
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:none}
 .ph .t em{font:400 10.5px/1 -apple-system,sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none;display:block;margin-top:5px}
+.ph .model-chip{flex:0 1 auto;min-width:0;max-width:43%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  padding:4px 7px;border:1px solid rgba(255,255,255,.17);border-radius:8px;color:var(--ink-2);
+  font:500 9px/1.15 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.01em;
+  text-shadow:0 0 5px rgba(255,255,255,.55),0 0 11px rgba(255,255,255,.24);box-shadow:0 0 7px rgba(255,255,255,.08)}
 .ib{flex:0 0 auto;width:28px;height:28px;display:flex;align-items:center;justify-content:center;
   border-radius:9px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);
   font:600 13px/1 Georgia,serif;cursor:pointer;transition:border-color .18s var(--ease),color .18s var(--ease)}
@@ -74,12 +78,12 @@
 .ib.back{font:400 14px/1 -apple-system,sans-serif}
 
 /* the body: air between rows and inside them, a group is separated by a rule and a name */
-.pb{max-height:min(46vh,300px);overflow:auto;-webkit-overflow-scrolling:touch;padding:12px}
+.pb{max-height:min(46vh,300px);overflow:auto;-webkit-overflow-scrolling:touch;padding:8px}
 .pb::-webkit-scrollbar{width:0}
-.sec{font:700 9.5px/1 -apple-system,sans-serif;letter-spacing:.18em;color:var(--muted);margin:16px 0 9px}
+.sec{font:700 9.5px/1 -apple-system,sans-serif;letter-spacing:.18em;color:var(--muted);margin:10px 0 6px}
 .sec:first-child{margin-top:0}
-.group{display:flex;flex-direction:column;gap:8px}
-.group + .sec{margin-top:16px}
+.group{display:flex;flex-direction:column;gap:6px}
+.group + .sec{margin-top:10px}
 
 /* ---------- answers: one row a tap wide, a box on the left, a letter, the text, the share ---------- */
 .ans{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;margin:0;padding:10px 11px;
@@ -99,7 +103,7 @@
 /* ---------- one status line, never a paragraph ---------- */
 .row{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border-radius:var(--r);
   border:1px solid var(--rule);background:var(--paper-2);color:var(--ink-2);
-  font:400 11.5px/1.35 inherit;text-align:left;cursor:pointer;margin:12px 0 8px}
+  font:400 11.5px/1.35 inherit;text-align:left;cursor:pointer;margin:7px 0 5px}
 /* the status line closes the panel: a rule above it, the last line of the sheet */
 .pb > .row:last-child{margin-bottom:0}
 .row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--rule-3)}
@@ -143,7 +147,7 @@
 .log .ln.warn,.log .ln.bad{color:var(--muted)}
 .log .ln .t{flex:0 0 auto;color:var(--muted)}
 .log .ln .m{flex:1 1 auto;min-width:0}
-.empty{padding:14px 6px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5}
+.empty{padding:8px 6px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5}
 .spin{width:14px;height:14px;margin:10px auto;border-radius:50%;border:1.5px solid var(--rule-2);border-top-color:var(--ink);animation:sp .7s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:9px 14px;

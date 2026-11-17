@@ -10,7 +10,7 @@ const h = require('./lib/harness.js');
 const { ensureTls } = require('./lib/tls.js');
 
 const SOURCE = path.join(h.ROOT, 'Storage', 'artifacts', 'mse.user.js');
-const EVID = path.join(h.ROOT, 'evidence', 'mse');
+const EVID = path.join(process.env.MSE_EVIDENCE_DIR || require('os').tmpdir(), 'mse-test-evidence');
 fs.mkdirSync(EVID, { recursive: true });
 const report = {};
 test.after(() => fs.writeFileSync(path.join(EVID, 'report.json'), JSON.stringify(report, null, 1)));
@@ -451,9 +451,10 @@ test('M11 the gateway and the agent: check, models, allow by ID, and the agent f
     await page.waitForTimeout(2500);
     const checked = await page.evaluate(() => window.__mse.state());
     assert.match(checked.pop.text, /AI gateway answered/, 'the gateway answers');
-    /* 2.4: the panel does not name models any more — the router answers for them; the check reports the address
-       and the key, and the journal keeps the count of models the gateway offers */
-    assert.doesNotMatch(checked.pop.text, /mock-model|gpt-4o-mini/, 'the panel names no model: the router decides');
+    /* 2.6.1: only the active model is named in the header, not the offered model list. */
+    const chip = await page.evaluate(() => window.__mse.root().querySelector('.pop:not(.out) .ph [data-mse="model-chip"]')?.textContent);
+    assert.equal(chip, 'mock-model', 'the header names the active model');
+    assert.doesNotMatch(checked.pop.text, /gpt-4o-mini/, 'the other offered models are not displayed');
     const gwLog = await page.evaluate(() => window.__mse.log());
     assert.ok(gwLog.some((l) => /AI gateway is up/.test(l.text)), 'the journal says the gateway is up');
     assert.ok(gwLog.some((l) => /\d+ models/.test(l.text)), 'and how many models it offers');
@@ -496,11 +497,15 @@ test('M11 the gateway and the agent: check, models, allow by ID, and the agent f
     assert.equal(res.agent.state, 'ok', 'the agent answered: ' + JSON.stringify(res.agent));
     assert.match(res.agent.answer, /A hashtag/, 'and picked an option of the question');
     await page.waitForTimeout(400);
+    const beforeTap = await page.evaluate(() => [...document.querySelectorAll('input[name="q127:1_answer"]')].some(i => i.checked && i.value !== '-1'));
+    assert.equal(beforeTap, false, 'the agent does not fill without a tap');
+    await page.evaluate(() => { const row = [...window.__mse.root().querySelectorAll('.ans')].find(e => e.textContent.includes('A hashtag') && e.textContent.includes('agent')); if (!row) throw Error('agent row missing'); row.click(); });
+    await page.waitForTimeout(200);
     const picked = await page.evaluate(() => {
       const sel = [...document.querySelectorAll('input[name="q127:1_answer"]')].filter((i) => i.checked && i.value !== '-1')[0];
       return sel ? sel.closest('.answer').querySelector('.flex-fill').textContent.trim() : null;
     });
-    assert.equal(picked, 'A hashtag', 'the agent answer is selected in the form');
+    assert.equal(picked, 'A hashtag', 'the agent answer is selected after tapping');
 
     const journal = await page.evaluate(() => window.__mse.log());
     assert.ok(journal.some((l) => l.kind === 'agent' && l.ok), 'the journal keeps the agent call');
@@ -657,7 +662,7 @@ test('M13 the two tiers: a base key never reaches the gateway, an allowed key ge
 
     /* 1. base tier: the panel is opened, the service is asked, the gateway is not touched */
     const base = await openPanel(page);
-    assert.match(base.pop.text, /no answers yet/, 'their base answered with nothing');
+    assert.match(base.pop.text, /A hashtag/, 'the form choices remain available when the base is empty');
     assert.doesNotMatch(base.pop.text, /AI/, 'no AI row for a key that was never let in');
     assert.equal(gwHits().length, 0,
       'not a single request towards the gateway: ' + JSON.stringify(gwHits().map((r) => r.path)));

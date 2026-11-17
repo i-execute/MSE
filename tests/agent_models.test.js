@@ -45,6 +45,7 @@ function backend(options) {
         return json(200, { object: 'list', data: options.models.map((id) => ({ id, object: 'model' })) });
       }
       if (req.method === 'POST' && req.url === '/v1/chat/completions') {
+        if (options.status) return json(options.status, { error: { message: 'backend failure' } });
         let parsed = {};
         try { parsed = JSON.parse(body); } catch (e) {}
         const asked = String((parsed.messages || []).map((m) => m.content).join('\n'));
@@ -149,6 +150,7 @@ test('bug 1: register -> allow -> agent, and the answer is one of the options', 
       assert.match(String(out.json.message), /not in the task/, 'and says why: ' + JSON.stringify(out.json));
     } finally {
       r2.child.kill();
+      bad.server.close();
     }
 
     /* a key nobody let in never reaches the model */
@@ -215,4 +217,21 @@ test('bug 3: the list of models is the backend\'s, and changes when the backend 
   } finally {
     r.child.kill();
   }
+});
+
+
+test('503 from the selected model is reported as unavailable, not malformed JSON', { timeout: 60000 }, async () => {
+  const bg = await backend({ models: ['model-one'], status: 503 });
+  const r = await startRouter(bg.port, { MSE_MODEL: 'model-one' });
+  try {
+    await call(r.port, 'POST', '/mse/v1/register', { key: KEY, moodleId: '4242' });
+    await fetch('http://127.0.0.1:' + r.port + '/admin/allow', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-token': TOKEN },
+      body: JSON.stringify({ moodleId: '4242' })
+    });
+    const out = await call(r.port, 'POST', '/mse/v1/agent', { question: 'q?', options: ['a', 'b'] }, KEY);
+    assert.equal(out.status, 503);
+    assert.equal(out.json.code, 'model_unavailable');
+    assert.match(out.json.message, /model unavailable.*another model/i);
+  } finally { r.child.kill(); bg.server.close(); }
 });

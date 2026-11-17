@@ -19,6 +19,7 @@ import pty
 import re
 import select
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -88,6 +89,7 @@ def sandbox() -> dict:
         "MSE_ENV_DIR": str(base / "etc"),
         "MSE_STATE_DIR": str(base / "var"),
         "MSE_UNIT_DIR": str(base / "units"),
+        "MSE_BIN_DIR": str(base / "installed-bin"),
         "MSE_ALLOW_NONROOT": "1",
         "MSE_SRC_DIR": str(ROOT),
         "MSE_TEST_LOG": str(base / "calls.log"),
@@ -263,6 +265,11 @@ def main() -> int:
     check(env.get("MSE_BOT_TOKEN", "").endswith("0123456789"), "the bot token lands in mse.env")
     check(env.get("MSE_OWNER_ID") == "100000001", "the owner id lands in mse.env")
     check(env.get("MSE_TAILSCALE_KEY", "").startswith("tskey-auth-"), "the tailscale key lands in mse.env")
+    ports = [int(env.get(key, "0")) for key in ("MSE_PORT", "MSE_UPSTREAM_PORT")]
+    check(all(20000 <= port <= 60000 for port in ports) and ports[0] != ports[1], "two distinct random ports land in mse.env")
+    check(env.get("MSE_ADMIN_URL") == "http://127.0.0.1:" + str(ports[0]), "admin URL uses the selected router port")
+    unit = Path(box["MSE_UNIT_DIR"]) / "mse-router.service"
+    check(unit.exists() and ("EnvironmentFile=" + str(Path(box["MSE_ENV_DIR"]) / "mse.env")) in unit.read_text(), "router unit reads the selected ports from env")
     env_file = Path(box["MSE_ENV_DIR"]) / "mse.env"
     if env_file.exists():
         mode = oct(env_file.stat().st_mode & 0o777)
@@ -285,6 +292,22 @@ def main() -> int:
     check(str(env3.get("MSE_PUBLIC_URL", "")).startswith("https://"), "the address is written into MSE_PUBLIC_URL")
     check("router:    answers, with the address in /health" in text, "the installer confirms /health after the restart")
     check("mse-bot: active" in text, "the installer confirms the bot unit is active")
+    held = []
+    try:
+        for port in ports:
+            sock = socket.socket()
+            sock.bind(("127.0.0.1", port))
+            sock.listen()
+            held.append(sock)
+        updated = subprocess.run(["bash", str(INSTALL), "--update", "--yes", "--no-tunnel"],
+                                 env=env_of(box), stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=600)
+        after = read_env(box)
+        check(updated.returncode == 0, "update completes while old ports are occupied")
+        check([int(after.get(key, "0")) for key in ("MSE_PORT", "MSE_UPSTREAM_PORT")] == ports,
+              "update preserves both ports")
+    finally:
+        for sock in held:
+            sock.close()
 
     print("\n== 4. the panel asks for the same three keys before it installs (bug 7)")
     # a terminal, a clean box, nothing in the env: the panel must ask, not walk past the keys and fail later

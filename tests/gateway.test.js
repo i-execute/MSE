@@ -39,6 +39,7 @@ const admin = { 'x-admin-token': 'adm_test_token' };
 test('G1 /health introduces itself, so the extension can tell a gateway from anything else', async () => {
   const r = await fetch(base + '/health');
   const b = await j(r);
+  assert.equal(r.headers.get('cache-control'), 'no-store');
   assert.equal(r.status, 200);
   assert.equal(b.ok, true);
   assert.equal(b.name, 'MSE gateway');

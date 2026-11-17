@@ -69,6 +69,9 @@ class Router:
     def __init__(self, data_dir: Path, port: int, token: str, code_dir: Path | None = None) -> None:
         self.data_dir = data_dir
         self.port = port
+        self.upstream_port = free_port()
+        while self.upstream_port == port:
+            self.upstream_port = free_port()
         self.token = token
         self.code_dir = code_dir
         self.proc: subprocess.Popen | None = None
@@ -79,6 +82,7 @@ class Router:
             "PATH": os.environ["PATH"],
             "HOME": str(self.data_dir),
             "MSE_PORT": str(self.port),
+            "MSE_UPSTREAM_PORT": str(self.upstream_port),
             "MSE_DATA_DIR": str(self.data_dir),
             "MSE_ADMIN_TOKEN": self.token,
             "MSE_DAILY_QUOTA": "200",
@@ -103,6 +107,7 @@ def main() -> int:
     code = work / "opt"          # a stand-in for /opt/mse
     code.mkdir(parents=True)
     shutil.copy2(ROUTER, code / "mse-router.js")
+    shutil.copy2(ROUTER.parent / "mse-dumps.js", code / "mse-dumps.js")
     token = "adm_test_token_for_the_state_test"
     port = free_port()
     router = Router(data, port, token)
@@ -175,6 +180,7 @@ def main() -> int:
 
     # the router still starts from a fresh code copy with the old data
     shutil.copy2(ROUTER, code / "mse-router.js")
+    shutil.copy2(ROUTER.parent / "mse-dumps.js", code / "mse-dumps.js")
     router = Router(data, port, token, code_dir=code)
     router.start()
     check(wait_health(port, token), "the router starts from a fresh code copy")

@@ -33,6 +33,7 @@ ENV_DIR="${MSE_ENV_DIR:-/etc/mse}"
 ENV_FILE="$ENV_DIR/mse.env"
 STATE_DIR="${MSE_STATE_DIR:-/var/lib/mse}"
 UNIT_DIR="${MSE_UNIT_DIR:-/etc/systemd/system}"
+BIN_DIR="${MSE_BIN_DIR:-/usr/local/bin}"
 ASSUME_YES=0
 WITH_VENV=1
 WITH_BOT=1
@@ -305,6 +306,36 @@ env_set() { # env_set KEY VALUE — replace in place, never duplicates a key
   chmod 600 "$ENV_FILE"
 }
 
+# Bind-test candidates before persisting them. The sockets are released before service startup;
+# another process could still claim a selected port in that interval.
+free_port() {
+  "$NODE_BIN" - "$1" <<'NODE'
+const net = require('net');
+const crypto = require('crypto');
+const exclude = Number(process.argv[2]);
+let attempts = 0;
+function pick() {
+  if (++attempts > 1000) { console.error('no free port found'); process.exit(1); }
+  const port = crypto.randomInt(20000, 60001);
+  if (port === exclude) return pick();
+  const s = net.createServer();
+  s.once('error', pick);
+  s.listen(port, '127.0.0.1', () => s.close(() => console.log(port)));
+}
+pick();
+NODE
+}
+valid_port() { [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )); }
+choose_ports() {
+  MSE_PORT="${MSE_PORT:-$(env_get MSE_PORT)}"
+  MSE_UPSTREAM_PORT="${MSE_UPSTREAM_PORT:-$(env_get MSE_UPSTREAM_PORT)}"
+  if [ -n "$MSE_PORT" ]; then valid_port "$MSE_PORT" || die "invalid MSE_PORT"; MSE_PORT="$((10#$MSE_PORT))"; fi
+  if [ -n "$MSE_UPSTREAM_PORT" ]; then valid_port "$MSE_UPSTREAM_PORT" || die "invalid MSE_UPSTREAM_PORT"; MSE_UPSTREAM_PORT="$((10#$MSE_UPSTREAM_PORT))"; fi
+  [ -n "$MSE_PORT" ] || MSE_PORT="$(free_port "$MSE_UPSTREAM_PORT")"
+  [ -n "$MSE_UPSTREAM_PORT" ] || MSE_UPSTREAM_PORT="$(free_port "$MSE_PORT")"
+  [ "$MSE_PORT" != "$MSE_UPSTREAM_PORT" ] || die "router and backend ports must differ"
+}
+
 write_env() {
   if [ -f "$ENV_FILE" ]; then
     say "  settings:  already there, keeping it ($ENV_FILE)"
@@ -317,7 +348,7 @@ write_env() {
 # MSE 2.0 · the only settings file. Mode 600, owner root.
 #
 # router (the outside world reaches it only through tailscale)
-MSE_PORT=${MSE_PORT:-8788}
+MSE_PORT=${MSE_PORT}
 MSE_HOST=127.0.0.1
 MSE_PUBLIC_URL=
 MSE_ADMIN_TOKEN=$(gen_token)
@@ -325,7 +356,7 @@ MSE_DAILY_QUOTA=${MSE_DAILY_QUOTA:-200}
 MSE_ALLOW_ORIGINS=*
 # AI backend: a local port; the model key lives there and nowhere else
 MSE_UPSTREAM_HOST=127.0.0.1
-MSE_UPSTREAM_PORT=${MSE_UPSTREAM_PORT:-8799}
+MSE_UPSTREAM_PORT=${MSE_UPSTREAM_PORT}
 MSE_UPSTREAM_KEY=
 # empty means "the default the local backend offers first": the list itself is never written down here
 MSE_MODEL=${MSE_MODEL:-}
@@ -342,7 +373,7 @@ MSE_API_HASH=${MSE_API_HASH:-}
 MSE_OWNER_USERNAME=${MSE_OWNER_USERNAME:-}
 # the custom emoji pack (tgiosicons, as in the obhod panel): off by default, on from the bot's config screen
 MSE_EMOJI=${MSE_EMOJI:-0}
-MSE_ADMIN_URL=http://127.0.0.1:${MSE_PORT:-8788}
+MSE_ADMIN_URL=http://127.0.0.1:${MSE_PORT}
 ENV
   chmod 600 "$ENV_FILE"
   say "  settings:  created ($ENV_FILE)"
@@ -423,7 +454,7 @@ Environment=MSE_DATA_DIR=$STATE_DIR
 Environment=MSE_STATE_DIR=$STATE_DIR
 Environment=GOYGRAM_VAULT=$STATE_DIR/default.vault
 Environment=MSE_ENV_FILE=$ENV_FILE
-Environment=MSE_TUNNEL_SCRIPT=/usr/local/bin/mse-tunnel.sh
+Environment=MSE_TUNNEL_SCRIPT=$BIN_DIR/mse-tunnel.sh
 # goygram writes <session>.vault into the working directory: it must be the data directory, never the code tree
 # (an update replaces /opt/mse, and the vault holds the mt session). The package is found through PYTHONPATH.
 Environment=PYTHONPATH=$PREFIX
@@ -466,13 +497,13 @@ start_services() {
   if have curl; then
     ready=0
     for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-      if curl -fsS "http://127.0.0.1:${MSE_PORT:-8788}/health" >/dev/null 2>&1; then ready=1; break; fi
+      if curl -fsS "http://127.0.0.1:${MSE_PORT}/health" >/dev/null 2>&1; then ready=1; break; fi
       sleep 1
     done
     if [ "$ready" = "1" ]; then
-      say "  router:    http://127.0.0.1:${MSE_PORT:-8788}/health answers"
+      say "  router:    http://127.0.0.1:${MSE_PORT}/health answers"
     else
-      note "the router did not answer on 127.0.0.1:${MSE_PORT:-8788} after 15 s"
+      note "the router did not answer on 127.0.0.1:${MSE_PORT} after 15 s"
       note "look at it with:  journalctl -u mse-router -n 40 --no-pager"
       note "restart it with:  sudo mse  ->  Service Control  ->  Restart mse-router"
     fi
@@ -491,7 +522,7 @@ start_services() {
 # ------------------------------------------------------------------ tunnel
 wait_for_router() {
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    curl -fsS "http://127.0.0.1:${MSE_PORT:-8788}/health" >/dev/null 2>&1 && return 0
+    curl -fsS "http://127.0.0.1:${MSE_PORT}/health" >/dev/null 2>&1 && return 0
     sleep 1
   done
   return 0
@@ -539,11 +570,11 @@ setup_tunnel() {
   MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh up \
     || note "tailscale up failed: the panel shows why (Tunnel -> Status)"
 
-  say "  tunnel:    funnel -> 127.0.0.1:${MSE_PORT:-8788}"
+  say "  tunnel:    funnel -> 127.0.0.1:${MSE_PORT}"
   url=""
   i=0
   while [ "$i" -lt 3 ]; do
-    url="$(MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh funnel "${MSE_PORT:-8788}" 2>/dev/null | tail -1 || true)"
+    url="$(MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh funnel "${MSE_PORT}" 2>/dev/null | tail -1 || true)"
     case "$url" in https://*) break ;; esac
     i=$((i + 1))
     sleep 2
@@ -586,7 +617,7 @@ restart_router_after_tunnel() {
   if have curl; then
     ok=0
     for _ in 1 2 3 4 5 6 7 8 9 10; do
-      if curl -fsS "http://127.0.0.1:${MSE_PORT:-8788}/health" >/dev/null 2>&1; then ok=1; break; fi
+      if curl -fsS "http://127.0.0.1:${MSE_PORT}/health" >/dev/null 2>&1; then ok=1; break; fi
       sleep 1
     done
     [ "$ok" = "1" ] && say "  router:    answers, with the address in /health" \
@@ -634,19 +665,23 @@ if [ "$UPDATE" = "1" ]; then say "  mode:      update (settings and state are ke
 install_deps
 fetch_source
 
-run mkdir -p "$PREFIX" "$ENV_DIR" "$STATE_DIR" "$PREFIX/logs" "$UNIT_DIR"
+run mkdir -p "$PREFIX" "$ENV_DIR" "$STATE_DIR" "$PREFIX/logs" "$UNIT_DIR" "$BIN_DIR"
 if [ "$UPDATE" = "1" ] && [ "$DRY" = "0" ]; then
   # an update replaces the code only: settings, devices and the allow list stay where they are
   find "$PREFIX" -mindepth 1 -maxdepth 1 ! -name venv ! -name logs -exec rm -rf {} + 2>/dev/null || true
 fi
 run cp -r "$SRC/." "$PREFIX/"
 run chmod 755 "$PREFIX/stack/mse-tunnel.sh" "$PREFIX/stack/install.sh"
-run ln -sf "$PREFIX/stack/mse-tunnel.sh" /usr/local/bin/mse-tunnel.sh
+run ln -sf "$PREFIX/stack/mse-tunnel.sh" "$BIN_DIR/mse-tunnel.sh"
 say "  code:      installed into $PREFIX"
 
 first_run_dialogue
+choose_ports
 write_env
 merge_env_from_environment
+if [ "$DRY" = "0" ]; then
+  env_set MSE_ADMIN_URL "http://127.0.0.1:${MSE_PORT}"
+fi
 setup_bot_env
 prepare_data_dir
 write_units
@@ -655,7 +690,7 @@ start_services
 # the panel: `sudo mse` opens it, `sudo mse update` updates the stack, `sudo mse --status` reports and exits
 if [ "$DRY" = "0" ]; then
   rm -f "$PREFIX/stack/tui.py" 2>/dev/null || true
-  cat > /usr/local/bin/mse <<PANEL
+  cat > "$BIN_DIR/mse" <<PANEL
 #!/usr/bin/env bash
 # MSE panel — the control screen, run it as: sudo mse
 case "\${1:-}" in
@@ -663,7 +698,7 @@ case "\${1:-}" in
 esac
 exec $PY_BIN $PREFIX/stack/mse_setup.py "\$@"
 PANEL
-  chmod 755 /usr/local/bin/mse
+  chmod 755 "$BIN_DIR/mse"
 fi
 say "  panel:     sudo mse   (update: sudo mse update)"
 
@@ -682,5 +717,5 @@ else
 fi
 say "  sudo mse                     panel: health, install, services, tunnel, model and keys"
 say "  sudo mse update              update the code and dependencies in place"
-say "  curl localhost:${MSE_PORT:-8788}/health"
+say "  curl localhost:${MSE_PORT}/health"
 say "  journalctl -u mse-router -f"

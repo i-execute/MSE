@@ -127,7 +127,9 @@
   /* after the address changes, the old one must not be left anywhere. This is a scan, not a fixed list: every key
      that looks like an address in every store is compared with the one that counts, and anything else is deleted. */
   var lastScrub = [];
+  var urlGeneration = 0;
   function scrubUrl(keep) {
+    var generation = urlGeneration;
     var kept = normUrl(keep);
     var dropped = [];
     function consider(where, key, value, del) {
@@ -147,12 +149,14 @@
     lsList.forEach(function (k) {
       consider('localStorage', k, lsGet(k), function () { lsDel(k); });
     });
-    return stayKeys().then(function (all) {
+    return stayQueue.then(function () { return stayKeys(); }).then(function (all) {
+      if (generation !== urlGeneration) return [];
       var mine = (all || []).filter(function (k) { return /url/i.test(k); });
       [CONFIG.urlKey, CONFIG.urlMirrorKey, CONFIG.urlLegacyKey].map(stayPrefixed).forEach(function (k) {
         if (mine.indexOf(k) < 0) mine.push(k);
       });
       return Promise.all(mine.map(function (k) { return stayRead(k); })).then(function (vals) {
+        if (generation !== urlGeneration) return [];
         mine.forEach(function (k, i) {
           consider('stay', k, vals[i], function () { stayDel(k); });
         });
@@ -196,6 +200,46 @@
     return 'mse_' + s;
   }
 
+  function tracedFetch(url, options) {
+    var opts = options || {};
+    var request = {method: opts.method || 'GET', url: String(url), body: opts.body || null};
+    return window.fetch(url, opts).then(function (response) {
+      if (window.__mse && window.__mse.onDebugTraffic && window.MSEBridge && window.MSEBridge.debugEnabled()) {
+        response.clone().text().then(function (raw) {
+          var parsed; try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
+          window.__mse.onDebugTraffic({request:request, response:{status:response.status, body:parsed}});
+        }, function () {});
+      }
+      return response;
+    }, function (error) {
+      if (window.__mse && window.__mse.onDebugTraffic && window.MSEBridge && window.MSEBridge.debugEnabled()) window.__mse.onDebugTraffic({request:request, error:String(error && error.message || 'network')});
+      throw error;
+    });
+  }
+  function redactDump(value, key, depth, secrets) {
+    if (depth > 30) return '[depth limit]';
+    if (typeof value === 'string') {
+      var text = value;
+      if (key) text = text.split(key).join('[redacted]');
+      (secrets || []).forEach(function (secret) { if (secret && secret.length >= 4) text = text.split(secret).join('[redacted]'); });
+      return text.replace(/mse_[A-Za-z0-9_-]{20,}/g, '[redacted]')
+        .replace(/\bBearer\s+[A-Za-z0-9_.-]+/gi, 'Bearer [redacted]')
+        .replace(/(https?:\/\/[^\s"'<>?#]+)[?#][^\s"'<>]*/gi, '$1?[redacted]')
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '[script removed]')
+        .replace(/<input\b[^>]*(?:type\s*=\s*["']?(?:hidden|password)|name\s*=\s*["']?(?:sesskey|token|password|csrf))[^>]*>/gi, '[hidden input removed]')
+        .replace(/((?:sesskey|password|token|secret|csrf|session|authorization)\s*["']?\s*[:=]\s*["']?)[^\s"'&,<>}]+/gi, '$1[redacted]');
+    }
+    if (Array.isArray(value)) return value.map(function (v) { return redactDump(v,key,depth+1,secrets); });
+    if (!value || typeof value !== 'object') return value;
+    var out = {};
+    var sensitiveInput = /^(hidden|password)$/i.test(String(value.type || '')) || /sess|token|secret|pass|csrf|auth|cookie/i.test(String(value.name || ''));
+    Object.keys(value).forEach(function (name) {
+      out[name] = (sensitiveInput && /^(value|text)$/i.test(name)) || /^(authorization|cookie|cookies|set-cookie|key|devicekey|api[-_]?key|password|passwd|secret|token|sesskey|session|csrf|xsrf|inlineMoodleScripts)$/i.test(name)
+        ? '[redacted]' : redactDump(value[name],key,depth+1,secrets);
+    });
+    return out;
+  }
+  var lastAgentRequest = null;
   var MSEBridge = {
     /* ---------------- the address ---------------- */
     url: function () {
@@ -245,6 +289,7 @@
     },
     setUrl: function (raw) {
       var url = normUrl(raw);
+      urlGeneration++;
       if (!url) {
         lsDel(CONFIG.urlKey); lsDel(CONFIG.urlMirrorKey);
         stayDel(CONFIG.urlKey); stayDel(CONFIG.urlMirrorKey);
@@ -274,7 +319,7 @@
       var started = Date.now();
       var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
       var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
-      return fetch(url + '/health', { method: 'GET', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
+      return tracedFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
         .then(function (r) {
           return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });
         })
@@ -298,7 +343,7 @@
           };
         }, function (e) {
           clearTimeout(timer);
-          return { ok: false, reachable: false, mine: false, ms: Date.now() - started, message: 'the address does not answer: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network') };
+          return { ok: false, reachable: false, mine: false, ms: Date.now() - started, message: 'address offline: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network') };
         });
     },
 
@@ -336,9 +381,9 @@
       if (!url) return Promise.reject(new Error('the gateway address comes first'));
       var key = self.key();
       identity = identity || {};
-      var body = { key: key, moodleId: String(identity.id || ''), name: String(identity.name || ''), site: String(identity.site || '') };
-      if (!body.moodleId) return Promise.reject(new Error('the user id is not visible: open a page where the profile shows'));
-      return fetch(url + '/mse/v1/register', {
+      var body = { key: key, moodleId: String(identity.id || ''), name: String(identity.name || ''), site: String(identity.site || ''), deviceName: String((window.navigator && window.navigator.userAgent) || '').slice(0, 120) };
+      if (!body.moodleId) return Promise.reject(new Error('user ID missing · open profile'));
+      return tracedFetch(url + '/mse/v1/register', {
         method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key }, body: JSON.stringify(body)
       }).then(function (r) {
         return r.json().then(function (j) {
@@ -372,7 +417,7 @@
       var url = self.url();
       if (!url) return Promise.resolve({ state: 'no-url', message: 'gateway address is not set' });
       var key = self.key();
-      return fetch(url + '/mse/v1/me', { method: 'GET', headers: { authorization: 'Bearer ' + key, accept: 'application/json' } })
+      return tracedFetch(url + '/mse/v1/me', { method: 'GET', headers: { authorization: 'Bearer ' + key, accept: 'application/json' } })
         .then(function (r) {
           return r.json().then(function (j) {
             var d = (j && j.device) || {};
@@ -395,18 +440,18 @@
       var url = self.url();
       if (!url) return Promise.resolve({ ok: false, models: [], message: 'address is not set' });
       var started = Date.now();
-      return fetch(url + '/v1/models', { method: 'GET', headers: { authorization: 'Bearer ' + self.key(), accept: 'application/json' } })
+      return tracedFetch(url + '/v1/models', { method: 'GET', headers: { authorization: 'Bearer ' + self.key(), accept: 'application/json' } })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j, ms: Date.now() - started }; }); })
         .then(function (res) {
           var list = (res.json && Array.isArray(res.json.data) ? res.json.data : []).map(function (m) { return String(m.id || m); }).filter(Boolean);
           return { ok: res.ok && list.length > 0, models: list, ms: res.ms, status: res.status, message: res.ok ? 'models available: ' + list.length : 'the gateway answered ' + res.status };
         }, function (e) {
-          return { ok: false, models: [], ms: Date.now() - started, message: 'the gateway did not answer: ' + ((e && e.message) || 'network') };
+          return { ok: false, models: [], ms: Date.now() - started, message: 'gateway offline: ' + ((e && e.message) || 'network') };
         });
     },
 
     /* ---------------- the agent: the question goes out, the chosen answer comes back ---------------- */
-    agent: function (payload) {
+    agent: function (payload, onStage) {
       var self = this;
       var url = self.url();
       if (!url) return Promise.resolve({ ok: false, code: 'no_gateway', message: 'gateway is not configured' });
@@ -417,22 +462,58 @@
         type: String(payload.type || ''),
         options: (payload.options || []).slice(0, 20).map(function (o) { return String(o).slice(0, 300); }),
         multiple: !!payload.multiple,
+        selects: Array.isArray(payload.selects) ? payload.selects : [],
+        textCount: Number(payload.textCount) || 0,
         image: payload.image || null,
         prior: payload.prior || null
       };
       var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
       var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 45000);
-      return fetch(url + '/mse/v1/agent', {
+      var record = { request: { method: 'POST', url: url + '/mse/v1/agent', json: body }, response: null };
+      lastAgentRequest = record;
+      return tracedFetch(url + '/mse/v1/agent', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
+        headers: { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() },
         body: JSON.stringify(body),
         signal: ctrl ? ctrl.signal : undefined
       }).then(function (r) {
-        return r.json().then(function (j) { return { status: r.status, j: j, retryAfter: Number(r.headers.get('retry-after') || 0) }; });
+        if (/text\/event-stream/i.test(String(r.headers.get('content-type') || '')) && r.body && r.body.getReader) {
+          var reader = r.body.getReader(), decoder = new TextDecoder(), pending = '', result = null;
+          function handle(block) {
+            var name = '', data = [];
+            block.split(/\r?\n/).forEach(function (line) {
+              if (line.indexOf('event:') === 0) name = line.slice(6).trim();
+              if (line.indexOf('data:') === 0) data.push(line.slice(5).trim());
+            });
+            var value; try { value = JSON.parse(data.join('\n')); } catch (_) { return; }
+            if (name === 'stage' && typeof onStage === 'function') onStage(value.stage);
+            if (name === 'result') result = value;
+          }
+          function read() {
+            return reader.read().then(function (part) {
+              pending += decoder.decode(part.value || new Uint8Array(), {stream:!part.done});
+              var blocks = pending.split(/\r?\n\r?\n/); pending = blocks.pop(); blocks.forEach(handle);
+              if (!part.done) return read();
+              if (pending) handle(pending);
+              record.response = {status:r.status, json:result};
+              return {status:r.status, j:result, retryAfter:Number(r.headers.get('retry-after') || 0)};
+            });
+          }
+          return read();
+        }
+        return r.text().then(function (raw) {
+          var j = null;
+          try { j = JSON.parse(raw); } catch (e) {}
+          record.response = { status: r.status, json: j, body: j === null ? raw : undefined };
+          return { status: r.status, j: j, retryAfter: Number(r.headers.get('retry-after') || 0) };
+        });
       }).then(function (res) {
         clearTimeout(timer);
         var j = res.j || {};
         var ms = Date.now() - started;
+        if (res.status === 503 && !j.ok) {
+          return { ok: false, code: j.code || 'model_unavailable', ms: ms, message: j.message || 'model unavailable, try another model' };
+        }
         if (res.status === 429 || j.code === 'rate_limited') {
           return { ok: false, code: 'rate_limited', ms: ms, retryAfter: j.retry_after || res.retryAfter || 5, message: 'agent is busy, at the limit' };
         }
@@ -440,9 +521,33 @@
         return { ok: true, code: 'ok', ms: ms, answer: j.answer || null, confidence: j.confidence == null ? null : j.confidence, model: j.model || null, reasoning: j.reasoning ? String(j.reasoning).slice(0, 400) : null };
       }, function (e) {
         clearTimeout(timer);
+        record.response = { error: (e && e.name) || 'network' };
         return { ok: false, code: (e && e.name === 'AbortError') ? 'timeout' : 'network', ms: Date.now() - started, message: (e && e.name === 'AbortError') ? 'the agent did not answer in 45 s' : 'the request did not go out: ' + ((e && e.message) || 'network') };
       });
     },
+    debugEnabled: function () { return lsGet('mse.debug.enabled') === '1'; },
+    setDebugEnabled: function (on) { lsSet('mse.debug.enabled', on ? '1' : '0'); },
+    sendDump: function (type, dump) {
+      var self = this, url = self.url(), key = self.key();
+      if (!url || !key) return Promise.resolve({ok:false, message:'gateway not set'});
+      var secrets = [];
+      try { String(document.cookie || '').split(';').forEach(function (part) {
+        var n = part.indexOf('='); if (n >= 0) { var v = part.slice(n+1).trim(); secrets.push(v); try { secrets.push(decodeURIComponent(v)); } catch (_) {} }
+      }); } catch (_) {}
+      try { Array.prototype.forEach.call(document.querySelectorAll('input[type=hidden], input[type=password]'), function (input) { if (input.value) secrets.push(input.value); }); } catch (_) {}
+      try { if (window.M && window.M.cfg && window.M.cfg.sesskey) secrets.push(String(window.M.cfg.sesskey)); } catch (_) {}
+      secrets.slice().forEach(function (v) { if (v) secrets.push(encodeURIComponent(v)); });
+      var safe = redactDump(dump, key, 0, secrets);
+      var json = JSON.stringify(safe);
+      if (json.length > 2000000) safe = {clientTruncated:true, preview:json.slice(0,160000)};
+      return window.fetch(url + '/mse/v1/dump', {
+        method:'POST', headers:{'content-type':'application/json', authorization:'Bearer '+key},
+        body:JSON.stringify({type:type, dump:safe})
+      }).then(function (r) { return r.json().then(function (j) {
+        return r.ok && j.ok ? j : {ok:false,message:(j.error && j.error.message) || 'dump failed'};
+      }); }, function () { return {ok:false,message:'gateway offline'}; });
+    },
+    snifAgent: function () { return lastAgentRequest; },
 
     /* ---------------- one chat call, for the “advanced” view: proves the whole chain ---------------- */
     chat: function (text, onChunk) {
@@ -451,7 +556,7 @@
       if (!url) return Promise.reject(new Error('gateway address is not set'));
       /* no model name here: the router decides which model the backend serves, the client never names one */
       var body = { stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
-      return fetch(url + '/v1/chat/completions', {
+      return tracedFetch(url + '/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
         body: JSON.stringify(body)

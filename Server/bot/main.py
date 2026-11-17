@@ -19,6 +19,8 @@ import logging
 import os
 import subprocess
 import sys
+import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -29,13 +31,13 @@ from .client import Gateway, GatewayError, tunnel_do, tunnel_status
 
 log = logging.getLogger("mse.bot")
 
-GATEWAY_URL = os.environ.get("MSE_ADMIN_URL", "http://127.0.0.1:8788").rstrip("/")
+GATEWAY_URL = os.environ.get("MSE_ADMIN_URL", "").rstrip("/") or ("http://127.0.0.1:" + os.environ.get("MSE_PORT", ""))
 ADMIN_TOKEN = os.environ.get("MSE_ADMIN_TOKEN", "")
 BOT_TOKEN = os.environ.get("MSE_BOT_TOKEN", "")
 OWNER_ID = int(os.environ.get("MSE_OWNER_ID", "0") or 0)
 OWNER_USERNAME = os.environ.get("MSE_OWNER_USERNAME", "").lstrip("@").lower()
 TUNNEL_SCRIPT = os.environ.get("MSE_TUNNEL_SCRIPT", "/usr/local/bin/mse-tunnel.sh")
-GATEWAY_PORT = int(os.environ.get("MSE_PORT", "8788") or 8788)
+GATEWAY_PORT = int(os.environ.get("MSE_PORT", "0") or 0)
 ENV_FILE = os.environ.get("MSE_ENV_FILE", "/etc/mse/mse.env")
 DATA_DIR = os.environ.get("MSE_DATA_DIR", os.environ.get("MSE_STATE_DIR", "/var/lib/mse"))
 SESSION_NAME = str(Path(DATA_DIR) / "mse-bot")   # goygram appends .vault: the session stays in the data directory
@@ -51,8 +53,8 @@ INLINE_WARN = ("inline mode is off for this bot: turn it on in @BotFather (/mybo
 
 def is_owner(evt: object) -> bool:
     who = int(getattr(evt, "from_id", 0) or 0)
-    if OWNER_ID and who == OWNER_ID:
-        return True
+    if OWNER_ID:
+        return who == OWNER_ID
     if OWNER_USERNAME:
         user = getattr(evt, "from_user", None) or getattr(evt, "user", None)
         if isinstance(user, dict):
@@ -579,6 +581,30 @@ class Bot:
             await asyncio.to_thread(lambda: subprocess.run(["systemctl", "restart", "mse-bot"], capture_output=True, timeout=60))
         await self.config(chat_id, msg_id, notice=field + " saved" + (" · the bot restarted" if need_restart else ""))
 
+    async def show_dumps(self, chat_id: int, msg_id: int = 0) -> int:
+        listing = await asyncio.to_thread(self.gw.dumps)
+        return await self.render(chat_id, msg_id, screens.dumps_screen(listing.get("dumps") or []))
+
+    async def send_dump(self, dump_id: str) -> None:
+        """Always deliver sensitive attachments to the configured owner, never to a group chat."""
+        if not OWNER_ID or not BOT_TOKEN:
+            raise GatewayError("owner or bot token not configured")
+        record = await asyncio.to_thread(self.gw.dump, dump_id)
+        content = json.dumps(record.get("dump"), ensure_ascii=False, indent=2).encode("utf-8")
+        def send_file() -> None:
+            boundary = "----mse" + uuid.uuid4().hex
+            prefix = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{OWNER_ID}\r\n"
+                      f"--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"mse-dump.txt\"\r\n"
+                      "Content-Type: text/plain; charset=utf-8\r\n\r\n").encode()
+            payload = prefix + content + f"\r\n--{boundary}--\r\n".encode()
+            req = urllib.request.Request("https://api.telegram.org/bot" + BOT_TOKEN + "/sendDocument", data=payload,
+                headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
+            with urllib.request.urlopen(req, timeout=30) as response:
+                result = json.load(response)
+            if not result.get("ok"):
+                raise GatewayError("Telegram rejected dump")
+        await asyncio.to_thread(send_file)
+
     # ------------------------------------------------------------------ callbacks
     async def on_callback(self, evt: object) -> None:
         if not is_owner(evt):
@@ -593,6 +619,12 @@ class Bot:
             if data in ("home", "") or head == "home":
                 await self.toast(evt, "refreshed")
                 await self.home(chat_id, msg_id)
+            elif data == "dump:list":
+                await self.toast(evt, "")
+                await self.show_dumps(chat_id, msg_id)
+            elif head == "dump" and len(parts) == 3 and parts[1] == "get":
+                await self.toast(evt, "sending to owner")
+                await self.send_dump(parts[2])
             elif data == "dev:list":
                 await self.toast(evt, "")
                 await self.people(chat_id, msg_id)
@@ -692,6 +724,15 @@ class Bot:
                 res = await asyncio.to_thread(self.gw.applications, True)
                 for item in res.get("applications") or []:
                     await self.announce(item)
+                pending_dumps = await asyncio.to_thread(self.gw.dump_notifications)
+                for item in pending_dumps.get("notifications") or []:
+                    rich = screens.screen("new dump", ui.muted(str(item.get("type") or "?") + " · " + str(item.get("at") or "?")),
+                        [ui.facts([("Moodle id", ui.code(item.get("moodleId") or "?")),
+                                   ("device", ui.code(item.get("deviceId") or "?"))], icon="bell")],
+                        [ui.row(ui.button("get dump", "dump:get:" + str(item.get("id") or ""), icon="logs"))], icon="bell")
+                    delivered = await self.render(OWNER_ID, 0, rich)
+                    if delivered:
+                        await asyncio.to_thread(self.gw.acknowledge_dump, str(item.get("id") or ""))
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -715,8 +756,8 @@ class Bot:
                 ui.quote(ui.muted("give them the answer database, or let them in to the AI row as well"), "allow or decline"),
             ],
             [
-                ui.row(ui.button("allow", "dev:approve:" + moodle_id, icon="ok"),
-                       ui.button("decline", "dev:revoke:" + moodle_id, icon="fail")),
+                ui.row(ui.button("allow", "dev:approve:" + str(item.get("deviceId") or ""), icon="ok"),
+                       ui.button("decline", "dev:revoke:" + str(item.get("deviceId") or ""), icon="fail")),
                 ui.row(ui.button("all requests", "dev:pending", icon="bell")),
             ],
             icon="bell",

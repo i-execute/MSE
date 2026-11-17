@@ -20,7 +20,7 @@
  * every other path (`/v1/chat/completions`, `/v1/models`, …), so an allowed device can point any
  * OpenAI-compatible client at it and get the model, while a device nobody let in gets a 401/403 and no bytes.
  *
- * Env: MSE_PORT (8788), MSE_HOST (127.0.0.1), MSE_UPSTREAM_PORT (8799), MSE_UPSTREAM_HOST (127.0.0.1),
+ * Env: MSE_PORT, MSE_HOST (127.0.0.1), MSE_UPSTREAM_PORT, MSE_UPSTREAM_HOST (127.0.0.1),
  *      MSE_UPSTREAM_KEY (the *device-facing* key of the backend, if it wants one — never the model key),
  *      MSE_DATA_DIR, MSE_ADMIN_TOKEN, MSE_MODEL(S), MSE_DAILY_QUOTA, MSE_ALLOW_ORIGINS, MSE_PUBLIC_URL.
  */
@@ -30,23 +30,25 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
+const { StringDecoder } = require('string_decoder');
+const dumps = require('./mse-dumps');
 
 const here = __dirname;
 /* One data directory, and it is not the code directory: an update wipes /opt/mse, so state, the admin token and the
    goygram vault all live under MSE_DATA_DIR (/var/lib/mse on a real install). The default keeps a bare
    `node mse-router.js` from a checkout working, but the install always passes the real path. */
-const DATA_DIR = path.resolve(process.env.MSE_DATA_DIR || process.env.MSE_STATE_DIR || path.join(here, 'data'));
+const DATA_DIR = path.resolve(process.env.MSE_DATA_DIR || process.env.MSE_STATE_DIR || path.join(require('os').homedir(), '.local', 'share', 'mse'));
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const VAULT_FILE = path.join(DATA_DIR, 'default.vault');
 /* goygram keeps its session vault in the working directory unless it is told otherwise: point it at the data
    directory before anything can read it, so a vault is never written into the code tree */
 process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
 process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
-const PORT = Number(process.env.MSE_PORT || 8788);
+const PORT = Number(process.env.MSE_PORT);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.4.0';
+const VERSION = '2.6.1';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
-const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT || 8799);
+const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
 const UPSTREAM_KEY = process.env.MSE_UPSTREAM_KEY || '';
 
@@ -79,7 +81,7 @@ ensureDataDir();
 
 /* settings that the owner changes from the panel are part of the state too: without them a restart silently
    put the quota back to the value from the environment */
-let state = { devices: {}, allow: [], log: [], applications: [], settings: {} };
+let state = { devices: {}, allow: [], log: [], applications: [], dumpNotifications: [], settings: {} };
 function loadState() {
   try {
     const raw = fs.readFileSync(STATE_FILE, 'utf8');
@@ -90,6 +92,7 @@ function loadState() {
         allow: Array.isArray(parsed.allow) ? parsed.allow : [],
         log: Array.isArray(parsed.log) ? parsed.log : [],
         applications: Array.isArray(parsed.applications) ? parsed.applications : [],
+        dumpNotifications: Array.isArray(parsed.dumpNotifications) ? parsed.dumpNotifications : [],
         settings: parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : {}
       };
       const q = Number(state.settings.dailyQuota);
@@ -113,6 +116,13 @@ function saveState() {
       fs.renameSync(tmp, STATE_FILE);
     } catch (e) { console.error('state not saved:', e.message); }
   }, 120);
+}
+function saveStateNow() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  ensureDataDir();
+  const tmp = STATE_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(state, null, 1), {mode:0o600});
+  fs.renameSync(tmp, STATE_FILE);
 }
 const ADMIN_TOKEN = (() => {
   if (process.env.MSE_ADMIN_TOKEN) return String(process.env.MSE_ADMIN_TOKEN);
@@ -169,7 +179,16 @@ function keyOf(req) {
   const api = req.headers['x-api-key'];
   return api ? String(api).trim() : '';
 }
-const deviceByKey = (key) => (key ? state.devices[deviceIdOf(key)] || null : null);
+function deviceByKey(key) {
+  const rec = key ? state.devices[deviceIdOf(key)] : null;
+  if (!rec) return null;
+  const digest = sha256(key);
+  if (rec.keyHash) {
+    const a = Buffer.from(rec.keyHash), b = Buffer.from(digest);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  } else { rec.keyHash = digest; saveState(); } // migrate legacy records on first use
+  return rec;
+}
 function quotaOf(rec) {
   if (!rec) return 0;
   if (rec.quotaDay !== day()) { rec.quotaDay = day(); rec.quotaUsed = 0; }
@@ -190,7 +209,7 @@ function isAdmin(req) {
 }
 function publicDevice(rec) {
   return {
-    deviceId: rec.deviceId, moodleId: rec.moodleId, name: rec.name, site: rec.site,
+    deviceId: rec.deviceId, moodleId: rec.moodleId, name: rec.name, site: rec.site, deviceName: rec.deviceName || "",
     status: rec.status, created: rec.created, seen: rec.seen, requests: rec.requests || 0,
     quota: quotaOf(rec), quotaUsed: rec.quotaUsed || 0, banned: !!rec.banned
   };
@@ -202,25 +221,24 @@ function registerDevice(body) {
   const moodleId = String(body.moodleId || '').trim();
   const name = String(body.name || '').trim().slice(0, 120);
   const site = String(body.site || '').trim().slice(0, 200);
-  if (!/^mse_[A-Za-z0-9_-]{32,}$/.test(key)) return { error: 'key must look like mse_<32+ chars>' };
+  const deviceName = String(body.deviceName || '').trim().slice(0, 120);
+  if (!/^mse_[A-Za-z0-9_-]{32,}$/.test(key)) return { error: 'invalid key' };
   if (!/^\d{1,12}$/.test(moodleId)) return { error: 'moodleId must be a number' };
   const deviceId = deviceIdOf(key);
   const existing = state.devices[deviceId];
+  if (existing && !deviceByKey(key)) return { error: 'invalid key' };
   if (existing && existing.banned) return { error: 'this key was revoked', device: existing };
-  const allowed = state.allow.some((a) => String(a.moodleId) === moodleId);
-  const rec = {
-    deviceId, moodleId, name, site,
-    status: allowed ? 'active' : 'pending',
-    created: existing ? existing.created : now(),
-    seen: now(), requests: existing ? existing.requests || 0 : 0,
-    quotaDay: day(), quotaUsed: existing ? existing.quotaUsed || 0 : 0
-  };
+  // The identity and approval of an existing key are immutable through registration.
+  if (existing && (existing.moodleId !== moodleId || existing.site !== site)) return { error: 'key already bound to another identity' };
+  const rec = existing || { deviceId, keyHash: sha256(key), moodleId, name, site, deviceName, status: 'pending',
+    created: now(), seen: now(), requests: 0, quotaDay: day(), quotaUsed: 0 };
+  rec.seen = now();
+  if (deviceName) rec.deviceName = deviceName;
   state.devices[deviceId] = rec;
   saveState();
-  note('register ' + deviceId + ' moodle ' + moodleId + ' → ' + rec.status, rec);
-  // a new application is worth a message: the bot picks these up with long polling and pings the owner
-  if (!existing && !allowed) {
-    state.applications.push({ deviceId, moodleId, name, site, at: now() });
+  if (!existing) {
+    note('register ' + deviceId + ' moodle ' + moodleId + ' → pending', rec);
+    state.applications.push({ deviceId, moodleId, name, site, deviceName, at: now() });
     if (state.applications.length > 40) state.applications.splice(0, state.applications.length - 40);
     saveState();
   }
@@ -340,34 +358,71 @@ function extractJson(text) {
 function buildAgentPrompt(body) {
   const options = Array.isArray(body.options) ? body.options.map((o, i) => (i + 1) + '. ' + o).join('\n') : '';
   const system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
-    '{"answer": "<exactly one of the given options, character for character>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
-    'If there is no correct option or the data is missing, return {"error": "<short reason>"}. ' +
-    'Add nothing outside the JSON.';
+    '{"answer": "<answer>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
+    'If there is no correct answer or data is missing, return {"error": "<short reason>"}. Add nothing outside the JSON.';
   let user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
-  if (options) user += 'Options (pick exactly one):\n' + options + '\n';
-  if (body.multiple) user += 'Several may be correct: list them separated by "|" in answer.\n';
-  if (body.image) user += 'The question has an image attached, but it was not passed as text.\n';
+  if (options) user += (body.multiple ? 'Options (pick all that apply):\n' : 'Options (pick exactly one):\n') + options + '\n';
+  if (body.multiple) user += 'Return selected option captions joined by |, exactly as listed.\n';
+  if (Array.isArray(body.selects) && body.selects.length) {
+    user += 'For each numbered dropdown choose one option, in order, joined by |:\n';
+    body.selects.forEach((values,i) => { user += (i+1) + ': ' + (Array.isArray(values) ? values.join(' / ') : '') + '\n'; });
+  }
+  if (Number(body.textCount) > 1) user += 'Give one value for each of the ' + Math.min(20, Number(body.textCount)) + ' text fields, in order, joined by |.\n';
+  const images = Array.isArray(body.image) ? body.image : [];
+  if (images.length) {
+    const content = [{type:'text', text:user}];
+    images.forEach((image) => { content.push({type:'text', text:String(image.label || 'image').slice(0,200)}); content.push({type:'image_url', image_url:{url:image.data}}); });
+    return [{role:'system', content:system}, {role:'user', content}];
+  }
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
-function upstreamJson(method, pathname, payload) {
+
+function upstreamJson(method, pathname, payload, onContent) {
   return new Promise((resolve) => {
     const url = new URL(CFG.upstreamUrl + pathname);
     const lib = url.protocol === 'https:' ? https : http;
     const body = payload ? JSON.stringify(payload) : null;
-    const headers = { accept: 'application/json' };
+    const headers = { accept: onContent ? 'text/event-stream, application/json' : 'application/json' };
     if (body) { headers['content-type'] = 'application/json'; headers['content-length'] = Buffer.byteLength(body); }
     if (UPSTREAM_KEY) headers.authorization = 'Bearer ' + UPSTREAM_KEY;
+    let finished = false;
+    function finish(result) { if (!finished) { finished = true; resolve(result); } }
     const req = lib.request({
       method, hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80),
       path: url.pathname + url.search, headers, timeout: CFG.timeoutMs
     }, (up) => {
-      const chunks = [];
-      up.on('data', (c) => chunks.push(c));
-      up.on('end', () => resolve({ status: up.statusCode || 502, text: Buffer.concat(chunks).toString('utf8') }));
-      up.on('error', (e) => resolve({ status: 0, text: '', error: e.message }));
+      const streaming = onContent && /text\/event-stream/i.test(String(up.headers['content-type'] || ''));
+      const decoder = new StringDecoder('utf8'); let raw = '', pending = '', content = '', backendModel = null;
+      function lines(chunk) {
+        pending += chunk;
+        const split = pending.split(/\r?\n/); pending = split.pop();
+        for (const line of split) {
+          if (!line.startsWith('data:')) continue;
+          const item = parseJson(line.slice(5).trim());
+          if (item && typeof item.model === 'string' && item.model) backendModel = item.model;
+          const delta = item && item.choices && item.choices[0] && item.choices[0].delta;
+          if (delta && typeof delta.reasoning_content === 'string' && delta.reasoning_content) onContent('reasoning');
+          if (delta && typeof delta.content === 'string' && delta.content) {
+            content += delta.content;
+            if (content.length > 1024 * 1024) { req.destroy(new Error('upstream answer too large')); return; }
+            onContent('writing answer');
+          }
+        }
+      }
+      up.on('data', (c) => {
+        const text = decoder.write(c);
+        if (streaming) lines(text); else { raw += text; if (raw.length > 2 * 1024 * 1024) req.destroy(new Error('upstream answer too large')); }
+      });
+      up.on('end', () => {
+        const tail = decoder.end();
+        if (streaming) { lines(tail + '\n'); raw = JSON.stringify({model:backendModel,choices:[{message:{content}}]}); }
+        else { raw += tail; if (onContent && up.statusCode >= 200 && up.statusCode < 300) onContent('writing answer'); }
+        finish({ status: up.statusCode || 502, text: raw });
+      });
+      up.on('error', (e) => finish({ status: 0, text: '', error: e.message }));
     });
     req.on('timeout', () => req.destroy(new Error('the model did not answer in time')));
-    req.on('error', (e) => resolve({ status: 0, text: '', error: e.message }));
+    req.on('error', (e) => finish({ status: 0, text: '', error: e.message }));
     if (body) req.write(body);
     req.end();
   });
@@ -382,44 +437,76 @@ async function handleAgent(req, res, rec) {
   }
   const body = parseJson(await readBody(req, 256 * 1024));
   if (!body || !body.question) return oaiError(req, res, 400, 'question is required', 'bad_request');
+  if (body.image && (!Array.isArray(body.image) || body.image.length > 5 || body.image.some((x) => !x || !/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(String(x.data || ''))) || body.image.reduce((n,x) => n + String(x.data).length, 0) > 180000)) return oaiError(req, res, 400, 'image format or size unsupported', 'bad_image');
   if (!CFG.model) return send(req, res, 503, { ok: false, code: 'no_model', retry_after: 5, message: 'the backend offered no model yet' });
 
+  const streaming = /text\/event-stream/i.test(String(req.headers.accept || ''));
   const payload = { model: CFG.model, temperature: 0, messages: buildAgentPrompt(body) };
+  if (streaming) {
+    payload.stream = true;
+    res.writeHead(200, { 'content-type':'text/event-stream; charset=utf-8', 'cache-control':'no-cache', 'x-accel-buffering':'no' });
+  }
+  function event(type, value) { if (!res.destroyed) res.write('event: ' + type + '\ndata: ' + JSON.stringify(value) + '\n\n'); }
+  function reply(status, result) {
+    if (!streaming) return send(req, res, status, result);
+    event('result', result); return res.end();
+  }
+  if (streaming) event('stage', {stage: body.image ? 'looking at image' : 'reasoning'});
+  let currentStage = body.image ? 'looking at image' : 'reasoning';
+  const onContent = streaming ? (stage) => { if (stage !== currentStage && !(currentStage === 'writing answer' && stage === 'reasoning')) { currentStage = stage; event('stage', {stage}); } } : null;
   const started = now();
   rec.requests = (rec.requests || 0) + 1;
   rec.quotaUsed = (rec.quotaUsed || 0) + 1;
   saveState();
   note('agent ' + String(body.question).slice(0, 40), rec);
 
-  const up = await upstreamJson('POST', '/v1/chat/completions', payload);
+  const up = await upstreamJson('POST', '/v1/chat/completions', payload, onContent);
   const ms = now() - started;
   if (!up.status) {
-    res.setHeader('retry-after', '5');
-    return send(req, res, 502, { ok: false, code: 'upstream_down', retry_after: 5, message: 'the model is unavailable: ' + (up.error || 'network') });
+    if (!streaming) res.setHeader('retry-after', '5');
+    return reply(502, { ok: false, code: 'upstream_down', retry_after: 5, message: 'the model is unavailable: ' + (up.error || 'network') });
   }
   if (up.status === 429) {
-    res.setHeader('retry-after', '5');
-    return send(req, res, 429, { ok: false, code: 'rate_limited', retry_after: 5, message: 'the model rate-limited the call' });
+    if (!streaming) res.setHeader('retry-after', '5');
+    return reply(429, { ok: false, code: 'rate_limited', retry_after: 5, message: 'the model rate-limited the call' });
+  }
+  if (up.status >= 500) {
+    if (!streaming) res.setHeader('retry-after', '5');
+    return reply(503, { ok: false, code: 'model_unavailable', retry_after: 5, message: 'model unavailable, try another model' });
+  }
+  if (up.status < 200 || up.status >= 300) {
+    return reply(502, { ok: false, code: 'upstream_error', message: 'AI backend rejected the request (HTTP ' + up.status + ')' });
   }
   const parsed = parseJson(up.text);
   if (!parsed || !parsed.choices || !parsed.choices[0]) {
-    return send(req, res, 502, { ok: false, code: 'upstream_bad', retry_after: 5, message: 'the model answered in an unexpected format' });
+    return reply(502, { ok: false, code: 'upstream_bad', retry_after: 5, message: 'the model answered in an unexpected format' });
   }
   const prose = String((parsed.choices[0].message || {}).content || '');
   const answerObj = extractJson(prose);
   const options = Array.isArray(body.options) ? body.options : [];
-  if (!answerObj) return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent could not parse the task', raw: prose.slice(0, 200) });
-  if (answerObj.error) return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: String(answerObj.error).slice(0, 160) });
+  if (!answerObj) return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent could not parse the task', raw: prose.slice(0, 200) });
+  if (answerObj.error) return reply(200, { ok: false, code: 'agent_error', ms, message: String(answerObj.error).slice(0, 160) });
   const answer = String(answerObj.answer || '').trim();
-  if (!answer) return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
-  const picked = options.filter((o) => String(o).trim().toLowerCase() === answer.toLowerCase())[0];
-  if (options.length && !picked) {
-    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
+  if (!answer) return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
+  const parts = answer.split('|').map((x) => x.trim()).filter(Boolean);
+  let picked = answer;
+  if (Array.isArray(body.selects) && body.selects.length) {
+    if (parts.length !== body.selects.length) return reply(200, {ok:false, code:'agent_error', ms, message:'wrong number of dropdown answers'});
+    const matches = body.selects.map((group,i) => Array.isArray(group) ? group.filter((o) => String(o).trim().toLowerCase() === parts[i].toLowerCase()) : []);
+    if (matches.some((xs) => xs.length !== 1)) return reply(200, {ok:false, code:'agent_error', ms, message:'dropdown answer not in the task'});
+    picked = matches.map((xs) => xs[0]).join(' | ');
+  } else if (options.length) {
+    if (!body.multiple && parts.length !== 1) return reply(200, {ok:false, code:'agent_error', ms, message:'agent picked multiple options'});
+    const matches = parts.map((part) => options.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase()));
+    if (matches.some((xs) => xs.length !== 1)) return reply(200, {ok:false, code:'agent_error', ms, message:'the agent named an option that is not in the task', answer});
+    picked = matches.map((xs) => xs[0]).join(' | ');
+  } else if (Number(body.textCount) > 1 && parts.length !== Number(body.textCount)) {
+    return reply(200, {ok:false, code:'agent_error', ms, message:'wrong number of text answers'});
   }
-  return send(req, res, 200, {
+  return reply(200, {
     ok: true, code: 'ok', ms, answer: picked || answer,
     confidence: typeof answerObj.confidence === 'number' ? answerObj.confidence : null,
-    reasoning: answerObj.reason || null, model: CFG.model
+    reasoning: answerObj.reason || null, model: typeof parsed.model === 'string' && parsed.model ? parsed.model : payload.model
   });
 }
 
@@ -432,6 +519,17 @@ async function handleAdmin(req, res, url) {
     const items = Array.isArray(state.applications) ? state.applications.slice() : [];
     if (take && items.length) { state.applications = []; saveState(); }
     return send(req, res, 200, { ok: true, applications: items, pending: Object.values(state.devices).filter((d) => d.status === 'pending').length });
+  }
+  if (url.pathname === '/admin/dumps' && req.method === 'GET') {
+    return send(req, res, 200, { ok: true, dumps: dumps.list(DATA_DIR) });
+  }
+  if (url.pathname === '/admin/dump-notifications' && req.method === 'GET') {
+    const items = state.dumpNotifications.slice();
+    return send(req, res, 200, { ok: true, notifications: items });
+  }
+  if (/^\/admin\/dumps\/[a-f0-9]{32}$/.test(url.pathname) && req.method === 'GET') {
+    const item = dumps.get(DATA_DIR, url.pathname.split('/').pop());
+    return item ? send(req, res, 200, { ok: true, dump: item }) : oaiError(req, res, 404, 'dump not found', 'not_found');
   }
   if (url.pathname === '/admin/state' && req.method === 'GET') {
     return send(req, res, 200, {
@@ -448,19 +546,21 @@ async function handleAdmin(req, res, url) {
     });
   }
   const body = parseJson(await readBody(req)) || {};
+  if (url.pathname === '/admin/dump-notifications/ack') {
+    const id = String(body.id || '');
+    state.dumpNotifications = state.dumpNotifications.filter((n) => n.id !== id);
+    saveStateNow();
+    return send(req, res, 200, {ok:true});
+  }
   if (url.pathname === '/admin/allow') {
     const moodleId = String(body.moodleId || '').trim();
     if (!/^\d{1,12}$/.test(moodleId)) return oaiError(req, res, 400, 'moodleId must be a number', 'bad_id');
+    const pending = Object.values(state.devices).filter((d) => String(d.moodleId) === moodleId && d.status === 'pending' && !d.banned);
+    if (pending.length > 1) return oaiError(req, res, 409, 'multiple pending devices: approve a deviceId explicitly', 'ambiguous_device');
     if (!state.allow.some((a) => String(a.moodleId) === moodleId)) {
-      state.allow.push({ moodleId, name: String(body.name || '').trim().slice(0, 120), added: now(), deviceId: null });
+      state.allow.push({ moodleId, name: String(body.name || '').trim().slice(0, 120), added: now() });
     }
-    Object.values(state.devices).forEach((d) => {
-      if (String(d.moodleId) === moodleId && d.status !== 'active' && !d.banned) {
-        d.status = 'active';
-        const slot = state.allow.find((a) => String(a.moodleId) === moodleId);
-        if (slot && !slot.deviceId) slot.deviceId = d.deviceId;
-      }
-    });
+    if (pending.length === 1) pending[0].status = 'active';
     saveState();
     note('allow ' + moodleId);
     return send(req, res, 200, { ok: true, allow: state.allow });
@@ -520,6 +620,7 @@ const handler = async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   try {
     if (url.pathname === '/health' || url.pathname === '/') {
+      res.setHeader('cache-control', 'no-store');
       return send(req, res, 200, {
         ok: true, name: 'MSE gateway', version: VERSION, role: 'router',
         backend: 'tailscale', publicUrl: CFG.publicUrl || null,
@@ -564,6 +665,22 @@ const handler = async (req, res) => {
     }
     /* the agent is served here, by the router: /mse/* does not exist behind us, and asking the backend for it was
        the bug that answered "not found: /mse/v1/agent" on every question that had options */
+    if (url.pathname === '/mse/v1/dump' && req.method === 'POST') {
+      const key = keyOf(req), rec = deviceByKey(key);
+      if (!rec) return oaiError(req, res, 401, 'unknown key', 'invalid_key');
+      if (rec.status !== 'active') return oaiError(req, res, 403, 'device is ' + rec.status, 'device_' + rec.status);
+      const body = parseJson(await readBody(req, 4 * 1024 * 1024));
+      if (!body || !['report', 'debug'].includes(body.type) || !body.dump || typeof body.dump !== 'object')
+        return oaiError(req, res, 400, 'type and dump required', 'bad_dump');
+      if (rec.dumpDay !== day()) { rec.dumpDay = day(); rec.dumpUsed = 0; }
+      if ((rec.dumpUsed || 0) >= 50) return oaiError(req, res, 429, 'dump quota reached', 'dump_quota');
+      const meta = dumps.store(DATA_DIR, rec, body.type, body.dump, key);
+      rec.dumpUsed = (rec.dumpUsed || 0) + 1; rec.seen = now();
+      state.dumpNotifications.push(meta);
+      if (state.dumpNotifications.length > 100) state.dumpNotifications.splice(0, state.dumpNotifications.length - 100);
+      saveStateNow();
+      return send(req, res, 201, {ok:true, id:meta.id, truncated:meta.truncated});
+    }
     if (url.pathname === '/mse/v1/agent' && req.method === 'POST') {
       const rec = deviceByKey(keyOf(req));
       if (!rec) return oaiError(req, res, 401, 'unknown key: register the device first', 'invalid_key');
@@ -607,6 +724,10 @@ function askModelsAtStart() {
   return modelsReady;
 }
 if (require.main === module) {
+  if (![PORT, UPSTREAM_PORT].every((p) => Number.isInteger(p) && p > 0 && p <= 65535) || PORT === UPSTREAM_PORT) {
+    console.error('MSE_PORT and MSE_UPSTREAM_PORT must be distinct valid ports');
+    process.exit(1);
+  }
   askModelsAtStart();
   server.listen(PORT, HOST, () => {
     console.log('MSE router ' + VERSION + ' on http://' + HOST + ':' + PORT + '  (public: ' + (CFG.publicUrl || 'not set yet') + ')');

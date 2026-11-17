@@ -1,36 +1,36 @@
 {
-  "version": "2.4.0",
+  "version": "2.6.1",
   "brand": "MSE",
   "base": "2.22.0",
   "bundles": {
     "commons": {
       "file": "js/commons.js",
-      "bytes": 448969,
-      "sha256": "2b8f1b026ba4e31795e2bb81dd0cca89522b8dcca26864f1e069ea66dd1aa463",
+      "bytes": 447997,
+      "sha256": "22175048bd44e4ff00e5e5992705fe19d0ec8dc3fa3d57ebdc1503eaf6641cde",
       "assets": []
     },
     "background": {
       "file": "js/background.js",
-      "bytes": 45294,
-      "sha256": "ffdf86606732d8575474e17e4a10c329b0b7f45302930252d4ddadbb08a48980",
+      "bytes": 44569,
+      "sha256": "d93f4a9c05cf7aedb16d90a7428b8eb43d0354fe890b4ab997f7fd1560c38e2d",
       "assets": []
     },
     "quiz_attempt": {
       "file": "js/quiz_attempt.js",
-      "bytes": 109936,
-      "sha256": "1586558f06a797a1bbd3826d82f3ac1699b47e95feb07fd7d5d193a2b1f0caa8",
+      "bytes": 109916,
+      "sha256": "08394ea42d3e43e708179c909f1143f125704e7620240b3ffe3ed553cac3b9f5",
       "assets": []
     },
     "quiz_overview": {
       "file": "js/quiz_overview.js",
-      "bytes": 4201,
-      "sha256": "98198f8ac6d5705a5f886707a7bedf3518614c6857c5a3dada45c0279a8e6914",
+      "bytes": 4149,
+      "sha256": "f34faf2bd3c5781170415160dbea99d3eb5b4cf897ca9443c7237787d9604b71",
       "assets": []
     },
     "quiz_board": {
       "file": "js/quiz_board.js",
-      "bytes": 18849,
-      "sha256": "3fe78d8e088d4fa36613de321e849ad7ba1f860dd74ebabfaeeabe44b92b7db0",
+      "bytes": 18674,
+      "sha256": "f5fea75354555b8d3d69adf3462b3b5e53921f465b3402010f0ca8120f636452",
       "assets": []
     },
     "popup": {
@@ -215,13 +215,13 @@
   },
   "pageScripts": {
     "mse-ui": {
-      "bytes": 66381,
-      "sha256": "285572177cb1f12d7ed08e3acea0231775ef19e7636e2040713c57157b6591fa",
+      "bytes": 78810,
+      "sha256": "73f5a2fcee3b5c7a911e47bbb1c6ee369eb5d1bfa30f6f080851f47147905c19",
       "sanitizer": {
-        "comments": 85,
+        "comments": 80,
         "strings": 3,
         "templates": 0,
-        "regexps": 10,
+        "regexps": 11,
         "windowRefs": 0,
         "windowProps": 0
       }
@@ -239,14 +239,14 @@
       }
     },
     "mse-bridge": {
-      "bytes": 20889,
-      "sha256": "d2d61da4344ace4b1c7b0e99e78bf05cb843251a88f12e9ac3b1cfc67ce25cd1",
+      "bytes": 27664,
+      "sha256": "557dd575a3e09e32b57dbc59174015311b95f65a40f7b288e275954d64ac5cc7",
       "sanitizer": {
         "comments": 28,
         "strings": 3,
         "templates": 0,
-        "regexps": 6,
-        "windowRefs": 3,
+        "regexps": 9,
+        "windowRefs": 21,
         "windowProps": 0
       }
     },
@@ -267,12 +267,12 @@
     "scripts": 1,
     "headers": 1,
     "requires": 0,
-    "bytes": 1619183
+    "bytes": 1634737
   },
   "userscript": {
     "file": "Storage/artifacts/mse.user.js",
-    "bytes": 1623756,
-    "sha256": "d4f199fed2954fd1068493bf06d69c5c2817aa04bb84416014958ad75dc84848"
+    "bytes": 1638821,
+    "sha256": "1f786833fb59c327c58f681c5f13453a831b580ddb9d902e3fd3273dd6aa6a26"
   },
   "sanitizer": {
     "comments": 68,
@@ -299,5 +299,7 @@
     "*://*/my/",
     "*://*/my/*",
     "*://*/my/index.php*"
-  ]
+  ],
+  "repackedFrom": "2.4 artifact; UI and bridge re-sanitized; vendor sources unavailable",
+  "sanitizerNote": "global sanitizer statistics refer to the 2.4 base build"
 }

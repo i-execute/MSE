@@ -28,7 +28,8 @@
     posKey: 'mse.pos',
     logKey: 'mse.log',
     width: 300,
-    agentRetryMs: 5000
+    agentRetryMs: 5000,
+    agentAllowWithoutImages: false
   }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
 
   /* ------------------------------------------------------------------ styles */
@@ -201,6 +202,12 @@
       return out;
     }
 
+    function debugAuxFetch(url, options) {
+      return fetch(url, options).then(function (response) {
+        debugTraffic({request:{url:String(url),method:(options && options.method) || 'GET'}, response:{status:response.status, body:'omitted: private page or binary'}});
+        return response;
+      }, function (error) { debugTraffic({request:{url:String(url)}, error:String(error && error.message || 'network')}); throw error; });
+    }
     /* the id is not on this page at all: the personal cabinet of the same site knows it, and it is one fetch away */
     /*
      * The id out of a page we fetched ourselves. The strong signals are read in order of trust:
@@ -250,7 +257,7 @@
 
     function learnFromCabinet() {
       var started = Date.now();
-      return fetch('/my/', { method: 'GET', credentials: 'same-origin', headers: { accept: 'text/html' } })
+      return debugAuxFetch('/my/', { method: 'GET', credentials: 'same-origin', headers: { accept: 'text/html' } })
         .then(function (r) { return r.text(); })
         .then(function (html) {
           var id = readIdFromHtml(html);
@@ -297,9 +304,10 @@
         });
       }
       if (!node && input.id) node = doc.querySelector('label[for="' + input.id + '"]');
+      if (!node) node = input.closest('label');
       if (!node) {
-        var holder = input.closest('.answer, .r0, .r1, [class^="r"]') || input.parentNode;
-        node = holder && holder.querySelector('[data-region="answer-label"], label');
+        var holder = input.closest('.r0, .r1, [data-region="answer"], .answer > div') || input.parentNode;
+        node = holder && (holder.querySelector('[data-region="answer-label"], label') || holder);
       }
       if (!node) return String(input.getAttribute('value') || '');
       var flex = node.querySelector('.flex-fill');
@@ -337,6 +345,7 @@
         if (x.parentNode) x.parentNode.removeChild(x);
       });
       var text = textOf(clone);
+      if (!text && clone.querySelector('img')) text = '[image question]';
       var type = typeOf(block);
       var q = {
         node: block,
@@ -358,7 +367,13 @@
         if (!/^q\d+:\d+_answer/.test(inp.name || '')) continue;
         if (String(inp.getAttribute('value')) === '-1') continue; /* the hidden "clear my choice" */
         if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;
-        q.answers.push({ input: inp, kind: 'choice', text: answerText(inp), letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
+        var caption = answerText(inp);
+        if (!caption) {
+          var holder = inp.closest('.r0, .r1, [data-region="answer"], label') || inp.parentNode;
+          var image = holder && holder.querySelector('img');
+          if (image) caption = image.getAttribute('alt') || ('image ' + (q.answers.length + 1));
+        }
+        q.answers.push({ input: inp, kind: 'choice', text: caption, letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
       }
       /* selects: match, gapselect, cloze */
       var selects = block.querySelectorAll('select');
@@ -472,6 +487,7 @@
     }
 
     /* GET only, and only to the answer service of the original */
+    var lastSyncRequest = null;
     function fetchSolution(q, meta) {
       var started = Date.now();
       if (meta.missing.length) {
@@ -480,11 +496,20 @@
         return Promise.reject(new Error(why));
       }
       var url = serviceUrl(q, meta);
+      var params = {};
+      new URL(url).searchParams.forEach(function (value, key) { params[key] = value; });
+      var record = { questionIdentity: q.identity, request: { method: 'GET', url: url, params: params }, response: null };
+      lastSyncRequest = record;
       return fetch(url, { method: 'GET', headers: { accept: 'application/json' } }).then(function (r) {
+        r.clone().text().then(function (raw) {
+          var value; try { value = JSON.parse(raw); } catch (e) { value = raw; }
+          record.response = { status: r.status, json: value };
+          debugTraffic(record);
+        }, function () { record.response = { status: r.status, error: 'unreadable response' }; });
         var ms = Date.now() - started;
         if (r.status === 400) {
           return r.text().then(function (body) {
-            logAdd('answers', false, 'answer database: 400 (page data incomplete or the service rejected the request)', { ms: ms });
+            logAdd('answers', false, 'database 400 · check page data', { ms: ms });
             throw new Error('answer database: 400 — ' + String(body || '').slice(0, 120));
           });
         }
@@ -497,7 +522,9 @@
           return json;
         });
       }, function (e) {
-        logAdd('answers', false, 'answer database did not respond: ' + ((e && e.message) || 'network'), { ms: Date.now() - started });
+        record.response = { error: (e && e.name) || 'network' };
+        debugTraffic(record);
+        logAdd('answers', false, 'database offline: ' + ((e && e.message) || 'network'), { ms: Date.now() - started });
         throw new Error('no connection to the answer database');
       });
     }
@@ -549,49 +576,47 @@
 
     /* ---------------------------------------------------------------- applying an answer */
     function applyAnswer(q, row) {
-      var want = norm(row.label);
-      var done = false;
-      /* choice: the option with the same caption */
-      var hit = null;
-      q.answers.forEach(function (a) {
-        if (hit) return;
-        var n = norm(a.text);
-        if (n === want || (want.length > 3 && (n.indexOf(want) >= 0 || want.indexOf(n) >= 0))) hit = a;
-      });
-      if (hit) {
-        if (hit.input.type === 'radio') hit.input.checked = true;
-        else hit.input.checked = row.checked === undefined ? true : !!row.checked;
-        try { hit.input.click(); } catch (e) {}
-        try { hit.input.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (e) {}
-        return { ok: true, how: 'choice' };
-      }
-      /* select: the option with the same caption, in any of the selects of the question */
-      var selDone = false;
-      q.controls.forEach(function (c) {
-        if (selDone || c.kind !== 'select') return;
-        var opts = c.node.options || [];
-        for (var i = 0; i < opts.length; i++) {
-          var n = norm(opts[i].textContent);
-          if (!n) continue;
-          if (n === want || (want.length > 3 && (n.indexOf(want) >= 0 || want.indexOf(n) >= 0))) {
-            c.node.selectedIndex = opts[i].index;
-            try { c.node.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (e) {}
-            selDone = true;
-            return;
-          }
+      var parts = String(row.label || '').split('|').map(function (x) { return x.trim(); }).filter(Boolean);
+      if (!parts.length) return {ok:false};
+      var checks = q.answers.filter(function (a) { return a.input.type === 'checkbox'; });
+      if (checks.length) {
+        var chosen = parts.map(function (part) {
+          var hits = checks.filter(function (a) { return norm(a.text) === norm(part); });
+          return hits.length === 1 ? hits[0] : null;
+        });
+        if (chosen.some(function (x) { return !x; })) return {ok:false};
+        if (parts.length === 1) {
+          chosen[0].input.click();
+        } else {
+          checks.forEach(function (a) { var selected = chosen.indexOf(a) >= 0; if (a.input.checked !== selected) a.input.click(); });
         }
-      });
-      if (selDone) return { ok: true, how: 'select' };
-      /* text boxes: the answer goes in as it came */
-      var boxes = q.controls.filter(function (c) { return c.kind === 'text' && !c.node.value; });
-      if (!boxes.length) boxes = q.controls.filter(function (c) { return c.kind === 'text'; });
-      if (boxes.length) {
-        boxes[0].node.value = row.label;
-        try { boxes[0].node.dispatchEvent(new win.Event('input', { bubbles: true })); } catch (e) {}
-        try { boxes[0].node.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (e) {}
-        return { ok: true, how: 'text' };
+        return {ok:true, how:'choice'};
       }
-      return { ok: false, how: null, done: done };
+      if (parts.length === 1) {
+        var hits = q.answers.filter(function (a) { return norm(a.text) === norm(parts[0]); });
+        if (hits.length === 1) { if (!hits[0].input.checked) hits[0].input.click(); return {ok:true, how:'choice'}; }
+      }
+      var selects = q.controls.filter(function (c) { return c.kind === 'select'; });
+      if (selects.length) {
+        var indexed = typeof row.selectIndex === 'number';
+        var targets = indexed ? [selects[row.selectIndex]] : selects;
+        if (targets.some(function (x) { return !x; }) || parts.length !== targets.length) return {ok:false};
+        var chosenOptions = targets.map(function (control, i) {
+          var matches = Array.prototype.filter.call(control.node.options, function (o) {
+            return norm(o.textContent) === norm(parts[i]) || String(o.value) === parts[i];
+          });
+          return matches.length === 1 ? matches[0] : null;
+        });
+        if (chosenOptions.some(function (x) { return !x; })) return {ok:false};
+        targets.forEach(function (c, i) { c.node.value = chosenOptions[i].value; c.node.dispatchEvent(new win.Event('change', {bubbles:true})); });
+        return {ok:true, how:'select'};
+      }
+      var boxes = q.controls.filter(function (c) { return c.kind === 'text'; });
+      if (boxes.length && boxes.length === parts.length) {
+        boxes.forEach(function (c,i) { c.node.value = parts[i]; c.node.dispatchEvent(new win.Event('input', {bubbles:true})); c.node.dispatchEvent(new win.Event('change', {bubbles:true})); });
+        return {ok:true, how:'text'};
+      }
+      return {ok:false, how:null};
     }
 
     /* ---------------------------------------------------------------- the shell */
@@ -697,6 +722,7 @@
       agent: null,             /* { state: 'idle'|'running'|'ok'|'error'|'retry', text, retryIn } */
       agentTimer: null,
       gw: { busy: null, probe: null, models: null, check: null, reg: null },
+      gatewayModel: null, modelEpoch: 0,
       ai: null,                /* { state: 'idle'|'running'|'ok'|'error', text, model } — the AI row, owner tier only */
       tier: null,              /* 'base' | 'owner' — base sees only their answer service, owner also the AI row */
       t0: 0
@@ -767,6 +793,7 @@
       render();
       win.requestAnimationFrame(function () { if (pop) pop.classList.add('in'); });
       load();
+      refreshHeaderModel();
     }
 
     var rise = 0;
@@ -792,6 +819,13 @@
       var t = el('div', 't', titleText);
       if (sub) t.appendChild(el('em', '', sub));
       h.appendChild(t);
+      if (state.gatewayModel) {
+        var chip = el('span', 'model-chip', state.gatewayModel);
+        chip.setAttribute('data-mse', 'model-chip');
+        chip.setAttribute('title', state.gatewayModel);
+        chip.setAttribute('aria-label', 'AI model: ' + state.gatewayModel);
+        h.appendChild(chip);
+      }
       var x = press(el('button', 'ib x', '×'), closePop);
       x.setAttribute('aria-label', 'close');
       h.appendChild(x);
@@ -885,7 +919,7 @@
         return;
       }
       if (!q.supported) {
-        body.appendChild(N(el('div', 'empty', '«' + (q.unsupported || q.type) + '” — the answer database cannot parse this question type')));
+        body.appendChild(N(el('div', 'empty', 'unsupported: ' + (q.unsupported || q.type))));
         if (aiAllowed()) appendAi(q);
         body.appendChild(N(statusLine()));
         return;
@@ -916,14 +950,20 @@
         body.appendChild(N(statusLine(), 1));
         return;
       }
-      var rows = state.rows || [];
+      var rows = (state.rows || []).slice();
+      if (!rows.length && q.answers.length) rows = q.answers.map(function (answer) { return {label:answer.text, correctness:0}; });
+      if (!rows.length && q.controls.some(function (c) { return c.kind === 'select'; })) {
+        q.controls.filter(function (c) { return c.kind === 'select'; }).forEach(function (c, index) {
+          Array.prototype.forEach.call(c.node.options, function (o) { if (o.value && !o.disabled) rows.push({label:o.textContent.trim(), selectIndex:index, correctness:0}); });
+        });
+      }
       if (!rows.length) {
         body.appendChild(N(el('div', 'empty', 'no answers yet')));
         if (aiAllowed()) appendAi(q);
       } else {
         var list = el('div', 'group');
         body.appendChild(N(list, 0));
-        rows.slice(0, 6).forEach(function (r, i) {
+        rows.slice(0, 40).forEach(function (r, i) {
           var a = el('button', 'ans press' + (r.correctness > 0 ? ' best' : ''));
           a.setAttribute('type', 'button');
           a.appendChild(el('span', 'mark', r.correctness > 0 ? '✓' : ''));
@@ -936,8 +976,8 @@
             flash(a);
             win.setTimeout(function () {
               var res = applyAnswer(q, r);
-              if (res.ok) { toast('selected: ' + r.label); setBadge(0); win.setTimeout(closePop, 420); }
-              else toast('no such option in the form');
+              if (res.ok) { a.classList.add('lit'); setBadge(0); }
+              else { state.error = 'not in the form'; render(); }
             }, 70);
           });
           list.appendChild(N(a, i));
@@ -954,7 +994,7 @@
       if (ai.state === 'running' || ai.state === 'retry') {
         var run = el('div', 'ans ai busy');
         run.appendChild(el('span', 'mark', '✦'));
-        run.appendChild(el('span', 'lbl', ai.state === 'retry' ? 'agent is busy, retrying in ' + ai.retryIn + ' s' : 'agent is thinking…'));
+        run.appendChild(el('span', 'lbl', ai.state === 'retry' ? 'agent busy · retry in ' + ai.retryIn + ' s' : 'agent working…'));
         run.appendChild(el('span', 'tag', 'AI'));
         body.appendChild(N(run, 1));
         return;
@@ -973,8 +1013,8 @@
         if (ai.state === 'ok' && ai.answer) {
           win.setTimeout(function () {
             var res = applyAnswer(q, { label: ai.answer, correctness: 0, count: 0, agent: true });
-            if (res.ok) { toast(res.how === 'text' ? 'filled in' : 'selected: ' + String(ai.answer).slice(0, 40)); setBadge(0); win.setTimeout(closePop, 420); }
-            else toast('not in the form');
+            if (res.ok) { a.classList.add('lit'); setBadge(0); }
+            else { state.error = 'not in the form'; render(); }
           }, 70);
           return;
         }
@@ -990,12 +1030,42 @@
       row.appendChild(el('span', 'dot ' + (st.state === 'ok' ? 'ok' : st.state === 'error' ? 'bad' : st.state === 'retry' || st.state === 'running' ? 'warn' : '')));
       var txt;
       if (st.state === 'idle') txt = 'agent: not asked';
-      else if (st.state === 'running') txt = 'agent is thinking…';
+      else if (st.state === 'running') txt = (st.stage || 'reasoning') + '…';
       else if (st.state === 'ok') txt = 'agent: ' + (st.answer || '—');
-      else if (st.state === 'retry') txt = 'agent is busy, retrying in ' + st.retryIn + ' s';
+      else if (st.state === 'retry') txt = 'agent busy · retry in ' + st.retryIn + ' s';
       else txt = 'agent: ' + (st.text || 'error');
       row.appendChild(el('span', 'txt', txt));
       return row;
+    }
+
+    function questionImages(q) {
+      var images = Array.prototype.slice.call(q.node.querySelectorAll('.qtext img, .answer img'));
+      if (images.length > 5) return Promise.reject(new Error('too many images'));
+      return Promise.all(images.map(function (img, index) {
+        var src = img.currentSrc || img.src || '';
+        var source = src.indexOf('data:image/') === 0 ? Promise.resolve(src) : (function () {
+          var u; try { u = new URL(src, win.location.href); } catch (_) { throw new Error('image unavailable'); }
+          if (u.origin !== win.location.origin) throw new Error('external image unavailable');
+          return debugAuxFetch(u.href, {credentials:'same-origin'}).then(function (response) {
+            if (!response.ok) throw new Error('image unavailable');
+            return response.blob();
+          }).then(function (blob) {
+            if (blob.size > 120000) throw new Error('image too large');
+            return new Promise(function (resolve, reject) {
+              var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); };
+              reader.onerror = function () { reject(new Error('image unreadable')); }; reader.readAsDataURL(blob);
+            });
+          });
+        })();
+        return source.then(function (data) {
+          if (!/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(data) || data.length > 160000) throw new Error('image format or size unsupported');
+          var related = q.answers.filter(function (a) { return a.input.parentNode && a.input.parentNode.contains(img); })[0];
+          return {data:data, label:related ? 'option: ' + related.text : 'question image ' + (index+1)};
+        });
+      })).then(function (all) {
+        if (all.reduce(function (n, image) { return n + image.data.length; }, 0) > 180000) throw new Error('images too large');
+        return all;
+      });
     }
 
     function runAgent(automatic) {
@@ -1006,28 +1076,33 @@
         render();
         return;
       }
-      state.agent = { state: 'running' };
+      state.agent = { state: 'running', stage: q.node.querySelector('.qtext img, .answer img') ? 'looking at image' : 'reasoning' };
       render();
       var t0 = Date.now();
-      win.MSEBridge.agent({
+      Promise.resolve().then(function () { return questionImages(q); }).then(function (images) { return win.MSEBridge.agent({
         host: state.meta.host,
         question: q.text,
         type: q.type,
         options: q.answers.map(function (a) { return a.text; }),
-        multiple: q.type === 'multichoiceset'
-      }).then(function (res) {
+        multiple: q.type === 'multichoiceset' || q.answers.some(function (a) { return a.input.type === 'checkbox'; }),
+        selects: q.controls.filter(function (c) { return c.kind === 'select'; }).map(function (c) { return Array.prototype.filter.call(c.node.options, function (o) { return !!o.value && !o.disabled; }).map(function (o) { return o.textContent.trim(); }); }),
+        textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
+        image: images.length ? images : null
+      }, function (stage) {
+        if (state.agent && state.agent.state === 'running' && ['reasoning', 'looking at image', 'writing answer'].indexOf(stage) >= 0) {
+          state.agent.stage = stage; if (pop && state.route === 'answers') render();
+        }
+      }); }).then(function (res) {
         var ms = Date.now() - t0;
         if (res.ok && res.answer) {
           logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
-          /* the model's name stays in the journal; the panel has no business naming models */
+          if (typeof res.model === 'string' && res.model.trim()) { state.modelEpoch++; state.gatewayModel = res.model.trim(); }
           state.agent = { state: 'ok', answer: res.answer };
           var row = { label: res.answer, correctness: 0, count: 0, agent: true };
           if (!(state.rows || []).some(function (r) { return r.label === row.label && r.agent; })) {
             state.rows = [row].concat(state.rows || []);
           }
           render();
-          var applied = applyAnswer(q, row);
-          if (applied.ok) toast('agent picked: ' + String(res.answer).slice(0, 40));
           return;
         }
         if (res.code === 'rate_limited') {
@@ -1042,6 +1117,9 @@
           : 'agent failed: ' + (res.message || 'error');
         logAdd('agent', false, text, { ms: ms });
         state.agent = { state: 'error', text: text };
+        render();
+      }, function (error) {
+        state.agent = {state:'error', text: 'image unsupported: ' + String(error && error.message || 'unavailable')};
         render();
       });
     }
@@ -1146,6 +1224,7 @@
       body.appendChild(N(el('div', 'sec', 'this device'), 1));
       /* the key itself is never drawn: it lives on this device and is used, not shown */
       var key = win.MSEBridge ? win.MSEBridge.key() : null;
+      body.appendChild(N(valueRow('device', meta && meta.device, false), 1));
       body.appendChild(N(valueRow('key', win.MSEBridge ? win.MSEBridge.maskedKey() : null, !!key), 1));
       var st = state.gw.check;
       var line = el('div', 'row');
@@ -1161,18 +1240,31 @@
       body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
     }
 
-    /* the one path an address takes: checked, then it replaces the old one everywhere, then it is used */
+    function refreshHeaderModel() {
+      var br = win.MSEBridge, url = br && br.url();
+      if (!url) { state.gatewayModel = null; return; }
+      if (!br.meta()) return;
+      var epoch = ++state.modelEpoch;
+      br.probe(url).then(function (r) {
+        if (epoch !== state.modelEpoch || br.url() !== url) return;
+        state.gatewayModel = r.ok && typeof r.model === 'string' && r.model.trim() ? r.model.trim() : null;
+        render();
+      }, function () { if (epoch === state.modelEpoch && br.url() === url) { state.gatewayModel = null; render(); } });
+    }
+
     function checkGateway(raw) {
       var gw = state.gw;
       var br = win.MSEBridge;
       if (!br || !raw) return Promise.resolve(null);
+      var epoch = ++state.modelEpoch;
       gw.busy = 'check';
       gw.probe = null;
       gw.models = null;
       render();
       return br.probe(raw).then(function (r) {
         gw.probe = r;
-        if (!r.ok) { gw.busy = null; logAdd('gateway', false, 'AI gateway: ' + r.message); render(); return null; }
+        if (!r.ok) { if (epoch === state.modelEpoch && raw === br.url()) state.gatewayModel = null; gw.busy = null; logAdd('gateway', false, 'AI gateway: ' + r.message); render(); return null; }
+        if (epoch === state.modelEpoch) { state.gatewayModel = typeof r.model === 'string' && r.model.trim() ? r.model.trim() : null; render(); }
         /* the new address replaces the old one in every store before anything else can read it */
         br.setUrl(raw);
         (br.audit ? br.audit() : Promise.resolve({ strays: [] })).then(function (audit) {
@@ -1257,6 +1349,11 @@
           }), 1));
         }
       }
+      var toggle = el('label', 'row');
+      var debug = el('input'); debug.type = 'checkbox'; debug.checked = br.debugEnabled(); debug.setAttribute('data-mse', 'debug-mode');
+      debug.addEventListener('change', function () { br.setDebugEnabled(debug.checked); });
+      toggle.appendChild(debug); toggle.appendChild(el('span', 'txt', 'Debug mode · sends diagnostics to owner (may include personal data)'));
+      body.appendChild(N(toggle, 1));
       body.appendChild(N(statusLine(), 1));
     }
 
@@ -1280,6 +1377,66 @@
       }), 1));
     }
 
+    function snifDump() {
+      var q = state.question || currentQuestion(readQuestions());
+      var block = q && q.node;
+      var images = block ? Array.prototype.map.call(block.querySelectorAll('img'), function (img) {
+        return { src: img.getAttribute('src'), resolved: img.src, alt: img.getAttribute('alt'), srcset: img.getAttribute('srcset') };
+      }) : [];
+      var backgrounds = [];
+      if (block) [block].concat(Array.prototype.slice.call(block.querySelectorAll('*'))).forEach(function (node) {
+        var bg = win.getComputedStyle(node).backgroundImage;
+        if (bg && bg !== 'none') backgrounds.push({ tag: node.tagName, id: node.id, className: String(node.className || ''), backgroundImage: bg });
+      });
+      var inputs = block ? Array.prototype.map.call(block.querySelectorAll('input, label, select, textarea'), function (node) {
+        return { tag: node.tagName, type: node.type || null, name: node.name || null,
+          id: node.id || null, for: node.getAttribute('for'), value: node.value == null ? null : node.value,
+          checked: 'checked' in node ? !!node.checked : null, text: node.tagName === 'LABEL' ? node.textContent : null,
+          options: node.options ? Array.prototype.map.call(node.options, function (o) { return { value: o.value, text: o.text, selected: o.selected }; }) : null };
+      }) : [];
+      var scripts = Array.prototype.map.call(doc.querySelectorAll('script:not([src])'), function (node) { return node.textContent || ''; })
+        .filter(function (text) { return /M\.cfg|YUI|Y\.use/i.test(text); });
+      var cookies = [];
+      try { cookies = String(doc.cookie || '').split(';').map(function (x) { return x.trim().split('=')[0]; }).filter(Boolean); } catch (e) {}
+      return {
+        schema: 'mse-snif-1', capturedAt: new Date().toISOString(),
+        warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
+        page: { location: String(win.location.href), title: doc.title, headings: Array.prototype.map.call(doc.querySelectorAll('h1,h2,h3'), function (n) { return n.textContent.trim(); }),
+          httpHeaders: 'unavailable to page JavaScript', cookieNamesVisibleToJavaScript: cookies, inlineMoodleScripts: scripts },
+        question: q ? { html: block.outerHTML, text: q.text, type: q.type, identity: q.identity,
+          identityCalculation: questionIdentity.toString(), images: images, backgrounds: backgrounds, inputs: inputs } : null,
+        requests: { syncshare: lastSyncRequest, agent: win.MSEBridge && win.MSEBridge.snifAgent ? win.MSEBridge.snifAgent() : null }
+      };
+    }
+    function debugTraffic(event) {
+      if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
+      var dump = snifDump(); dump.traffic = event;
+      win.MSEBridge.sendDump('debug', dump);
+    }
+    function reportCurrent(button) {
+      if (!win.MSEBridge) { button.textContent = 'gateway offline'; return; }
+      button.disabled = true; button.textContent = 'sending…';
+      var dump = snifDump(); dump.error = state.error || (state.agent && state.agent.text) || null;
+      win.MSEBridge.sendDump('report', dump).then(function (result) {
+        button.disabled = false; button.textContent = result.ok ? 'sent' : (result.message || 'failed');
+      });
+    }
+    var snifText = '';
+    function viewSnif() {
+      body.appendChild(N(el('div', 'sec', 'Snif · local only')));
+      body.appendChild(N(el('div', 'empty', 'May contain session keys and personal data. Review before sharing.')));
+      var copy = el('button', 'btn solid', 'Copy');
+      copy.setAttribute('data-mse', 'snif-copy');
+      copy.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        var dump = snifText;
+        if (!win.MSEBridge) { toast('copy unavailable'); return; }
+        win.MSEBridge.copy(dump).then(function (ok) { toast(ok ? 'copied' : 'copy failed'); });
+      });
+      body.appendChild(N(copy));
+      body.appendChild(N(press(el('button', 'btn', 'back'), function () { state.route = 'answers'; render(); })));
+    }
+
     /* ---------------- render ---------------- */
     var body = null;
     function render() {
@@ -1296,26 +1453,35 @@
       } else if (state.route === 'account') { sub = 'account'; }
       else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
       else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
+      else if (state.route === 'snif') { sub = 'Snif'; }
       pop.appendChild(head(title, sub, leading));
       body = el('div', 'pb');
       pop.appendChild(body);
       if (state.route === 'account') viewAccount();
       else if (state.route === 'gateway') viewGateway();
       else if (state.route === 'net') viewNet();
-      else viewAnswers();
+      else if (state.route === 'snif') viewSnif();
+      else {
+        viewAnswers();
+        var actions = el('div', 'frow');
+        actions.style.margin = '6px 0 0';
+        var snif = press(el('button', 'btn', 'Snif'), function () { snifText = JSON.stringify(snifDump(), null, 2); state.route = 'snif'; render(); });
+        snif.setAttribute('data-mse', 'snif'); snif.style.height = '44px';
+        var report = press(el('button', 'btn', 'Report'), function () { reportCurrent(report); });
+        report.setAttribute('data-mse', 'report'); report.style.height = '44px';
+        actions.appendChild(snif); actions.appendChild(report); body.appendChild(N(actions, 1));
+      }
       layout();
     }
 
     /* the dot in the status line follows the log even while the panel is closed */
     function updateDot() {}
 
-    var toastTimer = null, toastEl = null;
     function toast(text) {
-      if (!toastEl) { toastEl = el('div', 'toast'); wrap.appendChild(toastEl); }
-      toastEl.textContent = text;
-      toastEl.classList.add('on');
-      if (toastTimer) win.clearTimeout(toastTimer);
-      toastTimer = win.setTimeout(function () { toastEl.classList.remove('on'); }, 2000);
+      if (!body) return;
+      var msg = el('div', 'row', text);
+      msg.setAttribute('role', 'status');
+      body.appendChild(msg);
     }
 
     /* a tap outside closes it; the shadow root is closed, so only the host can be tested here */
@@ -1332,6 +1498,7 @@
     (doc.body || doc.documentElement).appendChild(host);
 
     win.__mse = {
+      onDebugTraffic: debugTraffic,
       open: function () { openPop(); return true; },
       close: closePop,
       identity: identity,
@@ -1412,6 +1579,9 @@
         };
       }
     };
+    var pendingTraffic = win.__msePendingTraffic || [];
+    win.__msePendingTraffic = [];
+    pendingTraffic.forEach(debugTraffic);
 
     function controls() {
       var out = {};
