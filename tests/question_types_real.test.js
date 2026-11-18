@@ -217,7 +217,7 @@ test('WebKit: universal handling of Layer 1 question types in real Moodle format
       await page.close();
     }
 
-    // 7. Coderunner / Rich text editor updating
+    // 7. Coderunner / Rich text editor updating with multiline code and pipes
     {
       const page = await t.newPage(h.fixtureUrl('attempt'));
       await page.waitForFunction(() => !!window.__mse);
@@ -234,14 +234,65 @@ test('WebKit: universal handling of Layer 1 question types in real Moodle format
         window.__mse.open();
       });
       await page.waitForFunction(() => !!window.__mse.state().question);
-      const applied = await page.evaluate(() => window.__mse.apply('def foo(): return 42'));
+      const codePayload = 'def foo(a, b):\n    return a | b';
+      const applied = await page.evaluate((c) => window.__mse.apply(c), codePayload);
       assert.equal(applied.ok, true);
+      assert.equal(applied.how, 'text');
       const res = await page.evaluate(() => ({
         boxVal: document.getElementById('code_box').value,
         edHtml: document.getElementById('atto_ed').innerHTML
       }));
-      assert.equal(res.boxVal, 'def foo(): return 42');
-      assert.match(res.edHtml, /def foo\(\): return 42/);
+      assert.equal(res.boxVal, codePayload, 'full multiline code preserved with bitwise pipe intact');
+      assert.match(res.edHtml, /def foo\(a, b\):<br>\s*return a \| b/);
+      await page.close();
+    }
+
+    // 8. True/False cross-lingual: Russian radios ('Верно' / 'Неверно') with English answer 'True'
+    {
+      const page = await t.newPage(h.fixtureUrl('attempt'));
+      await page.waitForFunction(() => !!window.__mse);
+      await page.evaluate(() => {
+        const q = document.querySelector('.que');
+        q.className = 'que truefalse deferredfeedback notyetanswered';
+        q.querySelector('.answer').innerHTML = `
+          <div class="r0"><input type="radio" name="q42:8_answer" id="tf_t" value="1"><label for="tf_t">Верно</label></div>
+          <div class="r1"><input type="radio" name="q42:8_answer" id="tf_f" value="0"><label for="tf_f">Неверно</label></div>
+        `;
+        window.__mse.open();
+      });
+      await page.waitForFunction(() => !!window.__mse.state().question);
+      const applied = await page.evaluate(() => window.__mse.apply('True'));
+      assert.equal(applied.ok, true);
+      assert.equal(applied.how, 'choice');
+      const isChecked = await page.evaluate(() => document.getElementById('tf_t').checked);
+      assert.equal(isChecked, true, 'Russian "Верно" selected via English "True"');
+      await page.close();
+    }
+
+    // 9. Essay question: supported and populates textarea
+    {
+      const page = await t.newPage(h.fixtureUrl('attempt'));
+      await page.waitForFunction(() => !!window.__mse);
+      await page.evaluate(() => {
+        const q = document.querySelector('.que');
+        q.className = 'que essay deferredfeedback notyetanswered';
+        q.querySelector('.formulation').innerHTML = `
+          <div class="qtext">Write an essay on photosynthesis</div>
+          <div class="answer"><textarea name="q42:9_answer" id="essay_box"></textarea></div>
+        `;
+        window.__mse.open();
+      });
+      await page.waitForFunction(() => !!window.__mse.state().question);
+      const q = await page.evaluate(() => window.__mse.current());
+      assert.equal(q.supported, true, 'essay is now supported');
+      assert.equal(q.kind, 'text');
+
+      const essayText = 'Photosynthesis is the process used by plants to convert light energy into chemical energy.';
+      const applied = await page.evaluate((txt) => window.__mse.apply(txt), essayText);
+      assert.equal(applied.ok, true);
+      assert.equal(applied.how, 'text');
+      const val = await page.evaluate(() => document.getElementById('essay_box').value);
+      assert.equal(val, essayText);
       await page.close();
     }
   } finally {

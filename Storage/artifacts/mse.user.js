@@ -3729,6 +3729,7 @@ var __ssW=window,__msePageWindow=window;
     multianswer: { label: 'nested questions', kind: 'select' },
     gapfill: { label: 'gaps', kind: 'text' },
     coderunner: { label: 'code', kind: 'text' },
+    essay: { label: 'essay', kind: 'text' },
     calculated: { label: 'calculated', kind: 'text' },
     calculatedsimple: { label: 'calculated', kind: 'text' },
     calculatedmulti: { label: 'calculated', kind: 'choice' },
@@ -3740,7 +3741,6 @@ var __ssW=window,__msePageWindow=window;
     ddmarker: 'markers on an image',
     dragdrop: 'drag and drop',
     ordering: 'ordering',
-    essay: 'essay',
     description: 'description (not a question)'
   };
 
@@ -4028,10 +4028,10 @@ var __ssW=window,__msePageWindow=window;
     }
 
     function readQuestion(block) {
-      var qtext = block.querySelector('.qtext');
+      var qtext = block.querySelector('.qtext') || block.querySelector('.formulation') || block;
       if (!qtext) return null;
       var clone = qtext.cloneNode(true);
-      Array.prototype.forEach.call(clone.querySelectorAll('.accesshide'), function (x) {
+      Array.prototype.forEach.call(clone.querySelectorAll('.accesshide, .MathJax_Preview, .katex-html'), function (x) {
         if (x.parentNode) x.parentNode.removeChild(x);
       });
       var text = textOf(clone);
@@ -4093,9 +4093,19 @@ var __ssW=window,__msePageWindow=window;
       for (var cn = 0; cn < controlNodes.length; cn++) {
         var node = controlNodes[cn];
         var tag = node.tagName.toLowerCase();
+        var labelText = '';
+        var tr = node.closest ? node.closest('tr') : null;
+        if (tr) {
+          var tdText = tr.querySelector('td.text');
+          if (tdText) labelText = textOf(tdText) || (tdText.querySelector('img') && tdText.querySelector('img').getAttribute('alt')) || '';
+        }
+        if (!labelText && node.id) {
+          var lbl = block.querySelector('label[for="' + node.id + '"]');
+          if (lbl) labelText = textOf(lbl);
+        }
         if (tag === 'select') {
           if (!/^q\d+:\d+_/.test(node.name || '')) continue;
-          q.controls.push({ kind: 'select', node: node });
+          q.controls.push({ kind: 'select', node: node, label: labelText || null });
         } else if (tag === 'input' && node.classList.contains('placeinput')) {
           var pMatch = /place(\d+)/.exec(node.className || '') || /_p(\d+)/.exec(node.name || '');
           var pNo = pMatch ? parseInt(pMatch[1], 10) : (q.controls.filter(function (c) { return c.kind === 'place'; }).length + 1);
@@ -4103,7 +4113,7 @@ var __ssW=window,__msePageWindow=window;
         } else {
           if (!/^q\d+:\d+_/.test(node.name || '')) continue;
           if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(node.name || '')) continue;
-          q.controls.push({ kind: 'text', node: node });
+          q.controls.push({ kind: 'text', node: node, label: labelText || null });
         }
       }
       return q;
@@ -4316,8 +4326,8 @@ var __ssW=window,__msePageWindow=window;
 
      
     function applyAnswer(q, row) {
-      var parts = String(row.label || '').split('|').map(function (x) { return x.trim(); }).filter(Boolean);
-      if (!parts.length) return {ok:false};
+      var fullText = String(row.label != null ? row.label : '').trim();
+      if (fullText === '') return {ok:false};
 
        
       var places = q.controls.filter(function (c) { return c.kind === 'place'; });
@@ -4330,6 +4340,34 @@ var __ssW=window,__msePageWindow=window;
           });
         }
       }
+
+      var interactive = q.controls.filter(function (c) { return c.kind === 'select' || c.kind === 'text'; });
+
+       
+      if (interactive.length === 1 && interactive[0].kind === 'text' && !q.answers.length && !places.length) {
+        var soloText = interactive[0];
+        soloText.node.value = fullText;
+        soloText.node.dispatchEvent(new win.Event('input', {bubbles:true}));
+        soloText.node.dispatchEvent(new win.Event('change', {bubbles:true}));
+        try {
+          var pBox = soloText.node.closest('.answer, .formulation, label') || soloText.node.parentNode;
+          var rEd = pBox && pBox.querySelector('[contenteditable="true"], .editor_atto_content');
+          if (rEd) {
+            rEd.innerHTML = '<p>' + fullText.replace(/\n/g, '<br>') + '</p>';
+            rEd.dispatchEvent(new win.Event('input', {bubbles:true}));
+          }
+          if (soloText.node.tagName.toLowerCase() === 'textarea' && win.ace && typeof win.ace.edit === 'function') {
+            var aId = soloText.node.id || (soloText.node.parentNode && soloText.node.parentNode.id);
+            var aEd = aId ? win.ace.edit(aId) : null;
+            if (aEd && aEd.setValue) aEd.setValue(fullText, 1);
+          }
+        } catch (_) {}
+        return {ok:true, how:'text'};
+      }
+
+      var parts = fullText.split('|').map(function (x) { return x.trim(); }).filter(Boolean);
+      if (!parts.length) return {ok:false};
+
       if (places.length) {
         if (parts.length !== places.length) return {ok:false};
         var dragHomes = q.answers.filter(function (a) { return a.kind === 'drag'; });
@@ -4375,7 +4413,12 @@ var __ssW=window,__msePageWindow=window;
        
       var checks = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; });
       if (checks.length && (!q.controls.length || q.type === 'multichoiceset')) {
-        var chosen = parts.map(function (part) {
+        var chParts = parts;
+        if (chParts.length === 1 && !checks.some(function (a) { return norm(a.text) === norm(chParts[0]); })) {
+          var commaSplit = fullText.split(/\s*,\s*|\s*;\s*|\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
+          if (commaSplit.length > 1) chParts = commaSplit;
+        }
+        var chosen = chParts.map(function (part) {
           var hits = checks.filter(function (a) { return norm(a.text) === norm(part); });
           if (!hits.length) {
             var pTrim = String(part || '').trim();
@@ -4386,7 +4429,7 @@ var __ssW=window,__msePageWindow=window;
           return hits.length === 1 ? hits[0] : null;
         });
         if (chosen.some(function (x) { return !x; })) return {ok:false};
-        if (parts.length === 1) {
+        if (chParts.length === 1) {
           chosen[0].input.click();
         } else {
           checks.forEach(function (a) { var selected = chosen.indexOf(a) >= 0; if (a.input.checked !== selected) a.input.click(); });
@@ -4398,12 +4441,26 @@ var __ssW=window,__msePageWindow=window;
       var radios = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'radio'; });
       if (radios.length && (!q.controls.length || q.type === 'multichoice' || q.type === 'truefalse' || q.type === 'calculatedmulti')) {
         if (parts.length === 1) {
-          var hits = radios.filter(function (a) { return norm(a.text) === norm(parts[0]); });
+          var p0 = parts[0];
+          var hits = radios.filter(function (a) { return norm(a.text) === norm(p0); });
           if (!hits.length) {
-            var pTrim = String(parts[0] || '').trim();
+            var pTrim = String(p0 || '').trim();
             hits = radios.filter(function (a, idx) {
               return (a.letter && a.letter.toLowerCase() === pTrim.toLowerCase()) || String(idx + 1) === pTrim;
             });
+          }
+          if (!hits.length) {
+            var TRUE_VALS = ['true', 'верно', 'правда', 'да', 't'];
+            var FALSE_VALS = ['false', 'неверно', 'ложь', 'нет', 'f'];
+            var pLower = norm(p0);
+            var isTrue = TRUE_VALS.indexOf(pLower) >= 0;
+            var isFalse = FALSE_VALS.indexOf(pLower) >= 0;
+            if (isTrue || isFalse) {
+              hits = radios.filter(function (a) {
+                var an = norm(a.text);
+                return isTrue ? TRUE_VALS.indexOf(an) >= 0 : FALSE_VALS.indexOf(an) >= 0;
+              });
+            }
           }
           if (hits.length === 1) { if (!hits[0].input.checked) hits[0].input.click(); return {ok:true, how:'choice'}; }
         }
@@ -4429,7 +4486,6 @@ var __ssW=window,__msePageWindow=window;
       }
 
        
-      var interactive = q.controls.filter(function (c) { return c.kind === 'select' || c.kind === 'text'; });
       if (interactive.length && interactive.length === parts.length) {
         var planned = [];
         for (var idx = 0; idx < interactive.length; idx++) {
@@ -4442,6 +4498,17 @@ var __ssW=window,__msePageWindow=window;
             if (!opts.length && /^\d+$/.test(val)) {
               var nIdx = parseInt(val, 10);
               if (nIdx >= 0 && nIdx < ctrl.node.options.length) opts = [ctrl.node.options[nIdx]];
+            }
+            if (!opts.length && /^[a-zа-я]$/i.test(val.trim())) {
+              var letCode = val.trim().toLowerCase().charCodeAt(0);
+              var letIdx = -1;
+              if (letCode >= 97 && letCode <= 122) letIdx = letCode - 97;
+              else {
+                var cyr = 'абвгдежзийклмнопрстуфхцчшщэюя';
+                letIdx = cyr.indexOf(val.trim().toLowerCase());
+              }
+              var validOpts = Array.prototype.filter.call(ctrl.node.options, function (o) { return !!o.value && !o.disabled; });
+              if (letIdx >= 0 && letIdx < validOpts.length) opts = [validOpts[letIdx]];
             }
             if (opts.length !== 1) return {ok:false};
             planned.push({ kind: 'select', node: ctrl.node, value: opts[0].value });
@@ -5049,36 +5116,47 @@ var __ssW=window,__msePageWindow=window;
     }
 
     function questionImages(q) {
-      var images = Array.prototype.slice.call(q.node.querySelectorAll('.qtext img, .answer img'));
-      if (images.length > 5) return Promise.reject(new Error('too many images'));
+      var allImgs = Array.prototype.slice.call(q.node.querySelectorAll('.qtext img, .answer img, .formulation img'));
+      var images = allImgs.filter(function (img) {
+        if (img.classList.contains('icon') || img.classList.contains('emoticon') || img.classList.contains('questionflagimage')) return false;
+        var src = img.currentSrc || img.src || '';
+        if (/\x2Ftheme\x2Fimage\.php\x2F/i.test(src)) return false;
+        if (img.naturalWidth && img.naturalWidth <= 24 && img.naturalHeight && img.naturalHeight <= 24) return false;
+        return true;
+      });
+      if (images.length > 5) images = images.slice(0, 5);
       return Promise.all(images.map(function (img, index) {
         var src = img.currentSrc || img.src || '';
         var source = src.indexOf('data:image/') === 0 ? Promise.resolve(src) : (function () {
-          var u; try { u = new URL(src, win.location.href); } catch (_) { throw new Error('image unavailable'); }
-          if (u.origin !== win.location.origin) throw new Error('external image unavailable');
+          var u; try { u = new URL(src, win.location.href); } catch (_) { return Promise.resolve(null); }
+          if (u.origin !== win.location.origin) return Promise.resolve(null);
           return debugAuxFetch(u.href, {credentials:'same-origin'}).then(function (response) {
-            if (!response.ok) throw new Error('image unavailable');
+            if (!response.ok) return null;
             return response.blob();
           }).then(function (blob) {
-            if (blob.size > 2500000) throw new Error('image too large (>2.5MB)');
-            return new Promise(function (resolve, reject) {
+            if (!blob || blob.size > 2500000) return null;
+            return new Promise(function (resolve) {
               var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); };
-              reader.onerror = function () { reject(new Error('image unreadable')); }; reader.readAsDataURL(blob);
+              reader.onerror = function () { resolve(null); }; reader.readAsDataURL(blob);
             });
-          });
+          }).catch(function () { return null; });
         })();
         return source.then(function (rawUrl) {
+          if (!rawUrl) return null;
           return downscaleDataUrl(rawUrl, 1024);
         }).then(function (data) {
-          if (!/^data:image\x2F(png|jpeg|gif|webp);base64,[A-Za-z0-9+\x2F=]+$/i.test(data)) throw new Error('image format unsupported');
-          if (data.length > 800000) throw new Error('image too large (>512KB)');
-          var related = q.answers.filter(function (a) { return a.input.parentNode && a.input.parentNode.contains(img); })[0];
+          if (!data || !/^data:image\x2F(png|jpeg|gif|webp);base64,[A-Za-z0-9+\x2F=]+$/i.test(data)) return null;
+          if (data.length > 800000) return null;
+          var related = q.answers.filter(function (a) { return a.input && a.input.parentNode && a.input.parentNode.contains(img); })[0];
           return {data:data, label:related ? 'option: ' + related.text : 'question image ' + (index+1)};
-        });
+        }).catch(function () { return null; });
       })).then(function (all) {
-        if (all.reduce(function (n, image) { return n + image.data.length; }, 0) > 1500000) throw new Error('images too large (over 1.5MB total)');
-        return all;
-      });
+        var valid = all.filter(function (x) { return !!x; });
+        if (valid.reduce(function (n, image) { return n + image.data.length; }, 0) > 1500000) {
+          valid = valid.length ? [valid[0]] : [];
+        }
+        return valid;
+      }).catch(function () { return []; });
     }
 
     function runAgent(automatic, retryCount) {
@@ -5095,15 +5173,16 @@ var __ssW=window,__msePageWindow=window;
       state.agent = { state: 'running', stage: stageText };
       render();
       var t0 = Date.now();
-      var fields = q.controls.map(function (c) {
+      var fields = q.controls.map(function (c, idx) {
         if (c.kind === 'select') {
           return {
             kind: 'select',
+            label: c.label || null,
             options: Array.prototype.filter.call(c.node.options, function (o) { return !!o.value && !o.disabled; }).map(function (o) { return o.textContent.trim(); })
           };
         }
-        if (c.kind === 'place') return { kind: 'place' };
-        return { kind: 'text' };
+        if (c.kind === 'place') return { kind: 'place', label: 'Blank ' + (c.placeNo || (idx + 1)) };
+        return { kind: 'text', label: c.label || null };
       });
       Promise.resolve().then(function () { return questionImages(q); }).then(function (images) { return win.MSEBridge.agent({
         host: state.meta.host,

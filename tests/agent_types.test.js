@@ -25,7 +25,7 @@ test.before(async () => {
     req.on('end', () => {
       lastPayload = JSON.parse(raw);
       let answer = 'Alpha';
-      if (mockReply) {
+      if (mockReply != null) {
         answer = mockReply;
       } else {
         const userMsg = lastPayload.messages[1].content;
@@ -125,6 +125,44 @@ test('Russian letter option matching: а), б), в)', async () => {
   res = await ask({ question: 'Столица?', options });
   assert.equal(res.body.ok, true);
   assert.equal(res.body.answer, 'Москва');
+
+  mockReply = null;
+});
+
+test('True/False cross-lingual synonym matching', async () => {
+  // Russian options, English model reply
+  mockReply = 'True';
+  let res = await ask({ question: 'Земля круглая?', options: ['Верно', 'Неверно'] });
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.answer, 'Верно');
+
+  // English options, Russian model reply
+  mockReply = 'Ложь';
+  res = await ask({ question: 'Sky is green?', options: ['True', 'False'] });
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.answer, 'False');
+
+  mockReply = null;
+});
+
+test('Model returning array or number 0', async () => {
+  // Array response
+  mockReply = ['Alpha', 'Beta'];
+  let res = await ask({ question: 'Which ones?', options: ['Alpha', 'Beta', 'Gamma'], multiple: true });
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.answer, 'Alpha | Beta');
+
+  // Answer is 0
+  mockReply = 0;
+  res = await ask({ question: 'What is 2 - 2?', type: 'numerical' });
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.answer, '0');
+
+  // Comma-separated multiple choice
+  mockReply = 'Alpha, Beta';
+  res = await ask({ question: 'Which ones?', options: ['Alpha', 'Beta', 'Gamma'], multiple: true });
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.answer, 'Alpha | Beta');
 
   mockReply = null;
 });

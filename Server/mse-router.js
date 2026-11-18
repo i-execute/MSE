@@ -586,6 +586,9 @@ function extractJson(text) {
   try { return JSON.parse(m[0]); } catch (e) { return null; }
 }
 const RU_LETTERS = 'абвгдежзийклмнопрстуфхцчшщэюя';
+const TRUE_VALS = ['true', 'верно', 'правда', 'да', 't'];
+const FALSE_VALS = ['false', 'неверно', 'ложь', 'нет', 'f'];
+
 function normOpt(s) {
   return String(s || '').trim().toLowerCase()
     .replace(/^(\([a-zа-я0-9]{1,2}\)|[a-zа-я0-9]{1,2}[\.\)\:\-])\s*/i, '')
@@ -601,6 +604,16 @@ function matchOption(part, options) {
   if (np) {
     m = options.filter((o) => normOpt(o) === np);
     if (m.length === 1) return m[0];
+  }
+  const pClean = pRaw.toLowerCase().replace(/[\.\)\:]$/, '');
+  const isTrue = TRUE_VALS.includes(pClean);
+  const isFalse = FALSE_VALS.includes(pClean);
+  if (isTrue || isFalse) {
+    const truthyOpt = options.find((o) => TRUE_VALS.includes(normOpt(o)));
+    const falsyOpt = options.find((o) => FALSE_VALS.includes(normOpt(o)));
+    if (truthyOpt && falsyOpt) {
+      return isTrue ? truthyOpt : falsyOpt;
+    }
   }
   if (/^\d+$/.test(pRaw)) {
     const idx = parseInt(pRaw, 10);
@@ -644,12 +657,13 @@ function buildAgentPrompt(body) {
   if (Array.isArray(body.fields) && body.fields.length > 1) {
     user += 'This question has ' + body.fields.length + ' inputs in order from left to right, joined by |:\n';
     body.fields.forEach((f, i) => {
+      const lbl = f.label ? ' [' + f.label + ']' : '';
       if (f.kind === 'select') {
-        user += (i + 1) + '. [Dropdown] Options: ' + (Array.isArray(f.options) ? f.options.join(' / ') : '') + '\n';
+        user += (i + 1) + '.' + lbl + ' [Dropdown] Options: ' + (Array.isArray(f.options) ? f.options.join(' / ') : '') + '\n';
       } else if (f.kind === 'place') {
-        user += (i + 1) + '. [Blank] Choose matching option from the options list below\n';
+        user += (i + 1) + '.' + lbl + ' [Blank] Choose matching option from the options list below\n';
       } else {
-        user += (i + 1) + '. [Text field] Enter value\n';
+        user += (i + 1) + '.' + lbl + ' [Text field] Enter value\n';
       }
     });
     if (options) user += 'Available options:\n' + options + '\n';
@@ -930,8 +944,18 @@ async function handleAgent(req, res, rec) {
     serverLog('warn', 'agent_error', String(answerObj.error).slice(0, 100), { deviceId: rec.deviceId });
     return reply(200, { ok: false, code: 'agent_error', ms, message: String(answerObj.error).slice(0, 160) });
   }
-  const answer = String(answerObj.answer || '').trim();
-  if (!answer) {
+  let rawAns = answerObj.answer;
+  if (Array.isArray(rawAns)) {
+    rawAns = rawAns.map((x) => String(x == null ? '' : x)).join(' | ');
+  } else if (rawAns && typeof rawAns === 'object') {
+    rawAns = Object.values(rawAns).map((x) => String(x == null ? '' : x)).join(' | ');
+  } else if (rawAns != null) {
+    rawAns = String(rawAns);
+  } else {
+    rawAns = '';
+  }
+  const answer = rawAns.trim();
+  if (answer === '') {
     serverLog('warn', 'agent_error', 'no option picked', { deviceId: rec.deviceId });
     return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
   }
@@ -941,8 +965,15 @@ async function handleAgent(req, res, rec) {
     return reply(200, { ok: false, code: 'agent_error', ms, message: 'the model reported no image was provided' });
   }
   let cleanAnswer = answer.replace(/^```[a-z]*\s*\n?/i, '').replace(/\n?```\s*$/i, '');
-  const parts = cleanAnswer.split('|').map((x) => x.trim()).filter(Boolean);
+  let parts = cleanAnswer.split('|').map((x) => x.trim()).filter(Boolean);
   let picked = cleanAnswer;
+
+  if (options.length && body.multiple && parts.length === 1 && !options.some((o) => normOpt(o) === normOpt(parts[0]))) {
+    const commaParts = cleanAnswer.split(/\s*,\s*|\s*;\s*|\n+/).map((x) => x.trim()).filter(Boolean);
+    if (commaParts.length > 1 && commaParts.every((cp) => matchOption(cp, options) !== null)) {
+      parts = commaParts;
+    }
+  }
 
   if (Array.isArray(body.fields) && body.fields.length > 1) {
     if (parts.length !== body.fields.length) {

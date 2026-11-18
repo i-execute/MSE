@@ -204,10 +204,10 @@ index f15bc4e..2bdb61d 100644
      },
      debugEnabled: function () { return lsGet('mse.debug.enabled') === '1'; },
 diff --git a/Extensions/src/mse-ui.js b/Extensions/src/mse-ui.js
-index ebf8183..0bce99e 100644
+index ebf8183..fb0a7d5 100644
 --- a/Extensions/src/mse-ui.js
 +++ b/Extensions/src/mse-ui.js
-@@ -44,17 +44,18 @@
+@@ -44,25 +44,48 @@
      shortanswer: { label: 'short answer', kind: 'text' },
      numerical: { label: 'number', kind: 'text' },
      match: { label: 'matching', kind: 'select' },
@@ -216,6 +216,7 @@ index ebf8183..0bce99e 100644
      multianswer: { label: 'nested questions', kind: 'select' },
      gapfill: { label: 'gaps', kind: 'text' },
      coderunner: { label: 'code', kind: 'text' },
++    essay: { label: 'essay', kind: 'text' },
      calculated: { label: 'calculated', kind: 'text' },
      calculatedsimple: { label: 'calculated', kind: 'text' },
 -    calculatedmulti: { label: 'calculated', kind: 'text' }
@@ -228,7 +229,8 @@ index ebf8183..0bce99e 100644
      ddimageortext: 'drag onto an image',
      ddmarker: 'markers on an image',
      dragdrop: 'drag and drop',
-@@ -63,6 +64,28 @@
+     ordering: 'ordering',
+-    essay: 'essay',
      description: 'description (not a question)'
    };
  
@@ -303,7 +305,7 @@ index ebf8183..0bce99e 100644
        return out;
      }
  
-@@ -334,7 +353,9 @@
+@@ -334,14 +353,16 @@
          if (m) return m[1];
        }
        var m2 = /^question-(\d+)-/.exec(block.id || '');
@@ -314,6 +316,15 @@ index ebf8183..0bce99e 100644
      }
  
      function readQuestion(block) {
+-      var qtext = block.querySelector('.qtext');
++      var qtext = block.querySelector('.qtext') || block.querySelector('.formulation') || block;
+       if (!qtext) return null;
+       var clone = qtext.cloneNode(true);
+-      Array.prototype.forEach.call(clone.querySelectorAll('.accesshide'), function (x) {
++      Array.prototype.forEach.call(clone.querySelectorAll('.accesshide, .MathJax_Preview, .katex-html'), function (x) {
+         if (x.parentNode) x.parentNode.removeChild(x);
+       });
+       var text = textOf(clone);
 @@ -364,7 +385,7 @@
        var inputs = block.querySelectorAll('input[type=radio], input[type=checkbox]');
        for (var i = 0; i < inputs.length; i++) {
@@ -323,7 +334,7 @@ index ebf8183..0bce99e 100644
          if (String(inp.getAttribute('value')) === '-1') continue; /* the hidden "clear my choice" */
          if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;
          var caption = answerText(inp);
-@@ -376,24 +397,46 @@
+@@ -376,24 +397,56 @@
          if (/^(очистить мой выбор|clear my choice)$/i.test(String(caption || '').trim())) continue;
          q.answers.push({ input: inp, kind: 'choice', text: caption, letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
        }
@@ -367,9 +378,19 @@ index ebf8183..0bce99e 100644
 +      for (var cn = 0; cn < controlNodes.length; cn++) {
 +        var node = controlNodes[cn];
 +        var tag = node.tagName.toLowerCase();
++        var labelText = '';
++        var tr = node.closest ? node.closest('tr') : null;
++        if (tr) {
++          var tdText = tr.querySelector('td.text');
++          if (tdText) labelText = textOf(tdText) || (tdText.querySelector('img') && tdText.querySelector('img').getAttribute('alt')) || '';
++        }
++        if (!labelText && node.id) {
++          var lbl = block.querySelector('label[for="' + node.id + '"]');
++          if (lbl) labelText = textOf(lbl);
++        }
 +        if (tag === 'select') {
 +          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
-+          q.controls.push({ kind: 'select', node: node });
++          q.controls.push({ kind: 'select', node: node, label: labelText || null });
 +        } else if (tag === 'input' && node.classList.contains('placeinput')) {
 +          var pMatch = /place(\d+)/.exec(node.className || '') || /_p(\d+)/.exec(node.name || '');
 +          var pNo = pMatch ? parseInt(pMatch[1], 10) : (q.controls.filter(function (c) { return c.kind === 'place'; }).length + 1);
@@ -377,7 +398,7 @@ index ebf8183..0bce99e 100644
 +        } else {
 +          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
 +          if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(node.name || '')) continue;
-+          q.controls.push({ kind: 'text', node: node });
++          q.controls.push({ kind: 'text', node: node, label: labelText || null });
 +        }
        }
 -      // ddwtos and friends keep their state in hidden inputs nobody can set for the user
@@ -386,7 +407,7 @@ index ebf8183..0bce99e 100644
        return q;
      }
  
-@@ -426,7 +469,7 @@
+@@ -426,7 +479,7 @@
      function attemptMeta() {
        var meta = { host: String(win.location.host), courseId: null, quizId: null, attemptId: null, moodleId: null, missing: [] };
        var id = identity();
@@ -395,7 +416,7 @@ index ebf8183..0bce99e 100644
        if (id.id) meta.moodleId = id.id;
        var bodyCls = (doc.body && doc.body.className) || '';
        var bodyId = (doc.body && doc.body.id) || '';
-@@ -509,7 +552,7 @@
+@@ -509,7 +562,7 @@
        var timeoutPromise = new Promise(function (_, reject) {
          timer = win.setTimeout(function () {
            if (controller) try { controller.abort(); } catch (_) {}
@@ -404,7 +425,7 @@ index ebf8183..0bce99e 100644
          }, 10000);
        });
  
-@@ -541,18 +584,18 @@
+@@ -541,18 +594,18 @@
          });
        }, function (e) {
          if (timer) { win.clearTimeout(timer); timer = null; }
@@ -428,12 +449,13 @@ index ebf8183..0bce99e 100644
          throw e;
        });
      }
-@@ -606,10 +649,71 @@
+@@ -604,46 +657,274 @@
+ 
+     /* ---------------------------------------------------------------- applying an answer */
      function applyAnswer(q, row) {
-       var parts = String(row.label || '').split('|').map(function (x) { return x.trim(); }).filter(Boolean);
-       if (!parts.length) return {ok:false};
--      var checks = q.answers.filter(function (a) { return a.input.type === 'checkbox'; });
--      if (checks.length) {
+-      var parts = String(row.label || '').split('|').map(function (x) { return x.trim(); }).filter(Boolean);
++      var fullText = String(row.label != null ? row.label : '').trim();
++      if (fullText === '') return {ok:false};
 +
 +      /* ddwtos: drag into text */
 +      var places = q.controls.filter(function (c) { return c.kind === 'place'; });
@@ -446,6 +468,37 @@ index ebf8183..0bce99e 100644
 +          });
 +        }
 +      }
++
++      var interactive = q.controls.filter(function (c) { return c.kind === 'select' || c.kind === 'text'; });
++
++      /* single text/code/essay field: directly fill full text without splitting by pipes */
++      if (interactive.length === 1 && interactive[0].kind === 'text' && !q.answers.length && !places.length) {
++        var soloText = interactive[0];
++        soloText.node.value = fullText;
++        soloText.node.dispatchEvent(new win.Event('input', {bubbles:true}));
++        soloText.node.dispatchEvent(new win.Event('change', {bubbles:true}));
++        try {
++          var pBox = soloText.node.closest('.answer, .formulation, label') || soloText.node.parentNode;
++          var rEd = pBox && pBox.querySelector('[contenteditable="true"], .editor_atto_content');
++          if (rEd) {
++            rEd.innerHTML = '<p>' + fullText.replace(/\n/g, '<br>') + '</p>';
++            rEd.dispatchEvent(new win.Event('input', {bubbles:true}));
++          }
++          if (soloText.node.tagName.toLowerCase() === 'textarea' && win.ace && typeof win.ace.edit === 'function') {
++            var aId = soloText.node.id || (soloText.node.parentNode && soloText.node.parentNode.id);
++            var aEd = aId ? win.ace.edit(aId) : null;
++            if (aEd && aEd.setValue) aEd.setValue(fullText, 1);
++          }
++        } catch (_) {}
++        return {ok:true, how:'text'};
++      }
++
++      var parts = fullText.split('|').map(function (x) { return x.trim(); }).filter(Boolean);
+       if (!parts.length) return {ok:false};
+-      var checks = q.answers.filter(function (a) { return a.input.type === 'checkbox'; });
+-      if (checks.length) {
+-        var chosen = parts.map(function (part) {
++
 +      if (places.length) {
 +        if (parts.length !== places.length) return {ok:false};
 +        var dragHomes = q.answers.filter(function (a) { return a.kind === 'drag'; });
@@ -491,7 +544,12 @@ index ebf8183..0bce99e 100644
 +      /* choice questions: checkboxes */
 +      var checks = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; });
 +      if (checks.length && (!q.controls.length || q.type === 'multichoiceset')) {
-         var chosen = parts.map(function (part) {
++        var chParts = parts;
++        if (chParts.length === 1 && !checks.some(function (a) { return norm(a.text) === norm(chParts[0]); })) {
++          var commaSplit = fullText.split(/\s*,\s*|\s*;\s*|\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
++          if (commaSplit.length > 1) chParts = commaSplit;
++        }
++        var chosen = chParts.map(function (part) {
            var hits = checks.filter(function (a) { return norm(a.text) === norm(part); });
 +          if (!hits.length) {
 +            var pTrim = String(part || '').trim();
@@ -502,7 +560,11 @@ index ebf8183..0bce99e 100644
            return hits.length === 1 ? hits[0] : null;
          });
          if (chosen.some(function (x) { return !x; })) return {ok:false};
-@@ -620,30 +724,140 @@
+-        if (parts.length === 1) {
++        if (chParts.length === 1) {
+           chosen[0].input.click();
+         } else {
+           checks.forEach(function (a) { var selected = chosen.indexOf(a) >= 0; if (a.input.checked !== selected) a.input.click(); });
          }
          return {ok:true, how:'choice'};
        }
@@ -514,12 +576,26 @@ index ebf8183..0bce99e 100644
 +      var radios = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'radio'; });
 +      if (radios.length && (!q.controls.length || q.type === 'multichoice' || q.type === 'truefalse' || q.type === 'calculatedmulti')) {
 +        if (parts.length === 1) {
-+          var hits = radios.filter(function (a) { return norm(a.text) === norm(parts[0]); });
++          var p0 = parts[0];
++          var hits = radios.filter(function (a) { return norm(a.text) === norm(p0); });
 +          if (!hits.length) {
-+            var pTrim = String(parts[0] || '').trim();
++            var pTrim = String(p0 || '').trim();
 +            hits = radios.filter(function (a, idx) {
 +              return (a.letter && a.letter.toLowerCase() === pTrim.toLowerCase()) || String(idx + 1) === pTrim;
 +            });
++          }
++          if (!hits.length) {
++            var TRUE_VALS = ['true', 'верно', 'правда', 'да', 't'];
++            var FALSE_VALS = ['false', 'неверно', 'ложь', 'нет', 'f'];
++            var pLower = norm(p0);
++            var isTrue = TRUE_VALS.indexOf(pLower) >= 0;
++            var isFalse = FALSE_VALS.indexOf(pLower) >= 0;
++            if (isTrue || isFalse) {
++              hits = radios.filter(function (a) {
++                var an = norm(a.text);
++                return isTrue ? TRUE_VALS.indexOf(an) >= 0 : FALSE_VALS.indexOf(an) >= 0;
++              });
++            }
 +          }
 +          if (hits.length === 1) { if (!hits[0].input.checked) hits[0].input.click(); return {ok:true, how:'choice'}; }
 +        }
@@ -561,7 +637,6 @@ index ebf8183..0bce99e 100644
 -        return {ok:true, how:'text'};
 +
 +      /* multi-control or mixed controls (Cloze, Matching, Gapselect, Gapfill) */
-+      var interactive = q.controls.filter(function (c) { return c.kind === 'select' || c.kind === 'text'; });
 +      if (interactive.length && interactive.length === parts.length) {
 +        var planned = [];
 +        for (var idx = 0; idx < interactive.length; idx++) {
@@ -574,6 +649,17 @@ index ebf8183..0bce99e 100644
 +            if (!opts.length && /^\d+$/.test(val)) {
 +              var nIdx = parseInt(val, 10);
 +              if (nIdx >= 0 && nIdx < ctrl.node.options.length) opts = [ctrl.node.options[nIdx]];
++            }
++            if (!opts.length && /^[a-zа-я]$/i.test(val.trim())) {
++              var letCode = val.trim().toLowerCase().charCodeAt(0);
++              var letIdx = -1;
++              if (letCode >= 97 && letCode <= 122) letIdx = letCode - 97;
++              else {
++                var cyr = 'абвгдежзийклмнопрстуфхцчшщэюя';
++                letIdx = cyr.indexOf(val.trim().toLowerCase());
++              }
++              var validOpts = Array.prototype.filter.call(ctrl.node.options, function (o) { return !!o.value && !o.disabled; });
++              if (letIdx >= 0 && letIdx < validOpts.length) opts = [validOpts[letIdx]];
 +            }
 +            if (opts.length !== 1) return {ok:false};
 +            planned.push({ kind: 'select', node: ctrl.node, value: opts[0].value });
@@ -605,7 +691,7 @@ index ebf8183..0bce99e 100644
 +          }
 +        });
 +        return {ok:true, how: interactive.every(function (c) { return c.kind === 'select'; }) ? 'select' : (interactive.every(function (c) { return c.kind === 'text'; }) ? 'text' : 'multi')};
-       }
++      }
 +
 +      /* single interactive control fallback */
 +      if (parts.length === 1 && interactive.length === 1) {
@@ -657,12 +743,12 @@ index ebf8183..0bce99e 100644
 +          if (!anyHits[0].input.checked) anyHits[0].input.click();
 +          return {ok:true, how:'choice'};
 +        }
-+      }
+       }
 +
        return {ok:false, how:null};
      }
  
-@@ -750,7 +964,7 @@
+@@ -750,7 +1031,7 @@
        agent: null,             /* { state: 'idle'|'running'|'ok'|'error'|'retry', text, retryIn } */
        agentTimer: null,
        gw: { busy: null, probe: null, models: null, check: null, reg: null },
@@ -671,7 +757,7 @@ index ebf8183..0bce99e 100644
        ai: null,                /* { state: 'idle'|'running'|'ok'|'error', text, model } — the AI row, owner tier only */
        tier: null,              /* 'base' | 'owner' — base sees only their answer service, owner also the AI row */
        t0: 0
-@@ -860,20 +1074,30 @@
+@@ -860,20 +1141,30 @@
  
      function head(titleText, sub, leading) {
        var h = el('div', 'ph');
@@ -711,7 +797,7 @@ index ebf8183..0bce99e 100644
          h.appendChild(chip);
        }
        var mini = el('button', 'mini-status');
-@@ -1056,8 +1280,10 @@
+@@ -1056,8 +1347,10 @@
            var mark = el('span', 'mark' + (r.agent ? ' agent' : ''));
            a.appendChild(mark);
            a.appendChild(el('span', 'lbl', r.label));
@@ -724,7 +810,7 @@ index ebf8183..0bce99e 100644
            if (r.agent) {
              var tag = el('span', 'tag agent', 'agent');
              a.appendChild(tag);
-@@ -1082,10 +1308,11 @@
+@@ -1082,10 +1375,11 @@
      function appendAi(q) {
        var ai = state.agent || { state: 'idle' };
        if (ai.state === 'running' || ai.state === 'retry') {
@@ -740,8 +826,67 @@ index ebf8183..0bce99e 100644
          body.appendChild(N(run, 1));
          return;
        }
-@@ -1190,24 +1417,39 @@
-       });
+@@ -1158,56 +1452,83 @@
+     }
+ 
+     function questionImages(q) {
+-      var images = Array.prototype.slice.call(q.node.querySelectorAll('.qtext img, .answer img'));
+-      if (images.length > 5) return Promise.reject(new Error('too many images'));
++      var allImgs = Array.prototype.slice.call(q.node.querySelectorAll('.qtext img, .answer img, .formulation img'));
++      var images = allImgs.filter(function (img) {
++        if (img.classList.contains('icon') || img.classList.contains('emoticon') || img.classList.contains('questionflagimage')) return false;
++        var src = img.currentSrc || img.src || '';
++        if (/\/theme\/image\.php\//i.test(src)) return false;
++        if (img.naturalWidth && img.naturalWidth <= 24 && img.naturalHeight && img.naturalHeight <= 24) return false;
++        return true;
++      });
++      if (images.length > 5) images = images.slice(0, 5);
+       return Promise.all(images.map(function (img, index) {
+         var src = img.currentSrc || img.src || '';
+         var source = src.indexOf('data:image/') === 0 ? Promise.resolve(src) : (function () {
+-          var u; try { u = new URL(src, win.location.href); } catch (_) { throw new Error('image unavailable'); }
+-          if (u.origin !== win.location.origin) throw new Error('external image unavailable');
++          var u; try { u = new URL(src, win.location.href); } catch (_) { return Promise.resolve(null); }
++          if (u.origin !== win.location.origin) return Promise.resolve(null);
+           return debugAuxFetch(u.href, {credentials:'same-origin'}).then(function (response) {
+-            if (!response.ok) throw new Error('image unavailable');
++            if (!response.ok) return null;
+             return response.blob();
+           }).then(function (blob) {
+-            if (blob.size > 2500000) throw new Error('image too large (>2.5MB)');
+-            return new Promise(function (resolve, reject) {
++            if (!blob || blob.size > 2500000) return null;
++            return new Promise(function (resolve) {
+               var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); };
+-              reader.onerror = function () { reject(new Error('image unreadable')); }; reader.readAsDataURL(blob);
++              reader.onerror = function () { resolve(null); }; reader.readAsDataURL(blob);
+             });
+-          });
++          }).catch(function () { return null; });
+         })();
+         return source.then(function (rawUrl) {
++          if (!rawUrl) return null;
+           return downscaleDataUrl(rawUrl, 1024);
+         }).then(function (data) {
+-          if (!/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(data)) throw new Error('image format unsupported');
+-          if (data.length > 800000) throw new Error('image too large (>512KB)');
+-          var related = q.answers.filter(function (a) { return a.input.parentNode && a.input.parentNode.contains(img); })[0];
++          if (!data || !/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(data)) return null;
++          if (data.length > 800000) return null;
++          var related = q.answers.filter(function (a) { return a.input && a.input.parentNode && a.input.parentNode.contains(img); })[0];
+           return {data:data, label:related ? 'option: ' + related.text : 'question image ' + (index+1)};
+-        });
++        }).catch(function () { return null; });
+       })).then(function (all) {
+-        if (all.reduce(function (n, image) { return n + image.data.length; }, 0) > 1500000) throw new Error('images too large (over 1.5MB total)');
+-        return all;
+-      });
++        var valid = all.filter(function (x) { return !!x; });
++        if (valid.reduce(function (n, image) { return n + image.data.length; }, 0) > 1500000) {
++          valid = valid.length ? [valid[0]] : [];
++        }
++        return valid;
++      }).catch(function () { return []; });
      }
  
 -    function runAgent(automatic) {
@@ -760,15 +905,16 @@ index ebf8183..0bce99e 100644
 +      state.agent = { state: 'running', stage: stageText };
        render();
        var t0 = Date.now();
-+      var fields = q.controls.map(function (c) {
++      var fields = q.controls.map(function (c, idx) {
 +        if (c.kind === 'select') {
 +          return {
 +            kind: 'select',
++            label: c.label || null,
 +            options: Array.prototype.filter.call(c.node.options, function (o) { return !!o.value && !o.disabled; }).map(function (o) { return o.textContent.trim(); })
 +          };
 +        }
-+        if (c.kind === 'place') return { kind: 'place' };
-+        return { kind: 'text' };
++        if (c.kind === 'place') return { kind: 'place', label: 'Blank ' + (c.placeNo || (idx + 1)) };
++        return { kind: 'text', label: c.label || null };
 +      });
        Promise.resolve().then(function () { return questionImages(q); }).then(function (images) { return win.MSEBridge.agent({
          host: state.meta.host,
@@ -783,7 +929,7 @@ index ebf8183..0bce99e 100644
          textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
          image: images.length ? images : null
        }, function (stage) {
-@@ -1218,7 +1460,11 @@
+@@ -1218,7 +1539,11 @@
          var ms = Date.now() - t0;
          if (res.ok && res.answer) {
            logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
@@ -796,7 +942,7 @@ index ebf8183..0bce99e 100644
            state.agent = { state: 'ok', answer: res.answer };
            var existing = (state.rows || []).find(function (r) { return r.label === res.answer; });
            if (existing) {
-@@ -1235,16 +1481,37 @@
+@@ -1235,16 +1560,37 @@
            startRetry(automatic);
            return;
          }
@@ -836,7 +982,7 @@ index ebf8183..0bce99e 100644
          render();
        });
      }
-@@ -1345,22 +1612,34 @@
+@@ -1345,22 +1691,34 @@
        var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
        body.appendChild(N(el('div', 'sec', 'account')));
        body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
@@ -878,7 +1024,7 @@ index ebf8183..0bce99e 100644
        net.appendChild(el('span', 'txt', 'network log'));
        net.appendChild(el('span', 'more', 'open'));
        body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
-@@ -1373,9 +1652,17 @@
+@@ -1373,9 +1731,17 @@
        var epoch = ++state.modelEpoch;
        br.probe(url).then(function (r) {
          if (epoch !== state.modelEpoch || br.url() !== url) return;
@@ -898,7 +1044,7 @@ index ebf8183..0bce99e 100644
      }
  
      function checkGateway(raw) {
-@@ -1385,26 +1672,43 @@
+@@ -1385,26 +1751,43 @@
        var epoch = ++state.modelEpoch;
        gw.busy = 'check';
        gw.probe = null;
@@ -957,7 +1103,7 @@ index ebf8183..0bce99e 100644
            render();
            return r;
          });
-@@ -1430,7 +1734,6 @@
+@@ -1430,7 +1813,6 @@
        input.spellcheck = false;
        input.placeholder = 'https://…';
        input.value = br.url() || '';
@@ -965,7 +1111,7 @@ index ebf8183..0bce99e 100644
        input.addEventListener('input', function () {
          var typed = String(input.value || '').trim().replace(/\/+$/, '');
          var saved = br.url() || '';
-@@ -1440,79 +1743,51 @@
+@@ -1440,79 +1822,51 @@
        body.appendChild(N(el('div', 'sec', 'connection'), 0));
        var frow = el('div', 'frow');
        body.appendChild(N(frow, 0));
@@ -1030,11 +1176,7 @@ index ebf8183..0bce99e 100644
 -        } else {
 -          light.classList.remove('on');
 -        }
-+        dbgBtn.classList.toggle('on', next);
-+        var curLight = dbgBtn.querySelector('.dbg-light');
-+        if (curLight) curLight.classList.toggle('on', next);
-+        if (next) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
-       });
+-      });
 -      toggle.appendChild(light);
 -      var dbgText = el('div', 'dbg-text');
 -      dbgText.appendChild(el('span', 'dbg-title', 'Debug mode'));
@@ -1053,7 +1195,11 @@ index ebf8183..0bce99e 100644
 -      actions.appendChild(snif);
 -      var report = press(el('button', 'btn', 'Report'), function () {
 -        reportCurrent(report);
--      });
++        dbgBtn.classList.toggle('on', next);
++        var curLight = dbgBtn.querySelector('.dbg-light');
++        if (curLight) curLight.classList.toggle('on', next);
++        if (next) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
+       });
 -      report.setAttribute('data-mse', 'report');
 -      actions.appendChild(report);
 -      body.appendChild(N(actions, 1));
@@ -1083,7 +1229,7 @@ index ebf8183..0bce99e 100644
      }
  
      /* ---------------- the network log ---------------- */
-@@ -1529,22 +1804,24 @@
+@@ -1529,22 +1883,24 @@
        });
        body.appendChild(N(box, 1));
        var frow = el('div', 'frow');
@@ -1114,7 +1260,7 @@ index ebf8183..0bce99e 100644
        frow.appendChild(clear);
        body.appendChild(N(frow, 1));
      }
-@@ -1598,6 +1875,34 @@
+@@ -1598,6 +1954,34 @@
          method: formEl.getAttribute('method') || 'POST',
          elementsCount: formEl.elements ? formEl.elements.length : 0
        } : null;
@@ -1149,7 +1295,7 @@ index ebf8183..0bce99e 100644
        var protocolView = q ? {
          page: null,
          question: q.text,
-@@ -1612,11 +1917,16 @@
+@@ -1612,11 +1996,16 @@
          text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) { return c.node.value || ''; }),
          images: images.map(function (im) { return im.src; }),
          question_image: images.length ? images[0].src : null,
@@ -1167,7 +1313,7 @@ index ebf8183..0bce99e 100644
          warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
          page: { location: String(win.location.href), title: doc.title, headings: Array.prototype.map.call(doc.querySelectorAll('h1,h2,h3'), function (n) { return n.textContent.trim(); }),
            httpHeaders: 'unavailable to page JavaScript', cookieNamesVisibleToJavaScript: cookies, inlineMoodleScripts: scripts },
-@@ -1631,6 +1941,8 @@
+@@ -1631,6 +2020,8 @@
      }
      function debugTraffic(event) {
        if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
@@ -1176,7 +1322,7 @@ index ebf8183..0bce99e 100644
        var dump = snifDump(); dump.traffic = event;
        win.MSEBridge.sendDump('debug', dump);
      }
-@@ -1644,6 +1956,7 @@
+@@ -1644,6 +2035,7 @@
      }
      var snifText = '';
      function viewSnif() {
@@ -1184,7 +1330,7 @@ index ebf8183..0bce99e 100644
        body.appendChild(N(el('div', 'sec', 'Snif · local only')));
        body.appendChild(N(el('div', 'empty', 'May contain session keys and personal data. Review before sharing.')));
        var copy = el('button', 'btn solid', 'Copy');
-@@ -1669,8 +1982,8 @@
+@@ -1669,8 +2061,8 @@
        var title = CONFIG.brand;
        var leading = 'info';
        if (state.route === 'answers' && state.question) {
@@ -1195,7 +1341,7 @@ index ebf8183..0bce99e 100644
        } else if (state.route === 'account') { sub = 'account'; }
        else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
        else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
-@@ -1733,6 +2046,7 @@
+@@ -1733,6 +2125,7 @@
          if (!q) return false;
          return applyAnswer(q, { label: label });
        },
@@ -1203,7 +1349,7 @@ index ebf8183..0bce99e 100644
        agent: function () { return state.agent; },
        runAgent: function () { runAgent(false); return true; },
        log: function () { return log.slice(-40); },
-@@ -1779,6 +2093,7 @@
+@@ -1779,6 +2172,7 @@
              : state.agent && state.agent.state === 'error' ? { state: 'error', text: state.agent.text }
              : state.agent && state.agent.state === 'running' ? { state: 'running', text: '' }
              : null,
@@ -1211,7 +1357,7 @@ index ebf8183..0bce99e 100644
            tier: state.tier,
            meta: state.meta,
            identity: identity(),
-@@ -1791,7 +2106,8 @@
+@@ -1791,7 +2185,8 @@
              supported: state.question.supported,
              identity: state.question.identity,
              questionId: state.question.questionId,
@@ -1328,10 +1474,10 @@ index c9d9c7c..bf93f5f 100644
  const read = (p) => fs.readFileSync(path.join(VENDOR, p), 'utf8');
 diff --git a/RELEASE_2.12.0.md b/RELEASE_2.12.0.md
 new file mode 100644
-index 0000000..2f65716
+index 0000000..55c9005
 --- /dev/null
 +++ b/RELEASE_2.12.0.md
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,80 @@
 +# MSE 2.12.0 Release Notes
 +
 +**Release Date:** 2026-11-18  
@@ -1364,11 +1510,14 @@ index 0000000..2f65716
 +
 +### C. Server & Agent Solver Prompts (`Server/mse-router.js` & `mse-server.js`)
 +* **Digit Ban Lifted for Numeric & Calculated Questions:** Removed the blanket rule prohibiting digits and numbers in agent prompts. Numerical (`numerical`) and calculated (`calculated`, `calculatedsimple`, `calculatedmulti`) questions now instruct the LLM to provide exact numbers or decimals (e.g. 42 or 3.14).
++* **Universal Option Matching (`matchOption`):** Robust parser resolves options matching exact text, punctuation-normalized text (stripping trailing periods/colons), letter prefixes (`A.`, `A)`, `(A)` in Latin and Cyrillic `а-я`), numeric prefixes (`1.`, `1)`), bare index/letter fallbacks, and substring prefixes.
++* **Structured Multi-Field Prompting (`fields`):** For multianswer and mixed Cloze questions, sends a structured layout of each input in sequential DOM order, allowing the LLM to answer each slot accurately.
 +* **Dedicated DDWTOS Prompting & Validation:** Added specialized prompts for drag-into-text questions with `N` blanks, instructing the agent to return choices in order separated by `|`. The router validates that every slot corresponds to an available draggable option.
 +* **Free Text & Code Support:** Short answer and free-form fields now allow arbitrary text without requiring options matching.
 +
 +### D. Quality Assurance & WebKit Verification
 +* **Exhaustive WebKit Test Suite:** Added `tests/question_types_real.test.js`, `tests/cloze_multianswer.test.js`, and `tests/ddwtos_real.test.js` running in Apple WebKit under Playwright to verify DOM interaction, event firing, and value propagation against real Moodle HTML.
++* **Rich Editor & Dynamic DOM Support:** Verified support for standard inputs, Moodle Atto editors, TinyMCE, `contenteditable` divs, and CodeRunner Ace editors.
 +* **Comprehensive Test Pass:** All 23 router/gateway unit tests, 13 full end-to-end WebKit Playwright scenarios (`tests/mse.test.js`), 5 python bot tests, and all specialized type tests pass cleanly.
 +* **Zero-Fingerprint Strict Audit:** Verified via `python3 scripts/audit.py --strict` with 0 hits across all files.
 +
@@ -1641,7 +1790,7 @@ index 35ad6de..5009406 100644
      if allow:
          ids = ", ".join(code(a.get("moodleId") if isinstance(a, dict) else a) for a in allow[:20]
 diff --git a/Server/mse-router.js b/Server/mse-router.js
-index 941517b..89392d2 100644
+index 941517b..323cae6 100644
 --- a/Server/mse-router.js
 +++ b/Server/mse-router.js
 @@ -32,6 +32,7 @@ const fs = require('fs');
@@ -1789,11 +1938,14 @@ index 941517b..89392d2 100644
  }
  
  function getCandidateModels(requestedModel) {
-@@ -507,23 +585,99 @@ function extractJson(text) {
+@@ -507,23 +585,113 @@ function extractJson(text) {
    if (!m) return null;
    try { return JSON.parse(m[0]); } catch (e) { return null; }
  }
 +const RU_LETTERS = 'абвгдежзийклмнопрстуфхцчшщэюя';
++const TRUE_VALS = ['true', 'верно', 'правда', 'да', 't'];
++const FALSE_VALS = ['false', 'неверно', 'ложь', 'нет', 'f'];
++
 +function normOpt(s) {
 +  return String(s || '').trim().toLowerCase()
 +    .replace(/^(\([a-zа-я0-9]{1,2}\)|[a-zа-я0-9]{1,2}[\.\)\:\-])\s*/i, '')
@@ -1809,6 +1961,16 @@ index 941517b..89392d2 100644
 +  if (np) {
 +    m = options.filter((o) => normOpt(o) === np);
 +    if (m.length === 1) return m[0];
++  }
++  const pClean = pRaw.toLowerCase().replace(/[\.\)\:]$/, '');
++  const isTrue = TRUE_VALS.includes(pClean);
++  const isFalse = FALSE_VALS.includes(pClean);
++  if (isTrue || isFalse) {
++    const truthyOpt = options.find((o) => TRUE_VALS.includes(normOpt(o)));
++    const falsyOpt = options.find((o) => FALSE_VALS.includes(normOpt(o)));
++    if (truthyOpt && falsyOpt) {
++      return isTrue ? truthyOpt : falsyOpt;
++    }
 +  }
 +  if (/^\d+$/.test(pRaw)) {
 +    const idx = parseInt(pRaw, 10);
@@ -1857,12 +2019,13 @@ index 941517b..89392d2 100644
 +  if (Array.isArray(body.fields) && body.fields.length > 1) {
 +    user += 'This question has ' + body.fields.length + ' inputs in order from left to right, joined by |:\n';
 +    body.fields.forEach((f, i) => {
++      const lbl = f.label ? ' [' + f.label + ']' : '';
 +      if (f.kind === 'select') {
-+        user += (i + 1) + '. [Dropdown] Options: ' + (Array.isArray(f.options) ? f.options.join(' / ') : '') + '\n';
++        user += (i + 1) + '.' + lbl + ' [Dropdown] Options: ' + (Array.isArray(f.options) ? f.options.join(' / ') : '') + '\n';
 +      } else if (f.kind === 'place') {
-+        user += (i + 1) + '. [Blank] Choose matching option from the options list below\n';
++        user += (i + 1) + '.' + lbl + ' [Blank] Choose matching option from the options list below\n';
 +      } else {
-+        user += (i + 1) + '. [Text field] Enter value\n';
++        user += (i + 1) + '.' + lbl + ' [Text field] Enter value\n';
 +      }
 +    });
 +    if (options) user += 'Available options:\n' + options + '\n';
@@ -1900,7 +2063,7 @@ index 941517b..89392d2 100644
    const images = Array.isArray(body.image) ? body.image : [];
    if (images.length) {
      const content = [];
-@@ -540,7 +694,7 @@ function buildAgentPrompt(body) {
+@@ -540,7 +708,7 @@ function buildAgentPrompt(body) {
    return [{ role: 'system', content: system }, { role: 'user', content: user }];
  }
  
@@ -1909,7 +2072,7 @@ index 941517b..89392d2 100644
    return new Promise((resolve) => {
      const url = new URL(CFG.upstreamUrl + pathname);
      const lib = url.protocol === 'https:' ? https : http;
-@@ -561,35 +715,57 @@ function upstreamJson(method, pathname, payload, onContent) {
+@@ -561,35 +729,57 @@ function upstreamJson(method, pathname, payload, onContent) {
      }
      const req = lib.request(reqOpts, (up) => {
        const streaming = onContent && /text\/event-stream/i.test(String(up.headers['content-type'] || ''));
@@ -1979,7 +2142,7 @@ index 941517b..89392d2 100644
      req.on('timeout', () => req.destroy(new Error('the model did not answer in time')));
      req.on('error', (e) => finish({ status: 0, text: '', error: e.message }));
      if (body) req.write(body);
-@@ -612,27 +788,68 @@ async function handleAgent(req, res, rec) {
+@@ -612,27 +802,68 @@ async function handleAgent(req, res, rec) {
      serverLog('warn', 'agent_bad_request', 'question is required', { deviceId: rec.deviceId });
      return oaiError(req, res, 400, 'question is required', 'bad_request');
    }
@@ -2024,12 +2187,12 @@ index 941517b..89392d2 100644
 +      if (pingTimer) clearInterval(pingTimer);
 +      abortEmitter.emit('abort');
 +    });
-+  }
+   }
+-  function event(type, value) { if (!res.destroyed) res.write('event: ' + type + '\ndata: ' + JSON.stringify(value) + '\n\n'); }
 +
 +  function event(type, value) {
 +    if (!res.destroyed) res.write('event: ' + type + '\ndata: ' + JSON.stringify(value) + '\n\n');
-   }
--  function event(type, value) { if (!res.destroyed) res.write('event: ' + type + '\ndata: ' + JSON.stringify(value) + '\n\n'); }
++  }
 +
    function reply(status, result) {
 +    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
@@ -2057,7 +2220,7 @@ index 941517b..89392d2 100644
    const started = now();
    rec.requests = (rec.requests || 0) + 1;
    rec.quotaUsed = (rec.quotaUsed || 0) + 1;
-@@ -648,7 +865,11 @@ async function handleAgent(req, res, rec) {
+@@ -648,7 +879,11 @@ async function handleAgent(req, res, rec) {
    for (let ci = 0; ci < candidateModels.length; ci++) {
      chosenModel = candidateModels[ci];
      payload.model = chosenModel;
@@ -2070,7 +2233,28 @@ index 941517b..89392d2 100644
      if (up && up.status === 503 && ci + 1 < candidateModels.length) {
        serverLog('warn', 'model_503', 'model ' + chosenModel + ' 503 -> fallback to ' + candidateModels[ci + 1], { deviceId: rec.deviceId });
        note('agent model ' + chosenModel + ' 503 → fallback to ' + candidateModels[ci + 1], rec);
-@@ -719,57 +940,76 @@ async function handleAgent(req, res, rec) {
+@@ -709,8 +944,18 @@ async function handleAgent(req, res, rec) {
+     serverLog('warn', 'agent_error', String(answerObj.error).slice(0, 100), { deviceId: rec.deviceId });
+     return reply(200, { ok: false, code: 'agent_error', ms, message: String(answerObj.error).slice(0, 160) });
+   }
+-  const answer = String(answerObj.answer || '').trim();
+-  if (!answer) {
++  let rawAns = answerObj.answer;
++  if (Array.isArray(rawAns)) {
++    rawAns = rawAns.map((x) => String(x == null ? '' : x)).join(' | ');
++  } else if (rawAns && typeof rawAns === 'object') {
++    rawAns = Object.values(rawAns).map((x) => String(x == null ? '' : x)).join(' | ');
++  } else if (rawAns != null) {
++    rawAns = String(rawAns);
++  } else {
++    rawAns = '';
++  }
++  const answer = rawAns.trim();
++  if (answer === '') {
+     serverLog('warn', 'agent_error', 'no option picked', { deviceId: rec.deviceId });
+     return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
+   }
+@@ -719,57 +964,83 @@ async function handleAgent(req, res, rec) {
      serverLog('warn', 'agent_no_image_refusal', 'model claimed no image was provided', { deviceId: rec.deviceId, model: chosenModel });
      return reply(200, { ok: false, code: 'agent_error', ms, message: 'the model reported no image was provided' });
    }
@@ -2081,13 +2265,13 @@ index 941517b..89392d2 100644
 -      serverLog('warn', 'agent_error', 'wrong number of dropdown answers', { deviceId: rec.deviceId });
 -      return reply(200, {ok:false, code:'agent_error', ms, message:'wrong number of dropdown answers'});
 +  let cleanAnswer = answer.replace(/^```[a-z]*\s*\n?/i, '').replace(/\n?```\s*$/i, '');
-+  const parts = cleanAnswer.split('|').map((x) => x.trim()).filter(Boolean);
++  let parts = cleanAnswer.split('|').map((x) => x.trim()).filter(Boolean);
 +  let picked = cleanAnswer;
 +
-+  if (Array.isArray(body.fields) && body.fields.length > 1) {
-+    if (parts.length !== body.fields.length) {
-+      serverLog('warn', 'agent_error', 'wrong number of field answers', { deviceId: rec.deviceId });
-+      return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of answers: expected ' + body.fields.length + ', got ' + parts.length });
++  if (options.length && body.multiple && parts.length === 1 && !options.some((o) => normOpt(o) === normOpt(parts[0]))) {
++    const commaParts = cleanAnswer.split(/\s*,\s*|\s*;\s*|\n+/).map((x) => x.trim()).filter(Boolean);
++    if (commaParts.length > 1 && commaParts.every((cp) => matchOption(cp, options) !== null)) {
++      parts = commaParts;
      }
 -    const matches = body.selects.map((group,i) => {
 -      if (!Array.isArray(group)) return [];
@@ -2097,15 +2281,22 @@ index 941517b..89392d2 100644
 -      if (/^\d+$/.test(part)) {
 -        const idx = parseInt(part, 10);
 -        if (idx >= 1 && idx <= group.length) return [group[idx - 1]];
++  }
++
++  if (Array.isArray(body.fields) && body.fields.length > 1) {
++    if (parts.length !== body.fields.length) {
++      serverLog('warn', 'agent_error', 'wrong number of field answers', { deviceId: rec.deviceId });
++      return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of answers: expected ' + body.fields.length + ', got ' + parts.length });
++    }
 +    const matched = parts.map((part, i) => {
 +      const f = body.fields[i];
 +      if (f && f.kind === 'select' && Array.isArray(f.options)) {
 +        return matchOption(part, f.options);
-       }
--      return [];
++      }
 +      if (f && f.kind === 'place' && options.length) {
 +        return matchOption(part, options);
-+      }
+       }
+-      return [];
 +      return part;
      });
 -    if (matches.some((xs) => xs.length !== 1)) {
@@ -2180,7 +2371,7 @@ index 941517b..89392d2 100644
    });
  }
  
-@@ -831,7 +1071,15 @@ async function handleAdmin(req, res, url) {
+@@ -831,7 +1102,15 @@ async function handleAdmin(req, res, url) {
      if (!state.allow.some((a) => String(a.moodleId) === moodleId)) {
        state.allow.push({ moodleId, name: String(body.name || '').trim().slice(0, 120), added: now() });
      }
@@ -2197,7 +2388,7 @@ index 941517b..89392d2 100644
      saveState();
      note('allow ' + moodleId);
      return send(req, res, 200, { ok: true, allow: state.allow });
-@@ -841,22 +1089,78 @@ async function handleAdmin(req, res, url) {
+@@ -841,22 +1120,78 @@ async function handleAdmin(req, res, url) {
      const rec = state.devices[deviceId];
      if (!rec) return oaiError(req, res, 404, 'no such device', 'no_device');
      const revoke = url.pathname === '/admin/revoke';
@@ -2284,7 +2475,7 @@ index 941517b..89392d2 100644
      saveState();
      note('disallow ' + moodleId);
      return send(req, res, 200, { ok: true, allow: state.allow });
-@@ -898,15 +1202,22 @@ const handler = async (req, res) => {
+@@ -898,15 +1233,22 @@ const handler = async (req, res) => {
    try {
      if (url.pathname === '/health' || url.pathname === '/') {
        res.setHeader('cache-control', 'no-store');
@@ -2315,7 +2506,7 @@ index 941517b..89392d2 100644
        });
      }
      if (url.pathname.startsWith('/admin/')) return await handleAdmin(req, res, url);
-@@ -915,10 +1226,15 @@ const handler = async (req, res) => {
+@@ -915,10 +1257,15 @@ const handler = async (req, res) => {
        if (!body) return oaiError(req, res, 400, 'body must be JSON', 'bad_json');
        const r = registerDevice(body);
        if (r.error) return oaiError(req, res, 400, r.error, 'bad_register');
@@ -2335,7 +2526,7 @@ index 941517b..89392d2 100644
            ? 'the key is live: use it as the api key of any OpenAI-compatible client'
            : 'waiting for the owner: Moodle id ' + r.device.moodleId + ' must be allowed (/admin/allow)'
        });
-@@ -927,17 +1243,34 @@ const handler = async (req, res) => {
+@@ -927,17 +1274,34 @@ const handler = async (req, res) => {
        const rec = deviceByKey(keyOf(req));
        if (!rec) return oaiError(req, res, 401, 'unknown key: register the device first', 'invalid_key');
        rec.seen = now(); saveState();
@@ -2378,7 +2569,7 @@ index 941517b..89392d2 100644
        const ids = CFG.models.length ? CFG.models : (CFG.model ? [CFG.model] : []);
        return send(req, res, 200, { object: 'list', data: ids.map((id) => ({ id, object: 'model', created: 1700000000, owned_by: 'backend' })) });
      }
-@@ -961,7 +1294,18 @@ const handler = async (req, res) => {
+@@ -961,7 +1325,18 @@ const handler = async (req, res) => {
        state.dumpNotifications.push(meta);
        if (state.dumpNotifications.length > 100) state.dumpNotifications.splice(0, state.dumpNotifications.length - 100);
        saveStateNow();
@@ -2399,14 +2590,17 @@ index 941517b..89392d2 100644
      }
      if (url.pathname === '/mse/v1/agent' && req.method === 'POST') {
 diff --git a/Server/mse-server.js b/Server/mse-server.js
-index 1359b14..226b64c 100644
+index 1359b14..12c1aae 100644
 --- a/Server/mse-server.js
 +++ b/Server/mse-server.js
-@@ -350,16 +350,72 @@ function extractJson(text) {
+@@ -350,16 +350,101 @@ function extractJson(text) {
    if (!m) return null;
    try { return JSON.parse(m[0]); } catch (e) { return null; }
  }
 +const RU_LETTERS = 'абвгдежзийклмнопрстуфхцчшщэюя';
++const TRUE_VALS = ['true', 'верно', 'правда', 'да', 't'];
++const FALSE_VALS = ['false', 'неверно', 'ложь', 'нет', 'f'];
++
 +function normOpt(s) {
 +  return String(s || '').trim().toLowerCase()
 +    .replace(/^(\([a-zа-я0-9]{1,2}\)|[a-zа-я0-9]{1,2}[\.\)\:\-])\s*/i, '')
@@ -2422,6 +2616,16 @@ index 1359b14..226b64c 100644
 +  if (np) {
 +    m = options.filter((o) => normOpt(o) === np);
 +    if (m.length === 1) return m[0];
++  }
++  const pClean = pRaw.toLowerCase().replace(/[\.\)\:]$/, '');
++  const isTrue = TRUE_VALS.includes(pClean);
++  const isFalse = FALSE_VALS.includes(pClean);
++  if (isTrue || isFalse) {
++    const truthyOpt = options.find((o) => TRUE_VALS.includes(normOpt(o)));
++    const falsyOpt = options.find((o) => FALSE_VALS.includes(normOpt(o)));
++    if (truthyOpt && falsyOpt) {
++      return isTrue ? truthyOpt : falsyOpt;
++    }
 +  }
 +  if (/^\d+$/.test(pRaw)) {
 +    const idx = parseInt(pRaw, 10);
@@ -2452,6 +2656,7 @@ index 1359b14..226b64c 100644
 +  var type = String(body.type || '').toLowerCase();
 +  var isNumeric = /^(numerical|calculated|calculatedsimple)$/.test(type);
 +  var isDdwtos = type === 'ddwtos' || Number(body.placesCount) > 0;
++  var isCoderunner = type === 'coderunner';
 +
    var system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
 -    '{"answer": "<verbatim option text>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
@@ -2466,7 +2671,21 @@ index 1359b14..226b64c 100644
    var user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
 -  if (options) user += 'Options (pick exactly one; return exact verbatim text, numbers forbidden):\n' + options + '\n';
 -  if (body.multiple) user += 'Several may be correct: list them separated by "|" in answer (verbatim text only, no numbers).\n';
-+  if (isDdwtos) {
++  if (Array.isArray(body.fields) && body.fields.length > 1) {
++    user += 'This question has ' + body.fields.length + ' inputs in order from left to right, joined by |:\n';
++    body.fields.forEach(function (f, i) {
++      var lbl = f.label ? ' [' + f.label + ']' : '';
++      if (f.kind === 'select') {
++        user += (i + 1) + '.' + lbl + ' [Dropdown] Options: ' + (Array.isArray(f.options) ? f.options.join(' / ') : '') + '\n';
++      } else if (f.kind === 'place') {
++        user += (i + 1) + '.' + lbl + ' [Blank] Choose matching option from the options list below\n';
++      } else {
++        user += (i + 1) + '.' + lbl + ' [Text field] Enter value\n';
++      }
++    });
++    if (options) user += 'Available options:\n' + options + '\n';
++    user += 'Provide the answer for all ' + body.fields.length + ' inputs in exact order, joined by |.\n';
++  } else if (isDdwtos) {
 +    var places = Number(body.placesCount) || 1;
 +    user += 'This is a drag-and-drop into text question with ' + places + ' blank(s) marked [[1]]' + (places > 1 ? ', [[2]], etc.' : '') + '.\n';
 +    if (options) user += 'Available options:\n' + options + '\n';
@@ -2477,24 +2696,68 @@ index 1359b14..226b64c 100644
 +  }
 +  if (body.multiple && !isDdwtos) user += 'Several may be correct: list them separated by "|" in answer (verbatim text only, no numbers).\n';
 +  if (isNumeric) user += 'Give the exact numerical answer as a number (e.g. 42 or 3.14). Do not include units unless explicitly asked.\n';
++  if (isCoderunner) user += 'Provide only the exact working code to solve the task. Do not wrap in markdown fences or explanations.\n';
    if (body.image) user += 'The question has an image attached, but it was not passed as text.\n';
    return [{ role: 'system', content: system }, { role: 'user', content: user }];
  }
-@@ -420,11 +476,7 @@ async function handleAgent(req, res) {
-     return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
+@@ -415,18 +500,45 @@ async function handleAgent(req, res) {
+   if (answerObj.error) {
+     return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: String(answerObj.error).slice(0, 160) });
    }
-   /* the answer must be one of the options, character for character (after trimming): otherwise it is an error */
+-  const answer = String(answerObj.answer || '').trim();
+-  if (!answer) {
+-    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
++  let rawAns = answerObj.answer;
++  if (Array.isArray(rawAns)) {
++    rawAns = rawAns.map((x) => String(x == null ? '' : x)).join(' | ');
++  } else if (rawAns && typeof rawAns === 'object') {
++    rawAns = Object.values(rawAns).map((x) => String(x == null ? '' : x)).join(' | ');
++  } else if (rawAns != null) {
++    rawAns = String(rawAns);
++  } else {
++    rawAns = '';
+   }
+-  /* the answer must be one of the options, character for character (after trimming): otherwise it is an error */
 -  let picked = options.filter((o) => String(o).trim().toLowerCase() === answer.toLowerCase())[0];
 -  if (!picked && /^\d+$/.test(answer)) {
 -    const idx = parseInt(answer, 10);
 -    if (idx >= 1 && idx <= options.length) picked = options[idx - 1];
--  }
-+  let picked = matchOption(answer, options);
-   if (options.length && !picked) {
-     return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
++  const answer = rawAns.trim();
++  if (answer === '') {
++    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
    }
+-  if (options.length && !picked) {
+-    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
++  let cleanAnswer = answer.replace(/^```[a-z]*\s*\n?/i, '').replace(/\n?```\s*$/i, '');
++  const parts = cleanAnswer.split('|').map((x) => x.trim()).filter(Boolean);
++  let picked = cleanAnswer;
++
++  if (Array.isArray(body.fields) && body.fields.length > 1) {
++    const matched = parts.map((part, i) => {
++      const f = body.fields[i];
++      if (f && f.kind === 'select' && Array.isArray(f.options)) {
++        return matchOption(part, f.options);
++      }
++      if (f && f.kind === 'place' && options.length) {
++        return matchOption(part, options);
++      }
++      return part;
++    });
++    if (matched.some((x) => x === null)) {
++      return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
++    }
++    picked = matched.join(' | ');
++  } else if (options.length) {
++    const matches = parts.map((part) => matchOption(part, options));
++    if (matches.some((xs) => xs === null)) {
++      return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
++    }
++    picked = matches.join(' | ');
+   }
+   return send(req, res, 200, {
+     ok: true, code: 'ok', ms, answer: picked || answer,
 diff --git a/Storage/artifacts/build-report.json b/Storage/artifacts/build-report.json
-index 40706a0..1152693 100644
+index 40706a0..e85a41e 100644
 --- a/Storage/artifacts/build-report.json
 +++ b/Storage/artifacts/build-report.json
 @@ -1,5 +1,5 @@
@@ -2504,22 +2767,25 @@ index 40706a0..1152693 100644
    "brand": "MSE",
    "base": "2.22.0",
    "bundles": {
-@@ -215,11 +215,11 @@
+@@ -215,13 +215,13 @@
    },
    "pageScripts": {
      "mse-ui": {
 -      "bytes": 90587,
 -      "sha256": "9448cd3f07b904e927946a1c2a571015e99b66a2262a570761c665909daad279",
-+      "bytes": 109230,
-+      "sha256": "2d6ac1405862db52806a95c6ef6e920f8d1d2792e21afb12f31c4820abd5beb1",
++      "bytes": 113325,
++      "sha256": "0bc42709ef7f3a6a522631b7f18b7ebdfa7655c1d53c3c5e3b2c201e835bbaa7",
        "sanitizer": {
 -        "comments": 80,
 -        "strings": 3,
-+        "comments": 83,
++        "comments": 84,
 +        "strings": 5,
          "templates": 0,
-         "regexps": 11,
+-        "regexps": 11,
++        "regexps": 12,
          "windowRefs": 0,
+         "windowProps": 0
+       }
 @@ -239,10 +239,10 @@
        }
      },
@@ -2539,19 +2805,19 @@ index 40706a0..1152693 100644
      "headers": 1,
      "requires": 0,
 -    "bytes": 1646595
-+    "bytes": 1668333
++    "bytes": 1672428
    },
    "userscript": {
      "file": "Storage/artifacts/mse.user.js",
 -    "bytes": 1650793,
 -    "sha256": "9623fc6dd11d1d327415683479da407af45ba4c58ad56ce1405b3fcc82ac4c08"
-+    "bytes": 1672439,
-+    "sha256": "2c5eca21dd0e7eaf514dc003e64ed5f164901b4698b40b44fa795165ca7ed095"
++    "bytes": 1676592,
++    "sha256": "d2089be07d96ea99da2b8e967235f5a6d27be2d7b21ba7a3399acffb7ef5f908"
    },
    "sanitizer": {
      "comments": 68,
 diff --git a/Storage/artifacts/mse.user.js b/Storage/artifacts/mse.user.js
-index 2f684ea..1c15440 100644
+index 2f684ea..ca102f6 100644
 --- a/Storage/artifacts/mse.user.js
 +++ b/Storage/artifacts/mse.user.js
 @@ -2,7 +2,7 @@
@@ -2773,7 +3039,7 @@ index 2f684ea..1c15440 100644
  
     
     
-@@ -3655,17 +3724,18 @@ var __ssW=window,__msePageWindow=window;
+@@ -3655,25 +3724,48 @@ var __ssW=window,__msePageWindow=window;
      shortanswer: { label: 'short answer', kind: 'text' },
      numerical: { label: 'number', kind: 'text' },
      match: { label: 'matching', kind: 'select' },
@@ -2782,6 +3048,7 @@ index 2f684ea..1c15440 100644
      multianswer: { label: 'nested questions', kind: 'select' },
      gapfill: { label: 'gaps', kind: 'text' },
      coderunner: { label: 'code', kind: 'text' },
++    essay: { label: 'essay', kind: 'text' },
      calculated: { label: 'calculated', kind: 'text' },
      calculatedsimple: { label: 'calculated', kind: 'text' },
 -    calculatedmulti: { label: 'calculated', kind: 'text' }
@@ -2794,7 +3061,8 @@ index 2f684ea..1c15440 100644
      ddimageortext: 'drag onto an image',
      ddmarker: 'markers on an image',
      dragdrop: 'drag and drop',
-@@ -3674,6 +3744,28 @@ var __ssW=window,__msePageWindow=window;
+     ordering: 'ordering',
+-    essay: 'essay',
      description: 'description (not a question)'
    };
  
@@ -2869,7 +3137,7 @@ index 2f684ea..1c15440 100644
        return out;
      }
  
-@@ -3934,7 +4022,9 @@ var __ssW=window,__msePageWindow=window;
+@@ -3934,14 +4022,16 @@ var __ssW=window,__msePageWindow=window;
          if (m) return m[1];
        }
        var m2 = /^question-(\d+)-/.exec(block.id || '');
@@ -2880,6 +3148,15 @@ index 2f684ea..1c15440 100644
      }
  
      function readQuestion(block) {
+-      var qtext = block.querySelector('.qtext');
++      var qtext = block.querySelector('.qtext') || block.querySelector('.formulation') || block;
+       if (!qtext) return null;
+       var clone = qtext.cloneNode(true);
+-      Array.prototype.forEach.call(clone.querySelectorAll('.accesshide'), function (x) {
++      Array.prototype.forEach.call(clone.querySelectorAll('.accesshide, .MathJax_Preview, .katex-html'), function (x) {
+         if (x.parentNode) x.parentNode.removeChild(x);
+       });
+       var text = textOf(clone);
 @@ -3964,7 +4054,7 @@ var __ssW=window,__msePageWindow=window;
        var inputs = block.querySelectorAll('input[type=radio], input[type=checkbox]');
        for (var i = 0; i < inputs.length; i++) {
@@ -2889,7 +3166,7 @@ index 2f684ea..1c15440 100644
          if (String(inp.getAttribute('value')) === '-1') continue;  
          if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;
          var caption = answerText(inp);
-@@ -3976,24 +4066,46 @@ var __ssW=window,__msePageWindow=window;
+@@ -3976,24 +4066,56 @@ var __ssW=window,__msePageWindow=window;
          if (/^(очистить мой выбор|clear my choice)$/i.test(String(caption || '').trim())) continue;
          q.answers.push({ input: inp, kind: 'choice', text: caption, letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
        }
@@ -2931,9 +3208,19 @@ index 2f684ea..1c15440 100644
 +      for (var cn = 0; cn < controlNodes.length; cn++) {
 +        var node = controlNodes[cn];
 +        var tag = node.tagName.toLowerCase();
++        var labelText = '';
++        var tr = node.closest ? node.closest('tr') : null;
++        if (tr) {
++          var tdText = tr.querySelector('td.text');
++          if (tdText) labelText = textOf(tdText) || (tdText.querySelector('img') && tdText.querySelector('img').getAttribute('alt')) || '';
++        }
++        if (!labelText && node.id) {
++          var lbl = block.querySelector('label[for="' + node.id + '"]');
++          if (lbl) labelText = textOf(lbl);
++        }
 +        if (tag === 'select') {
 +          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
-+          q.controls.push({ kind: 'select', node: node });
++          q.controls.push({ kind: 'select', node: node, label: labelText || null });
 +        } else if (tag === 'input' && node.classList.contains('placeinput')) {
 +          var pMatch = /place(\d+)/.exec(node.className || '') || /_p(\d+)/.exec(node.name || '');
 +          var pNo = pMatch ? parseInt(pMatch[1], 10) : (q.controls.filter(function (c) { return c.kind === 'place'; }).length + 1);
@@ -2941,7 +3228,7 @@ index 2f684ea..1c15440 100644
 +        } else {
 +          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
 +          if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(node.name || '')) continue;
-+          q.controls.push({ kind: 'text', node: node });
++          q.controls.push({ kind: 'text', node: node, label: labelText || null });
 +        }
        }
 -       
@@ -2950,7 +3237,7 @@ index 2f684ea..1c15440 100644
        return q;
      }
  
-@@ -4026,7 +4138,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -4026,7 +4148,7 @@ var __ssW=window,__msePageWindow=window;
      function attemptMeta() {
        var meta = { host: String(win.location.host), courseId: null, quizId: null, attemptId: null, moodleId: null, missing: [] };
        var id = identity();
@@ -2959,7 +3246,7 @@ index 2f684ea..1c15440 100644
        if (id.id) meta.moodleId = id.id;
        var bodyCls = (doc.body && doc.body.className) || '';
        var bodyId = (doc.body && doc.body.id) || '';
-@@ -4109,7 +4221,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -4109,7 +4231,7 @@ var __ssW=window,__msePageWindow=window;
        var timeoutPromise = new Promise(function (_, reject) {
          timer = win.setTimeout(function () {
            if (controller) try { controller.abort(); } catch (_) {}
@@ -2968,7 +3255,7 @@ index 2f684ea..1c15440 100644
          }, 10000);
        });
  
-@@ -4141,18 +4253,18 @@ var __ssW=window,__msePageWindow=window;
+@@ -4141,18 +4263,18 @@ var __ssW=window,__msePageWindow=window;
          });
        }, function (e) {
          if (timer) { win.clearTimeout(timer); timer = null; }
@@ -2992,12 +3279,13 @@ index 2f684ea..1c15440 100644
          throw e;
        });
      }
-@@ -4206,10 +4318,71 @@ var __ssW=window,__msePageWindow=window;
+@@ -4204,46 +4326,274 @@ var __ssW=window,__msePageWindow=window;
+ 
+      
      function applyAnswer(q, row) {
-       var parts = String(row.label || '').split('|').map(function (x) { return x.trim(); }).filter(Boolean);
-       if (!parts.length) return {ok:false};
--      var checks = q.answers.filter(function (a) { return a.input.type === 'checkbox'; });
--      if (checks.length) {
+-      var parts = String(row.label || '').split('|').map(function (x) { return x.trim(); }).filter(Boolean);
++      var fullText = String(row.label != null ? row.label : '').trim();
++      if (fullText === '') return {ok:false};
 +
 +       
 +      var places = q.controls.filter(function (c) { return c.kind === 'place'; });
@@ -3010,6 +3298,37 @@ index 2f684ea..1c15440 100644
 +          });
 +        }
 +      }
++
++      var interactive = q.controls.filter(function (c) { return c.kind === 'select' || c.kind === 'text'; });
++
++       
++      if (interactive.length === 1 && interactive[0].kind === 'text' && !q.answers.length && !places.length) {
++        var soloText = interactive[0];
++        soloText.node.value = fullText;
++        soloText.node.dispatchEvent(new win.Event('input', {bubbles:true}));
++        soloText.node.dispatchEvent(new win.Event('change', {bubbles:true}));
++        try {
++          var pBox = soloText.node.closest('.answer, .formulation, label') || soloText.node.parentNode;
++          var rEd = pBox && pBox.querySelector('[contenteditable="true"], .editor_atto_content');
++          if (rEd) {
++            rEd.innerHTML = '<p>' + fullText.replace(/\n/g, '<br>') + '</p>';
++            rEd.dispatchEvent(new win.Event('input', {bubbles:true}));
++          }
++          if (soloText.node.tagName.toLowerCase() === 'textarea' && win.ace && typeof win.ace.edit === 'function') {
++            var aId = soloText.node.id || (soloText.node.parentNode && soloText.node.parentNode.id);
++            var aEd = aId ? win.ace.edit(aId) : null;
++            if (aEd && aEd.setValue) aEd.setValue(fullText, 1);
++          }
++        } catch (_) {}
++        return {ok:true, how:'text'};
++      }
++
++      var parts = fullText.split('|').map(function (x) { return x.trim(); }).filter(Boolean);
+       if (!parts.length) return {ok:false};
+-      var checks = q.answers.filter(function (a) { return a.input.type === 'checkbox'; });
+-      if (checks.length) {
+-        var chosen = parts.map(function (part) {
++
 +      if (places.length) {
 +        if (parts.length !== places.length) return {ok:false};
 +        var dragHomes = q.answers.filter(function (a) { return a.kind === 'drag'; });
@@ -3055,7 +3374,12 @@ index 2f684ea..1c15440 100644
 +       
 +      var checks = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; });
 +      if (checks.length && (!q.controls.length || q.type === 'multichoiceset')) {
-         var chosen = parts.map(function (part) {
++        var chParts = parts;
++        if (chParts.length === 1 && !checks.some(function (a) { return norm(a.text) === norm(chParts[0]); })) {
++          var commaSplit = fullText.split(/\s*,\s*|\s*;\s*|\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
++          if (commaSplit.length > 1) chParts = commaSplit;
++        }
++        var chosen = chParts.map(function (part) {
            var hits = checks.filter(function (a) { return norm(a.text) === norm(part); });
 +          if (!hits.length) {
 +            var pTrim = String(part || '').trim();
@@ -3066,7 +3390,11 @@ index 2f684ea..1c15440 100644
            return hits.length === 1 ? hits[0] : null;
          });
          if (chosen.some(function (x) { return !x; })) return {ok:false};
-@@ -4220,30 +4393,140 @@ var __ssW=window,__msePageWindow=window;
+-        if (parts.length === 1) {
++        if (chParts.length === 1) {
+           chosen[0].input.click();
+         } else {
+           checks.forEach(function (a) { var selected = chosen.indexOf(a) >= 0; if (a.input.checked !== selected) a.input.click(); });
          }
          return {ok:true, how:'choice'};
        }
@@ -3078,12 +3406,26 @@ index 2f684ea..1c15440 100644
 +      var radios = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'radio'; });
 +      if (radios.length && (!q.controls.length || q.type === 'multichoice' || q.type === 'truefalse' || q.type === 'calculatedmulti')) {
 +        if (parts.length === 1) {
-+          var hits = radios.filter(function (a) { return norm(a.text) === norm(parts[0]); });
++          var p0 = parts[0];
++          var hits = radios.filter(function (a) { return norm(a.text) === norm(p0); });
 +          if (!hits.length) {
-+            var pTrim = String(parts[0] || '').trim();
++            var pTrim = String(p0 || '').trim();
 +            hits = radios.filter(function (a, idx) {
 +              return (a.letter && a.letter.toLowerCase() === pTrim.toLowerCase()) || String(idx + 1) === pTrim;
 +            });
++          }
++          if (!hits.length) {
++            var TRUE_VALS = ['true', 'верно', 'правда', 'да', 't'];
++            var FALSE_VALS = ['false', 'неверно', 'ложь', 'нет', 'f'];
++            var pLower = norm(p0);
++            var isTrue = TRUE_VALS.indexOf(pLower) >= 0;
++            var isFalse = FALSE_VALS.indexOf(pLower) >= 0;
++            if (isTrue || isFalse) {
++              hits = radios.filter(function (a) {
++                var an = norm(a.text);
++                return isTrue ? TRUE_VALS.indexOf(an) >= 0 : FALSE_VALS.indexOf(an) >= 0;
++              });
++            }
 +          }
 +          if (hits.length === 1) { if (!hits[0].input.checked) hits[0].input.click(); return {ok:true, how:'choice'}; }
 +        }
@@ -3118,10 +3460,13 @@ index 2f684ea..1c15440 100644
 +          return {ok:true, how:'select'};
 +        }
 +        return {ok:false};
-+      }
+       }
+-      var boxes = q.controls.filter(function (c) { return c.kind === 'text'; });
+-      if (boxes.length && boxes.length === parts.length) {
+-        boxes.forEach(function (c,i) { c.node.value = parts[i]; c.node.dispatchEvent(new win.Event('input', {bubbles:true})); c.node.dispatchEvent(new win.Event('change', {bubbles:true})); });
+-        return {ok:true, how:'text'};
 +
 +       
-+      var interactive = q.controls.filter(function (c) { return c.kind === 'select' || c.kind === 'text'; });
 +      if (interactive.length && interactive.length === parts.length) {
 +        var planned = [];
 +        for (var idx = 0; idx < interactive.length; idx++) {
@@ -3134,6 +3479,17 @@ index 2f684ea..1c15440 100644
 +            if (!opts.length && /^\d+$/.test(val)) {
 +              var nIdx = parseInt(val, 10);
 +              if (nIdx >= 0 && nIdx < ctrl.node.options.length) opts = [ctrl.node.options[nIdx]];
++            }
++            if (!opts.length && /^[a-zа-я]$/i.test(val.trim())) {
++              var letCode = val.trim().toLowerCase().charCodeAt(0);
++              var letIdx = -1;
++              if (letCode >= 97 && letCode <= 122) letIdx = letCode - 97;
++              else {
++                var cyr = 'абвгдежзийклмнопрстуфхцчшщэюя';
++                letIdx = cyr.indexOf(val.trim().toLowerCase());
++              }
++              var validOpts = Array.prototype.filter.call(ctrl.node.options, function (o) { return !!o.value && !o.disabled; });
++              if (letIdx >= 0 && letIdx < validOpts.length) opts = [validOpts[letIdx]];
 +            }
 +            if (opts.length !== 1) return {ok:false};
 +            planned.push({ kind: 'select', node: ctrl.node, value: opts[0].value });
@@ -3165,7 +3521,7 @@ index 2f684ea..1c15440 100644
 +          }
 +        });
 +        return {ok:true, how: interactive.every(function (c) { return c.kind === 'select'; }) ? 'select' : (interactive.every(function (c) { return c.kind === 'text'; }) ? 'text' : 'multi')};
-+      }
+       }
 +
 +       
 +      if (parts.length === 1 && interactive.length === 1) {
@@ -3202,11 +3558,7 @@ index 2f684ea..1c15440 100644
 +          } catch (_) {}
 +          return {ok:true, how:'text'};
 +        }
-       }
--      var boxes = q.controls.filter(function (c) { return c.kind === 'text'; });
--      if (boxes.length && boxes.length === parts.length) {
--        boxes.forEach(function (c,i) { c.node.value = parts[i]; c.node.dispatchEvent(new win.Event('input', {bubbles:true})); c.node.dispatchEvent(new win.Event('change', {bubbles:true})); });
--        return {ok:true, how:'text'};
++      }
 +
 +       
 +      if (parts.length === 1) {
@@ -3221,12 +3573,12 @@ index 2f684ea..1c15440 100644
 +          if (!anyHits[0].input.checked) anyHits[0].input.click();
 +          return {ok:true, how:'choice'};
 +        }
-       }
++      }
 +
        return {ok:false, how:null};
      }
  
-@@ -4350,7 +4633,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -4350,7 +4700,7 @@ var __ssW=window,__msePageWindow=window;
        agent: null,              
        agentTimer: null,
        gw: { busy: null, probe: null, models: null, check: null, reg: null },
@@ -3235,7 +3587,7 @@ index 2f684ea..1c15440 100644
        ai: null,                 
        tier: null,               
        t0: 0
-@@ -4460,20 +4743,30 @@ var __ssW=window,__msePageWindow=window;
+@@ -4460,20 +4810,30 @@ var __ssW=window,__msePageWindow=window;
  
      function head(titleText, sub, leading) {
        var h = el('div', 'ph');
@@ -3275,7 +3627,7 @@ index 2f684ea..1c15440 100644
          h.appendChild(chip);
        }
        var mini = el('button', 'mini-status');
-@@ -4651,8 +4944,10 @@ var __ssW=window,__msePageWindow=window;
+@@ -4651,8 +5011,10 @@ var __ssW=window,__msePageWindow=window;
            var mark = el('span', 'mark' + (r.agent ? ' agent' : ''));
            a.appendChild(mark);
            a.appendChild(el('span', 'lbl', r.label));
@@ -3288,7 +3640,7 @@ index 2f684ea..1c15440 100644
            if (r.agent) {
              var tag = el('span', 'tag agent', 'agent');
              a.appendChild(tag);
-@@ -4677,10 +4972,11 @@ var __ssW=window,__msePageWindow=window;
+@@ -4677,10 +5039,11 @@ var __ssW=window,__msePageWindow=window;
      function appendAi(q) {
        var ai = state.agent || { state: 'idle' };
        if (ai.state === 'running' || ai.state === 'retry') {
@@ -3304,8 +3656,67 @@ index 2f684ea..1c15440 100644
          body.appendChild(N(run, 1));
          return;
        }
-@@ -4785,24 +5081,39 @@ var __ssW=window,__msePageWindow=window;
-       });
+@@ -4753,56 +5116,83 @@ var __ssW=window,__msePageWindow=window;
+     }
+ 
+     function questionImages(q) {
+-      var images = Array.prototype.slice.call(q.node.querySelectorAll('.qtext img, .answer img'));
+-      if (images.length > 5) return Promise.reject(new Error('too many images'));
++      var allImgs = Array.prototype.slice.call(q.node.querySelectorAll('.qtext img, .answer img, .formulation img'));
++      var images = allImgs.filter(function (img) {
++        if (img.classList.contains('icon') || img.classList.contains('emoticon') || img.classList.contains('questionflagimage')) return false;
++        var src = img.currentSrc || img.src || '';
++        if (/\x2Ftheme\x2Fimage\.php\x2F/i.test(src)) return false;
++        if (img.naturalWidth && img.naturalWidth <= 24 && img.naturalHeight && img.naturalHeight <= 24) return false;
++        return true;
++      });
++      if (images.length > 5) images = images.slice(0, 5);
+       return Promise.all(images.map(function (img, index) {
+         var src = img.currentSrc || img.src || '';
+         var source = src.indexOf('data:image/') === 0 ? Promise.resolve(src) : (function () {
+-          var u; try { u = new URL(src, win.location.href); } catch (_) { throw new Error('image unavailable'); }
+-          if (u.origin !== win.location.origin) throw new Error('external image unavailable');
++          var u; try { u = new URL(src, win.location.href); } catch (_) { return Promise.resolve(null); }
++          if (u.origin !== win.location.origin) return Promise.resolve(null);
+           return debugAuxFetch(u.href, {credentials:'same-origin'}).then(function (response) {
+-            if (!response.ok) throw new Error('image unavailable');
++            if (!response.ok) return null;
+             return response.blob();
+           }).then(function (blob) {
+-            if (blob.size > 2500000) throw new Error('image too large (>2.5MB)');
+-            return new Promise(function (resolve, reject) {
++            if (!blob || blob.size > 2500000) return null;
++            return new Promise(function (resolve) {
+               var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); };
+-              reader.onerror = function () { reject(new Error('image unreadable')); }; reader.readAsDataURL(blob);
++              reader.onerror = function () { resolve(null); }; reader.readAsDataURL(blob);
+             });
+-          });
++          }).catch(function () { return null; });
+         })();
+         return source.then(function (rawUrl) {
++          if (!rawUrl) return null;
+           return downscaleDataUrl(rawUrl, 1024);
+         }).then(function (data) {
+-          if (!/^data:image\x2F(png|jpeg|gif|webp);base64,[A-Za-z0-9+\x2F=]+$/i.test(data)) throw new Error('image format unsupported');
+-          if (data.length > 800000) throw new Error('image too large (>512KB)');
+-          var related = q.answers.filter(function (a) { return a.input.parentNode && a.input.parentNode.contains(img); })[0];
++          if (!data || !/^data:image\x2F(png|jpeg|gif|webp);base64,[A-Za-z0-9+\x2F=]+$/i.test(data)) return null;
++          if (data.length > 800000) return null;
++          var related = q.answers.filter(function (a) { return a.input && a.input.parentNode && a.input.parentNode.contains(img); })[0];
+           return {data:data, label:related ? 'option: ' + related.text : 'question image ' + (index+1)};
+-        });
++        }).catch(function () { return null; });
+       })).then(function (all) {
+-        if (all.reduce(function (n, image) { return n + image.data.length; }, 0) > 1500000) throw new Error('images too large (over 1.5MB total)');
+-        return all;
+-      });
++        var valid = all.filter(function (x) { return !!x; });
++        if (valid.reduce(function (n, image) { return n + image.data.length; }, 0) > 1500000) {
++          valid = valid.length ? [valid[0]] : [];
++        }
++        return valid;
++      }).catch(function () { return []; });
      }
  
 -    function runAgent(automatic) {
@@ -3324,15 +3735,16 @@ index 2f684ea..1c15440 100644
 +      state.agent = { state: 'running', stage: stageText };
        render();
        var t0 = Date.now();
-+      var fields = q.controls.map(function (c) {
++      var fields = q.controls.map(function (c, idx) {
 +        if (c.kind === 'select') {
 +          return {
 +            kind: 'select',
++            label: c.label || null,
 +            options: Array.prototype.filter.call(c.node.options, function (o) { return !!o.value && !o.disabled; }).map(function (o) { return o.textContent.trim(); })
 +          };
 +        }
-+        if (c.kind === 'place') return { kind: 'place' };
-+        return { kind: 'text' };
++        if (c.kind === 'place') return { kind: 'place', label: 'Blank ' + (c.placeNo || (idx + 1)) };
++        return { kind: 'text', label: c.label || null };
 +      });
        Promise.resolve().then(function () { return questionImages(q); }).then(function (images) { return win.MSEBridge.agent({
          host: state.meta.host,
@@ -3347,7 +3759,7 @@ index 2f684ea..1c15440 100644
          textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
          image: images.length ? images : null
        }, function (stage) {
-@@ -4813,7 +5124,11 @@ var __ssW=window,__msePageWindow=window;
+@@ -4813,7 +5203,11 @@ var __ssW=window,__msePageWindow=window;
          var ms = Date.now() - t0;
          if (res.ok && res.answer) {
            logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
@@ -3360,7 +3772,7 @@ index 2f684ea..1c15440 100644
            state.agent = { state: 'ok', answer: res.answer };
            var existing = (state.rows || []).find(function (r) { return r.label === res.answer; });
            if (existing) {
-@@ -4830,16 +5145,37 @@ var __ssW=window,__msePageWindow=window;
+@@ -4830,16 +5224,37 @@ var __ssW=window,__msePageWindow=window;
            startRetry(automatic);
            return;
          }
@@ -3400,7 +3812,7 @@ index 2f684ea..1c15440 100644
          render();
        });
      }
-@@ -4940,22 +5276,34 @@ var __ssW=window,__msePageWindow=window;
+@@ -4940,22 +5355,34 @@ var __ssW=window,__msePageWindow=window;
        var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
        body.appendChild(N(el('div', 'sec', 'account')));
        body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
@@ -3442,7 +3854,7 @@ index 2f684ea..1c15440 100644
        net.appendChild(el('span', 'txt', 'network log'));
        net.appendChild(el('span', 'more', 'open'));
        body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
-@@ -4968,9 +5316,17 @@ var __ssW=window,__msePageWindow=window;
+@@ -4968,9 +5395,17 @@ var __ssW=window,__msePageWindow=window;
        var epoch = ++state.modelEpoch;
        br.probe(url).then(function (r) {
          if (epoch !== state.modelEpoch || br.url() !== url) return;
@@ -3462,7 +3874,7 @@ index 2f684ea..1c15440 100644
      }
  
      function checkGateway(raw) {
-@@ -4980,26 +5336,43 @@ var __ssW=window,__msePageWindow=window;
+@@ -4980,26 +5415,43 @@ var __ssW=window,__msePageWindow=window;
        var epoch = ++state.modelEpoch;
        gw.busy = 'check';
        gw.probe = null;
@@ -3521,7 +3933,7 @@ index 2f684ea..1c15440 100644
            render();
            return r;
          });
-@@ -5025,7 +5398,6 @@ var __ssW=window,__msePageWindow=window;
+@@ -5025,7 +5477,6 @@ var __ssW=window,__msePageWindow=window;
        input.spellcheck = false;
        input.placeholder = 'https:/\/…';
        input.value = br.url() || '';
@@ -3529,7 +3941,7 @@ index 2f684ea..1c15440 100644
        input.addEventListener('input', function () {
          var typed = String(input.value || '').trim().replace(/\x2F+$/, '');
          var saved = br.url() || '';
-@@ -5035,79 +5407,51 @@ var __ssW=window,__msePageWindow=window;
+@@ -5035,79 +5486,51 @@ var __ssW=window,__msePageWindow=window;
        body.appendChild(N(el('div', 'sec', 'connection'), 0));
        var frow = el('div', 'frow');
        body.appendChild(N(frow, 0));
@@ -3594,7 +4006,11 @@ index 2f684ea..1c15440 100644
 -        } else {
 -          light.classList.remove('on');
 -        }
--      });
++        dbgBtn.classList.toggle('on', next);
++        var curLight = dbgBtn.querySelector('.dbg-light');
++        if (curLight) curLight.classList.toggle('on', next);
++        if (next) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
+       });
 -      toggle.appendChild(light);
 -      var dbgText = el('div', 'dbg-text');
 -      dbgText.appendChild(el('span', 'dbg-title', 'Debug mode'));
@@ -3613,11 +4029,7 @@ index 2f684ea..1c15440 100644
 -      actions.appendChild(snif);
 -      var report = press(el('button', 'btn', 'Report'), function () {
 -        reportCurrent(report);
-+        dbgBtn.classList.toggle('on', next);
-+        var curLight = dbgBtn.querySelector('.dbg-light');
-+        if (curLight) curLight.classList.toggle('on', next);
-+        if (next) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
-       });
+-      });
 -      report.setAttribute('data-mse', 'report');
 -      actions.appendChild(report);
 -      body.appendChild(N(actions, 1));
@@ -3647,7 +4059,7 @@ index 2f684ea..1c15440 100644
      }
  
       
-@@ -5124,22 +5468,24 @@ var __ssW=window,__msePageWindow=window;
+@@ -5124,22 +5547,24 @@ var __ssW=window,__msePageWindow=window;
        });
        body.appendChild(N(box, 1));
        var frow = el('div', 'frow');
@@ -3678,7 +4090,7 @@ index 2f684ea..1c15440 100644
        frow.appendChild(clear);
        body.appendChild(N(frow, 1));
      }
-@@ -5193,6 +5539,34 @@ var __ssW=window,__msePageWindow=window;
+@@ -5193,6 +5618,34 @@ var __ssW=window,__msePageWindow=window;
          method: formEl.getAttribute('method') || 'POST',
          elementsCount: formEl.elements ? formEl.elements.length : 0
        } : null;
@@ -3713,7 +4125,7 @@ index 2f684ea..1c15440 100644
        var protocolView = q ? {
          page: null,
          question: q.text,
-@@ -5207,11 +5581,16 @@ var __ssW=window,__msePageWindow=window;
+@@ -5207,11 +5660,16 @@ var __ssW=window,__msePageWindow=window;
          text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) { return c.node.value || ''; }),
          images: images.map(function (im) { return im.src; }),
          question_image: images.length ? images[0].src : null,
@@ -3731,7 +4143,7 @@ index 2f684ea..1c15440 100644
          warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
          page: { location: String(win.location.href), title: doc.title, headings: Array.prototype.map.call(doc.querySelectorAll('h1,h2,h3'), function (n) { return n.textContent.trim(); }),
            httpHeaders: 'unavailable to page JavaScript', cookieNamesVisibleToJavaScript: cookies, inlineMoodleScripts: scripts },
-@@ -5226,6 +5605,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -5226,6 +5684,8 @@ var __ssW=window,__msePageWindow=window;
      }
      function debugTraffic(event) {
        if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
@@ -3740,7 +4152,7 @@ index 2f684ea..1c15440 100644
        var dump = snifDump(); dump.traffic = event;
        win.MSEBridge.sendDump('debug', dump);
      }
-@@ -5239,6 +5620,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5239,6 +5699,7 @@ var __ssW=window,__msePageWindow=window;
      }
      var snifText = '';
      function viewSnif() {
@@ -3748,7 +4160,7 @@ index 2f684ea..1c15440 100644
        body.appendChild(N(el('div', 'sec', 'Snif · local only')));
        body.appendChild(N(el('div', 'empty', 'May contain session keys and personal data. Review before sharing.')));
        var copy = el('button', 'btn solid', 'Copy');
-@@ -5264,8 +5646,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -5264,8 +5725,8 @@ var __ssW=window,__msePageWindow=window;
        var title = CONFIG.brand;
        var leading = 'info';
        if (state.route === 'answers' && state.question) {
@@ -3759,7 +4171,7 @@ index 2f684ea..1c15440 100644
        } else if (state.route === 'account') { sub = 'account'; }
        else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
        else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
-@@ -5328,6 +5710,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5328,6 +5789,7 @@ var __ssW=window,__msePageWindow=window;
          if (!q) return false;
          return applyAnswer(q, { label: label });
        },
@@ -3767,7 +4179,7 @@ index 2f684ea..1c15440 100644
        agent: function () { return state.agent; },
        runAgent: function () { runAgent(false); return true; },
        log: function () { return log.slice(-40); },
-@@ -5374,6 +5757,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5374,6 +5836,7 @@ var __ssW=window,__msePageWindow=window;
              : state.agent && state.agent.state === 'error' ? { state: 'error', text: state.agent.text }
              : state.agent && state.agent.state === 'running' ? { state: 'running', text: '' }
              : null,
@@ -3775,7 +4187,7 @@ index 2f684ea..1c15440 100644
            tier: state.tier,
            meta: state.meta,
            identity: identity(),
-@@ -5386,7 +5770,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -5386,7 +5849,8 @@ var __ssW=window,__msePageWindow=window;
              supported: state.question.supported,
              identity: state.question.identity,
              questionId: state.question.questionId,
@@ -3838,10 +4250,10 @@ index 84b7708..9fb7222 100644
          await new Promise((x) => setTimeout(x, 200));
        }
 diff --git a/tests/agent_types.test.js b/tests/agent_types.test.js
-index 460786e..ec4a8be 100644
+index 460786e..c80a1a0 100644
 --- a/tests/agent_types.test.js
 +++ b/tests/agent_types.test.js
-@@ -1,24 +1,216 @@
+@@ -1,24 +1,254 @@
  'use strict';
 -const test=require('node:test'), assert=require('node:assert/strict'), fs=require('fs'),os=require('os'),path=require('path'),http=require('http');
 -const data=fs.mkdtempSync(path.join(os.tmpdir(),'mse-types-')); Object.assign(process.env,{MSE_DATA_DIR:data,MSE_ADMIN_TOKEN:'adm_test',MSE_UPSTREAM_PORT:'1',MSE_MODEL:'mock'});
@@ -3891,7 +4303,7 @@ index 460786e..ec4a8be 100644
 +    req.on('end', () => {
 +      lastPayload = JSON.parse(raw);
 +      let answer = 'Alpha';
-+      if (mockReply) {
++      if (mockReply != null) {
 +        answer = mockReply;
 +      } else {
 +        const userMsg = lastPayload.messages[1].content;
@@ -3991,6 +4403,44 @@ index 460786e..ec4a8be 100644
 +  res = await ask({ question: 'Столица?', options });
 +  assert.equal(res.body.ok, true);
 +  assert.equal(res.body.answer, 'Москва');
++
++  mockReply = null;
++});
++
++test('True/False cross-lingual synonym matching', async () => {
++  // Russian options, English model reply
++  mockReply = 'True';
++  let res = await ask({ question: 'Земля круглая?', options: ['Верно', 'Неверно'] });
++  assert.equal(res.body.ok, true);
++  assert.equal(res.body.answer, 'Верно');
++
++  // English options, Russian model reply
++  mockReply = 'Ложь';
++  res = await ask({ question: 'Sky is green?', options: ['True', 'False'] });
++  assert.equal(res.body.ok, true);
++  assert.equal(res.body.answer, 'False');
++
++  mockReply = null;
++});
++
++test('Model returning array or number 0', async () => {
++  // Array response
++  mockReply = ['Alpha', 'Beta'];
++  let res = await ask({ question: 'Which ones?', options: ['Alpha', 'Beta', 'Gamma'], multiple: true });
++  assert.equal(res.body.ok, true);
++  assert.equal(res.body.answer, 'Alpha | Beta');
++
++  // Answer is 0
++  mockReply = 0;
++  res = await ask({ question: 'What is 2 - 2?', type: 'numerical' });
++  assert.equal(res.body.ok, true);
++  assert.equal(res.body.answer, '0');
++
++  // Comma-separated multiple choice
++  mockReply = 'Alpha, Beta';
++  res = await ask({ question: 'Which ones?', options: ['Alpha', 'Beta', 'Gamma'], multiple: true });
++  assert.equal(res.body.ok, true);
++  assert.equal(res.body.answer, 'Alpha | Beta');
 +
 +  mockReply = null;
 +});
@@ -4358,10 +4808,10 @@ index ea800b0..c0e5dad 100644
      const key = 'mse_' + 'd'.repeat(48);
 diff --git a/tests/question_types_real.test.js b/tests/question_types_real.test.js
 new file mode 100644
-index 0000000..578f3b1
+index 0000000..8d87627
 --- /dev/null
 +++ b/tests/question_types_real.test.js
-@@ -0,0 +1,250 @@
+@@ -0,0 +1,301 @@
 +'use strict';
 +const test = require('node:test');
 +const assert = require('node:assert/strict');
@@ -4581,7 +5031,7 @@ index 0000000..578f3b1
 +      await page.close();
 +    }
 +
-+    // 7. Coderunner / Rich text editor updating
++    // 7. Coderunner / Rich text editor updating with multiline code and pipes
 +    {
 +      const page = await t.newPage(h.fixtureUrl('attempt'));
 +      await page.waitForFunction(() => !!window.__mse);
@@ -4598,14 +5048,65 @@ index 0000000..578f3b1
 +        window.__mse.open();
 +      });
 +      await page.waitForFunction(() => !!window.__mse.state().question);
-+      const applied = await page.evaluate(() => window.__mse.apply('def foo(): return 42'));
++      const codePayload = 'def foo(a, b):\n    return a | b';
++      const applied = await page.evaluate((c) => window.__mse.apply(c), codePayload);
 +      assert.equal(applied.ok, true);
++      assert.equal(applied.how, 'text');
 +      const res = await page.evaluate(() => ({
 +        boxVal: document.getElementById('code_box').value,
 +        edHtml: document.getElementById('atto_ed').innerHTML
 +      }));
-+      assert.equal(res.boxVal, 'def foo(): return 42');
-+      assert.match(res.edHtml, /def foo\(\): return 42/);
++      assert.equal(res.boxVal, codePayload, 'full multiline code preserved with bitwise pipe intact');
++      assert.match(res.edHtml, /def foo\(a, b\):<br>\s*return a \| b/);
++      await page.close();
++    }
++
++    // 8. True/False cross-lingual: Russian radios ('Верно' / 'Неверно') with English answer 'True'
++    {
++      const page = await t.newPage(h.fixtureUrl('attempt'));
++      await page.waitForFunction(() => !!window.__mse);
++      await page.evaluate(() => {
++        const q = document.querySelector('.que');
++        q.className = 'que truefalse deferredfeedback notyetanswered';
++        q.querySelector('.answer').innerHTML = `
++          <div class="r0"><input type="radio" name="q42:8_answer" id="tf_t" value="1"><label for="tf_t">Верно</label></div>
++          <div class="r1"><input type="radio" name="q42:8_answer" id="tf_f" value="0"><label for="tf_f">Неверно</label></div>
++        `;
++        window.__mse.open();
++      });
++      await page.waitForFunction(() => !!window.__mse.state().question);
++      const applied = await page.evaluate(() => window.__mse.apply('True'));
++      assert.equal(applied.ok, true);
++      assert.equal(applied.how, 'choice');
++      const isChecked = await page.evaluate(() => document.getElementById('tf_t').checked);
++      assert.equal(isChecked, true, 'Russian "Верно" selected via English "True"');
++      await page.close();
++    }
++
++    // 9. Essay question: supported and populates textarea
++    {
++      const page = await t.newPage(h.fixtureUrl('attempt'));
++      await page.waitForFunction(() => !!window.__mse);
++      await page.evaluate(() => {
++        const q = document.querySelector('.que');
++        q.className = 'que essay deferredfeedback notyetanswered';
++        q.querySelector('.formulation').innerHTML = `
++          <div class="qtext">Write an essay on photosynthesis</div>
++          <div class="answer"><textarea name="q42:9_answer" id="essay_box"></textarea></div>
++        `;
++        window.__mse.open();
++      });
++      await page.waitForFunction(() => !!window.__mse.state().question);
++      const q = await page.evaluate(() => window.__mse.current());
++      assert.equal(q.supported, true, 'essay is now supported');
++      assert.equal(q.kind, 'text');
++
++      const essayText = 'Photosynthesis is the process used by plants to convert light energy into chemical energy.';
++      const applied = await page.evaluate((txt) => window.__mse.apply(txt), essayText);
++      assert.equal(applied.ok, true);
++      assert.equal(applied.how, 'text');
++      const val = await page.evaluate(() => document.getElementById('essay_box').value);
++      assert.equal(val, essayText);
 +      await page.close();
 +    }
 +  } finally {

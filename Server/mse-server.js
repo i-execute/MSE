@@ -351,6 +351,9 @@ function extractJson(text) {
   try { return JSON.parse(m[0]); } catch (e) { return null; }
 }
 const RU_LETTERS = 'абвгдежзийклмнопрстуфхцчшщэюя';
+const TRUE_VALS = ['true', 'верно', 'правда', 'да', 't'];
+const FALSE_VALS = ['false', 'неверно', 'ложь', 'нет', 'f'];
+
 function normOpt(s) {
   return String(s || '').trim().toLowerCase()
     .replace(/^(\([a-zа-я0-9]{1,2}\)|[a-zа-я0-9]{1,2}[\.\)\:\-])\s*/i, '')
@@ -366,6 +369,16 @@ function matchOption(part, options) {
   if (np) {
     m = options.filter((o) => normOpt(o) === np);
     if (m.length === 1) return m[0];
+  }
+  const pClean = pRaw.toLowerCase().replace(/[\.\)\:]$/, '');
+  const isTrue = TRUE_VALS.includes(pClean);
+  const isFalse = FALSE_VALS.includes(pClean);
+  if (isTrue || isFalse) {
+    const truthyOpt = options.find((o) => TRUE_VALS.includes(normOpt(o)));
+    const falsyOpt = options.find((o) => FALSE_VALS.includes(normOpt(o)));
+    if (truthyOpt && falsyOpt) {
+      return isTrue ? truthyOpt : falsyOpt;
+    }
   }
   if (/^\d+$/.test(pRaw)) {
     const idx = parseInt(pRaw, 10);
@@ -396,6 +409,7 @@ function buildAgentPrompt(body) {
   var type = String(body.type || '').toLowerCase();
   var isNumeric = /^(numerical|calculated|calculatedsimple)$/.test(type);
   var isDdwtos = type === 'ddwtos' || Number(body.placesCount) > 0;
+  var isCoderunner = type === 'coderunner';
 
   var system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
     '{"answer": "<verbatim option text or exact answer value>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
@@ -405,7 +419,21 @@ function buildAgentPrompt(body) {
     system += ' MANDATORY: For choice questions, return the EXACT VERBATIM text of the option as listed. Do NOT prefix with option numbers or index numbers.';
   }
   var user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
-  if (isDdwtos) {
+  if (Array.isArray(body.fields) && body.fields.length > 1) {
+    user += 'This question has ' + body.fields.length + ' inputs in order from left to right, joined by |:\n';
+    body.fields.forEach(function (f, i) {
+      var lbl = f.label ? ' [' + f.label + ']' : '';
+      if (f.kind === 'select') {
+        user += (i + 1) + '.' + lbl + ' [Dropdown] Options: ' + (Array.isArray(f.options) ? f.options.join(' / ') : '') + '\n';
+      } else if (f.kind === 'place') {
+        user += (i + 1) + '.' + lbl + ' [Blank] Choose matching option from the options list below\n';
+      } else {
+        user += (i + 1) + '.' + lbl + ' [Text field] Enter value\n';
+      }
+    });
+    if (options) user += 'Available options:\n' + options + '\n';
+    user += 'Provide the answer for all ' + body.fields.length + ' inputs in exact order, joined by |.\n';
+  } else if (isDdwtos) {
     var places = Number(body.placesCount) || 1;
     user += 'This is a drag-and-drop into text question with ' + places + ' blank(s) marked [[1]]' + (places > 1 ? ', [[2]], etc.' : '') + '.\n';
     if (options) user += 'Available options:\n' + options + '\n';
@@ -416,6 +444,7 @@ function buildAgentPrompt(body) {
   }
   if (body.multiple && !isDdwtos) user += 'Several may be correct: list them separated by "|" in answer (verbatim text only, no numbers).\n';
   if (isNumeric) user += 'Give the exact numerical answer as a number (e.g. 42 or 3.14). Do not include units unless explicitly asked.\n';
+  if (isCoderunner) user += 'Provide only the exact working code to solve the task. Do not wrap in markdown fences or explanations.\n';
   if (body.image) user += 'The question has an image attached, but it was not passed as text.\n';
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
@@ -471,14 +500,45 @@ async function handleAgent(req, res) {
   if (answerObj.error) {
     return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: String(answerObj.error).slice(0, 160) });
   }
-  const answer = String(answerObj.answer || '').trim();
-  if (!answer) {
+  let rawAns = answerObj.answer;
+  if (Array.isArray(rawAns)) {
+    rawAns = rawAns.map((x) => String(x == null ? '' : x)).join(' | ');
+  } else if (rawAns && typeof rawAns === 'object') {
+    rawAns = Object.values(rawAns).map((x) => String(x == null ? '' : x)).join(' | ');
+  } else if (rawAns != null) {
+    rawAns = String(rawAns);
+  } else {
+    rawAns = '';
+  }
+  const answer = rawAns.trim();
+  if (answer === '') {
     return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
   }
-  /* the answer must be one of the options, character for character (after trimming): otherwise it is an error */
-  let picked = matchOption(answer, options);
-  if (options.length && !picked) {
-    return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
+  let cleanAnswer = answer.replace(/^```[a-z]*\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+  const parts = cleanAnswer.split('|').map((x) => x.trim()).filter(Boolean);
+  let picked = cleanAnswer;
+
+  if (Array.isArray(body.fields) && body.fields.length > 1) {
+    const matched = parts.map((part, i) => {
+      const f = body.fields[i];
+      if (f && f.kind === 'select' && Array.isArray(f.options)) {
+        return matchOption(part, f.options);
+      }
+      if (f && f.kind === 'place' && options.length) {
+        return matchOption(part, options);
+      }
+      return part;
+    });
+    if (matched.some((x) => x === null)) {
+      return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
+    }
+    picked = matched.join(' | ');
+  } else if (options.length) {
+    const matches = parts.map((part) => matchOption(part, options));
+    if (matches.some((xs) => xs === null)) {
+      return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
+    }
+    picked = matches.join(' | ');
   }
   return send(req, res, 200, {
     ok: true, code: 'ok', ms, answer: picked || answer,

@@ -215,13 +215,13 @@
   },
   "pageScripts": {
     "mse-ui": {
-      "bytes": 109230,
-      "sha256": "2d6ac1405862db52806a95c6ef6e920f8d1d2792e21afb12f31c4820abd5beb1",
+      "bytes": 113325,
+      "sha256": "0bc42709ef7f3a6a522631b7f18b7ebdfa7655c1d53c3c5e3b2c201e835bbaa7",
       "sanitizer": {
-        "comments": 83,
+        "comments": 84,
         "strings": 5,
         "templates": 0,
-        "regexps": 11,
+        "regexps": 12,
         "windowRefs": 0,
         "windowProps": 0
       }
@@ -267,12 +267,12 @@
     "scripts": 1,
     "headers": 1,
     "requires": 0,
-    "bytes": 1668333
+    "bytes": 1672428
   },
   "userscript": {
     "file": "Storage/artifacts/mse.user.js",
-    "bytes": 1672439,
-    "sha256": "2c5eca21dd0e7eaf514dc003e64ed5f164901b4698b40b44fa795165ca7ed095"
+    "bytes": 1676592,
+    "sha256": "d2089be07d96ea99da2b8e967235f5a6d27be2d7b21ba7a3399acffb7ef5f908"
   },
   "sanitizer": {
     "comments": 68,
