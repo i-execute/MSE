@@ -75,13 +75,13 @@ def home(snap: dict[str, Any], notice: str = "") -> Rich:
         row(button("tailscale", "tunnel:show", icon="tunnel"), button("services", "svc:show", icon="restart")),
         row(button("model", "model:show", icon="cpu"), button("quota", "quota:show", icon="chart")),
         row(button("config", "cfg:show", icon="settings"), button("log", "log:show", icon="logs")),
-        row(button("dumps", "dump:list", icon="logs")),
+        row(button("дампы/логи", "dump:all", icon="logs")),
         row(button("update", "upd:check", icon="update"), button("refresh", "home", icon="refresh")),
     ]
     subtitle = muted("Moodle answer panel " + SEP + " router, AI backend, tailscale, telegram")
     if not router_ok:
         subtitle = status_chip(False, "router is not answering") + " " + muted(SEP + " everything below may be stale")
-    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.7.0"), icon="bot")
+    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.8.0"), icon="bot")
 
 
 def _pending_list(devices: list[dict[str, Any]]) -> str:

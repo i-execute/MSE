@@ -373,6 +373,7 @@
           var image = holder && holder.querySelector('img');
           if (image) caption = image.getAttribute('alt') || ('image ' + (q.answers.length + 1));
         }
+        if (/^(очистить мой выбор|clear my choice)$/i.test(String(caption || '').trim())) continue;
         q.answers.push({ input: inp, kind: 'choice', text: caption, letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
       }
       /* selects: match, gapselect, cloze */
@@ -387,7 +388,7 @@
       for (var t2 = 0; t2 < texts.length; t2++) {
         var box = texts[t2];
         if (!/^q\d+:\d+_/.test(box.name || '')) continue;
-        if (/_:flagged|_:sequencecheck/.test(box.name)) continue;
+        if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(box.name)) continue;
         q.controls.push({ kind: 'text', node: box });
       }
       // ddwtos and friends keep their state in hidden inputs nobody can set for the user
@@ -497,10 +498,27 @@
       }
       var url = serviceUrl(q, meta);
       var params = {};
-      new URL(url).searchParams.forEach(function (value, key) { params[key] = value; });
+      try {
+        new URL(url).searchParams.forEach(function (value, key) { params[key] = value; });
+      } catch (_) {}
       var record = { questionIdentity: q.identity, request: { method: 'GET', url: url, params: params }, response: null };
       lastSyncRequest = record;
-      return fetch(url, { method: 'GET', headers: { accept: 'application/json' } }).then(function (r) {
+
+      var controller = typeof AbortController === 'function' ? new AbortController() : null;
+      var timer = null;
+      var timeoutPromise = new Promise(function (_, reject) {
+        timer = win.setTimeout(function () {
+          if (controller) try { controller.abort(); } catch (_) {}
+          reject(new Error('база не ответила'));
+        }, 10000);
+      });
+
+      var fetchPromise = fetch(url, {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+        signal: controller ? controller.signal : undefined
+      }).then(function (r) {
+        if (timer) { win.clearTimeout(timer); timer = null; }
         r.clone().text().then(function (raw) {
           var value; try { value = JSON.parse(raw); } catch (e) { value = raw; }
           record.response = { status: r.status, json: value };
@@ -522,10 +540,20 @@
           return json;
         });
       }, function (e) {
-        record.response = { error: (e && e.name) || 'network' };
+        if (timer) { win.clearTimeout(timer); timer = null; }
+        var isTimeout = e && (e.name === 'AbortError' || e.message === 'база не ответила');
+        var errText = isTimeout ? 'база не ответила' : 'no connection to the answer database';
+        record.response = { error: isTimeout ? 'timeout' : ((e && e.name) || 'network') };
         debugTraffic(record);
-        logAdd('answers', false, 'database offline: ' + ((e && e.message) || 'network'), { ms: Date.now() - started });
-        throw new Error('no connection to the answer database');
+        logAdd('answers', false, isTimeout ? 'база не ответила' : ('database offline: ' + ((e && e.message) || 'network')), { ms: Date.now() - started });
+        throw new Error(errText);
+      });
+
+      return Promise.race([fetchPromise, timeoutPromise]).catch(function (e) {
+        if (timer) { win.clearTimeout(timer); timer = null; }
+        var isTimeout = e && (e.name === 'AbortError' || e.message === 'база не ответила');
+        if (isTimeout) throw new Error('база не ответила');
+        throw e;
       });
     }
     function nameOfParam(k) {
@@ -1031,10 +1059,7 @@
           if (r.share != null) a.appendChild(el('span', 'pct', r.share + '%'));
           else if (r.count) a.appendChild(el('span', 'pct', r.count + '×'));
           if (r.agent) {
-            var tag = el('span', 'tag agent', 'агент');
-            var hid = el('span', 'mse-hidden', 'agent');
-            hid.style.display = 'none';
-            tag.appendChild(hid);
+            var tag = el('span', 'tag agent', 'agent');
             a.appendChild(tag);
           }
           if (r.correctness > 0) a.classList.add('lit');
@@ -1050,26 +1075,6 @@
         });
       }
       if (aiAllowed() && (!state.agent || state.agent.state !== 'ok')) appendAi(q);
-      var actions = el('div', 'frow');
-      actions.style.margin = '6px 0 0';
-      var snif = press(el('button', 'btn', 'Snif'), function () {
-        snifText = JSON.stringify(snifDump(), null, 2);
-        state.route = 'snif';
-        render();
-      });
-      snif.setAttribute('data-mse', 'snif');
-      snif.style.minHeight = '44px';
-      snif.style.minWidth = '100px';
-      actions.appendChild(snif);
-      if (!state.agent || state.agent.state !== 'error') {
-        var report = press(el('button', 'btn', 'Report'), function () {
-          reportCurrent(report);
-        });
-        report.setAttribute('data-mse', 'report');
-        report.style.minHeight = '44px';
-        actions.appendChild(report);
-      }
-      body.appendChild(N(actions, 1));
     }
 
     /* There is ONE way to ask the model: the agent route. This is its single button, drawn in the answer list;
@@ -1087,13 +1092,7 @@
       if (ai.state === 'error') {
         var errRow = el('div', 'row err-row');
         errRow.appendChild(el('span', 'dot bad'));
-        errRow.appendChild(el('span', 'txt', 'агент не ответил' + (ai.text ? ': ' + ai.text : '')));
-        var rep = press(el('button', 'btn sm', 'Report'), function (ev) {
-          if (ev) ev.stopPropagation();
-          reportCurrent(rep);
-        });
-        rep.setAttribute('data-mse', 'report');
-        errRow.appendChild(rep);
+        errRow.appendChild(el('span', 'txt', 'agent: ' + (ai.text || 'no response')));
         body.appendChild(N(errRow, 1));
         return;
       }
@@ -1126,6 +1125,38 @@
       return row;
     }
 
+    function downscaleDataUrl(dataUrl, maxDim) {
+      return new Promise(function (resolve) {
+        if (!win.Image || !doc.createElement) { resolve(dataUrl); return; }
+        var im = new win.Image();
+        im.onload = function () {
+          var w = im.naturalWidth || im.width;
+          var h = im.naturalHeight || im.height;
+          if (!w || !h || (w <= maxDim && h <= maxDim && dataUrl.length < 200000)) {
+            resolve(dataUrl);
+            return;
+          }
+          var scale = Math.min(maxDim / w, maxDim / h, 1);
+          var nw = Math.max(1, Math.round(w * scale));
+          var nh = Math.max(1, Math.round(h * scale));
+          try {
+            var canvas = doc.createElement('canvas');
+            canvas.width = nw;
+            canvas.height = nh;
+            var ctx = canvas.getContext('2d');
+            if (!ctx) { resolve(dataUrl); return; }
+            ctx.drawImage(im, 0, 0, nw, nh);
+            var resized = canvas.toDataURL('image/jpeg', 0.85);
+            resolve(resized && resized.length < dataUrl.length ? resized : dataUrl);
+          } catch (_) {
+            resolve(dataUrl);
+          }
+        };
+        im.onerror = function () { resolve(dataUrl); };
+        im.src = dataUrl;
+      });
+    }
+
     function questionImages(q) {
       var images = Array.prototype.slice.call(q.node.querySelectorAll('.qtext img, .answer img'));
       if (images.length > 5) return Promise.reject(new Error('too many images'));
@@ -1138,20 +1169,23 @@
             if (!response.ok) throw new Error('image unavailable');
             return response.blob();
           }).then(function (blob) {
-            if (blob.size > 120000) throw new Error('image too large');
+            if (blob.size > 2500000) throw new Error('image too large (>2.5MB)');
             return new Promise(function (resolve, reject) {
               var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); };
               reader.onerror = function () { reject(new Error('image unreadable')); }; reader.readAsDataURL(blob);
             });
           });
         })();
-        return source.then(function (data) {
-          if (!/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(data) || data.length > 160000) throw new Error('image format or size unsupported');
+        return source.then(function (rawUrl) {
+          return downscaleDataUrl(rawUrl, 1024);
+        }).then(function (data) {
+          if (!/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(data)) throw new Error('image format unsupported');
+          if (data.length > 800000) throw new Error('image too large (>512KB)');
           var related = q.answers.filter(function (a) { return a.input.parentNode && a.input.parentNode.contains(img); })[0];
           return {data:data, label:related ? 'option: ' + related.text : 'question image ' + (index+1)};
         });
       })).then(function (all) {
-        if (all.reduce(function (n, image) { return n + image.data.length; }, 0) > 180000) throw new Error('images too large');
+        if (all.reduce(function (n, image) { return n + image.data.length; }, 0) > 1500000) throw new Error('images too large (over 1.5MB total)');
         return all;
       });
     }
@@ -1441,25 +1475,44 @@
           }), 1));
         }
       }
-      var toggle = el('label', 'dbg-toggle press');
-      var debug = el('input'); debug.type = 'checkbox'; debug.checked = br.debugEnabled(); debug.setAttribute('data-mse', 'debug-mode');
-      var light = el('span', 'dbg-light' + (debug.checked ? ' on' : ''));
-      debug.addEventListener('change', function () {
-        br.setDebugEnabled(debug.checked);
-        if (debug.checked) {
+      var toggle = el('div', 'dbg-toggle press');
+      toggle.setAttribute('role', 'button');
+      toggle.setAttribute('tabindex', '0');
+      toggle.setAttribute('data-mse', 'debug-mode');
+      var isDbg = br.debugEnabled();
+      var light = el('span', 'dbg-light' + (isDbg ? ' on' : ''));
+      toggle.addEventListener('click', function () {
+        var next = !br.debugEnabled();
+        br.setDebugEnabled(next);
+        if (next) {
           light.classList.add('on');
           debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now() });
         } else {
           light.classList.remove('on');
         }
       });
-      toggle.appendChild(debug);
       toggle.appendChild(light);
       var dbgText = el('div', 'dbg-text');
       dbgText.appendChild(el('span', 'dbg-title', 'Debug mode'));
       dbgText.appendChild(el('span', 'dbg-sub', 'sends diagnostics to owner (may include personal data)'));
       toggle.appendChild(dbgText);
       body.appendChild(N(toggle, 1));
+
+      var actions = el('div', 'frow');
+      actions.style.margin = '8px 0 0';
+      var snif = press(el('button', 'btn', 'Snif'), function () {
+        snifText = JSON.stringify(snifDump(), null, 2);
+        state.route = 'snif';
+        render();
+      });
+      snif.setAttribute('data-mse', 'snif');
+      actions.appendChild(snif);
+      var report = press(el('button', 'btn', 'Report'), function () {
+        reportCurrent(report);
+      });
+      report.setAttribute('data-mse', 'report');
+      actions.appendChild(report);
+      body.appendChild(N(actions, 1));
     }
 
     /* ---------------- the network log ---------------- */
@@ -1545,6 +1598,23 @@
         method: formEl.getAttribute('method') || 'POST',
         elementsCount: formEl.elements ? formEl.elements.length : 0
       } : null;
+      var protocolView = q ? {
+        page: null,
+        question: q.text,
+        question_hash: String(q.identity || ''),
+        qtype: q.type,
+        options: (q.answers || []).map(function (a) { return a.text; }),
+        option_kinds: (q.answers || []).map(function (a) { return a.kind; }),
+        checked: (q.answers || []).map(function (a) { return !!a.checked; }),
+        selects: q.controls.filter(function (c) { return c.kind === 'select'; }).map(function (c) {
+          return { options: Array.prototype.map.call(c.node.options, function (o) { return o.text; }), value: c.node.value };
+        }),
+        text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) { return c.node.value || ''; }),
+        images: images.map(function (im) { return im.src; }),
+        question_image: images.length ? images[0].src : null,
+        buttons: Array.prototype.map.call(doc.querySelectorAll('input[type=submit], button[type=submit]'), function (b) { return (b.name || '') + '=' + (b.value || b.textContent || ''); }),
+        url: String(win.location.href)
+      } : null;
       return {
         schema: 'mse-snif-1', capturedAt: new Date().toISOString(),
         warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
@@ -1555,6 +1625,7 @@
         questions: questionsList,
         question: q ? { html: block.outerHTML, text: q.text, type: q.type, identity: q.identity,
           identityCalculation: questionIdentity.toString(), images: images, backgrounds: backgrounds, inputs: inputs } : null,
+        protocol: protocolView,
         requests: { syncshare: lastSyncRequest, agent: win.MSEBridge && win.MSEBridge.snifAgent ? win.MSEBridge.snifAgent() : null }
       };
     }
@@ -1599,7 +1670,7 @@
       var leading = 'info';
       if (state.route === 'answers' && state.question) {
         var idx = Array.prototype.indexOf.call(doc.querySelectorAll('.que'), state.question.node) + 1;
-        sub = 'question ' + (idx || 1);
+        sub = 'куэшон ' + (idx || 1);
       } else if (state.route === 'account') { sub = 'account'; }
       else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
       else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
@@ -1700,6 +1771,7 @@
             controls: controls()
           } : null,
           rows: state.rows,
+          loading: state.loading,
           error: state.error,
           agent: state.agent,
           /* one name for the outside: the agent's answer, whichever row drew it */

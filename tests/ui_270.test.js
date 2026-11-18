@@ -79,16 +79,14 @@ test('2.7.0 UI acceptance: A1, A2, A4, A5, A6, A8, and sniffer debug schema', { 
     const copiedKey = await page.evaluate(() => window.__copied);
     assert.equal(copiedKey, rawKey, 'A8: full device key is copied to clipboard, not masked key');
 
-    // 4. A5: Debug mode switch with light indicator
+    // 4. A5: Debug mode switch with light indicator (monochrome dot, no checkbox)
     await page.evaluate(() => window.__mse.route('gateway'));
     await page.waitForFunction(() => window.__mse.route() === 'gateway');
     const debugLight = await page.evaluate(() => {
       const toggle = window.__mse.root().querySelector('.dbg-toggle');
       const light = toggle.querySelector('.dbg-light');
-      const input = toggle.querySelector('input[data-mse="debug-mode"]');
       const before = light.classList.contains('on');
-      input.checked = true;
-      input.dispatchEvent(new Event('change', { bubbles: true }));
+      toggle.click();
       const after = light.classList.contains('on');
       return { before, after, text: toggle.textContent };
     });
@@ -122,9 +120,15 @@ test('2.7.0 UI acceptance: A1, A2, A4, A5, A6, A8, and sniffer debug schema', { 
     });
     assert.ok(inputChecked, 'A2: Moodle radio input is checked');
 
-    // 6. Sniffer schema captures full questions structure
-    const dumpData = await page.evaluate(() => {
+    // 6. UI1: Snif and Report are removed from main view, and located in gateway/settings
+    const mainHasSnif = await page.evaluate(() => {
       window.__mse.open();
+      return !!window.__mse.root().querySelector('[data-mse="snif"]');
+    });
+    assert.equal(mainHasSnif, false, 'UI1: Snif is not in answers view');
+
+    await page.evaluate(() => {
+      window.__mse.route('gateway');
       const snifBtn = window.__mse.root().querySelector('[data-mse="snif"]');
       snifBtn.click();
     });

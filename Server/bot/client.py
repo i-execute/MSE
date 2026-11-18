@@ -44,6 +44,9 @@ class Gateway:
     def acknowledge_dump(self, dump_id: str) -> dict[str, Any]:
         return self._call("POST", "/admin/dump-notifications/ack", {"id": dump_id})
 
+    def server_log(self) -> dict[str, Any]:
+        return self._call("GET", "/admin/log")
+
     # ------------------------------------------------------------------ plumbing
     def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         data = json.dumps(body).encode("utf-8") if body is not None else None

@@ -2,7 +2,7 @@
 // @name         MSE
 // @name:ru      MSE — Moodle Solver Extension
 // @namespace    https://github.com/mse
-// @version      2.7.0
+// @version      2.8.0
 // @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @description Answers and hints for Moodle quizzes: the MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @author       MSE
@@ -3644,7 +3644,7 @@ var __ssW=window,__msePageWindow=window;
   }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
 
    
-  var CSS = ":host,*{box-sizing:border-box}\n/\* MSE theme: black and white, nothing else.\n   The panel is a sheet of dark glass over a page we do not own: one paper, one rule, one ink, one accent.\n   The accent is white — a border that lights up — so no hue is ever introduced by us. *\/\n.mse{\n  --paper:#0a0a0a;--paper-2:#111111;--paper-3:#161616;\n  --ink:#f2f2f2;--ink-2:#c8c8c8;--muted:#8a8a8a;\n  --rule:#2a2a2a;--rule-2:#3a3a3a;--rule-3:#4d4d4d;\n  --accent:#ffffff;--accent-soft:rgba(255,255,255,.14);--accent-line:rgba(255,255,255,.6);\n  --r:10px;--r-panel:14px;--pill:999px;\n  --ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);\n  --sp-1:4px;--sp-2:8px;--sp-3:12px;\n  font:13px/1.4 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif;\n  color:var(--ink);-webkit-font-smoothing:antialiased;\n}\n\n/\* ---------- the pill: tiny, quiet; only the letters carry any light ---------- *\/\n.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;\n  height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);\n  background:var(--paper-2);border:1px solid var(--rule-2);color:var(--ink);\n  font:700 10.5px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.16em;text-indent:.16em;\n  text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);\n  cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;\n  transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}\n.pill.dragging{opacity:.9}\n.pill:active{transform:scale(.97)}\n.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;\n  background:var(--accent);color:#000;font:700 9px/14px -apple-system,sans-serif;text-align:center;text-indent:0;text-shadow:none}\n.pill.lit{animation:pill-press .9s linear}\n@keyframes pill-press{\n  0%,100%{text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);border-color:var(--rule-2)}\n  8%{text-shadow:0 0 12px rgba(255,255,255,.95),0 0 26px rgba(255,255,255,.5);border-color:var(--accent-line)}\n  40%{text-shadow:0 0 10px rgba(255,255,255,.62),0 0 20px rgba(255,255,255,.3);border-color:var(--rule-2)}}\n\n/\* ---------- the press: a white edge that flashes and goes down slowly, no colour, no fill ---------- *\/\n.press{position:relative;isolation:isolate}\n.press::before,.press::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;\n  opacity:0;transition:opacity .2s var(--ease-out)}\n.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 0 1px rgba(255,255,255,.85),0 0 14px 2px rgba(255,255,255,.22)}\n.press::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px rgba(255,255,255,.28)}\n.press.hot{animation:press-light 1.5s linear forwards}\n@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}\n  4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}\n  18%{--press:.5;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.28}74%{--press:.12}to{--press:0}}\n.press.hot::before{opacity:var(--press)}\n.press.hot::after{opacity:calc(var(--press) * .9)}\n/\* the chosen row: a hairline that stays, no glow, no colour *\/\n.press.lit{border-color:var(--accent-line)!important}\n.press.lit::before{opacity:.5}\n.press.lit::after{opacity:.2}\n.press:active{transform:scale(.99)}\n\n/\* ---------- the panel ---------- *\/\n.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:290px;max-width:calc(100vw - 16px);\n  background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r-panel);\n  box-shadow:0 18px 48px rgba(0,0,0,.7);overflow:hidden;\n  transform-origin:var(--ox,100%) var(--oy,100%);\n  opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);\n  transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}\n.pop.in{opacity:1;transform:none;filter:none}\n.pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}\n.pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}\n@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}\n\n/\* the head: the name, the view, buttons, mini status bar — compact, no empty margins *\/\n.ph{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--rule)}\n.ph .t{flex:1 1 auto;min-width:0;font:700 11px/1 -apple-system,sans-serif;letter-spacing:.14em;\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:none}\n.ph .t em{font:400 10px/1 -apple-system,sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none;display:block;margin-top:3px}\n.ph .model-chip{flex:0 1 auto;min-width:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n  padding:3px 6px;border:1px solid rgba(255,255,255,.17);border-radius:7px;color:var(--ink-2);\n  font:500 9px/1.15 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.01em;\n  text-shadow:0 0 5px rgba(255,255,255,.55),0 0 11px rgba(255,255,255,.24);box-shadow:0 0 7px rgba(255,255,255,.08)}\n.mini-status{display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:6px;\n  background:transparent;border:1px solid transparent;cursor:pointer;\n  font:500 9.5px/1 -apple-system,sans-serif;color:var(--muted);\n  transition:border-color .18s var(--ease),color .18s var(--ease);flex:0 0 auto}\n.mini-status:hover{border-color:var(--rule-2);color:var(--ink)}\n.mini-status .dot{width:5px;height:5px;border-radius:50%;background:var(--rule-3)}\n.mini-status .dot.ok{background:var(--accent);box-shadow:0 0 5px rgba(255,255,255,.6)}\n.mini-status .dot.warn,.mini-status .dot.bad{background:var(--muted)}\n.ib{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;\n  border-radius:8px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);\n  font:600 12.5px/1 Georgia,serif;cursor:pointer;transition:border-color .18s var(--ease),color .18s var(--ease)}\n.ib:hover{border-color:var(--rule-3);color:var(--ink)}\n.ib.x{font:400 14px/1 -apple-system,sans-serif}\n.ib.back{font:400 13px/1 -apple-system,sans-serif}\n\n/\* the body: compact and tight, sized to content *\/\n.pb{max-height:min(50vh,320px);overflow:auto;-webkit-overflow-scrolling:touch;padding:6px 8px}\n.pb::-webkit-scrollbar{width:0}\n.sec{font:700 9px/1 -apple-system,sans-serif;letter-spacing:.16em;color:var(--muted);margin:8px 0 4px}\n.sec:first-child{margin-top:0}\n.group{display:flex;flex-direction:column;gap:5px}\n.group + .sec{margin-top:8px}\n\n/\* ---------- answers: one row a tap wide, a box on the left, a letter, the text, the share ---------- *\/\n.ans{display:flex;align-items:center;gap:9px;width:100%;min-height:36px;margin:0;padding:8px 10px;\n  border-radius:var(--r);border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:400 12.5px/1.3 inherit;text-align:left;cursor:pointer;\n  transition:border-color .18s var(--ease),background .18s var(--ease)}\n.ans:hover{border-color:var(--rule-3)}\n.ans .mark{flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:1px solid var(--rule-3);\n  display:flex;align-items:center;justify-content:center;font:700 9px/1 inherit;color:#000;\n  transition:border-color .2s,box-shadow .2s}\n.ans.best .mark{border-color:var(--accent-line)}\n.ans.agent .mark,.mark.agent{background:var(--paper-3);border:1px solid rgba(255,255,255,.85)!important;\n  box-shadow:0 0 6px rgba(255,255,255,.7),0 0 12px rgba(255,255,255,.28)}\n.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}\n.ans .pct{flex:0 0 auto;font:600 10px/1 -apple-system,sans-serif;color:var(--muted)}\n.ans.agent,.ans.ai{border-style:dashed}\n.ans.ai.busy .lbl{color:var(--muted)}\n.tag{font:600 9px/1 -apple-system,sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:5px}\n.ans .tag.agent,.tag.agent{color:var(--ink);font-weight:700;letter-spacing:.14em;\n  text-shadow:0 0 6px rgba(255,255,255,.6),0 0 12px rgba(255,255,255,.25);opacity:1}\n\n/\* ---------- one status line, never a paragraph ---------- *\/\n.row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink-2);\n  font:400 11px/1.3 inherit;text-align:left;cursor:pointer;margin:5px 0 3px}\n.pb > .row:last-child{margin-bottom:0}\n.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--rule-3)}\n.row .dot.ok{background:var(--accent)}\n.row .dot.warn,.row .dot.bad{background:var(--muted)}\n.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.row .more{flex:0 0 auto;font-size:10px;color:var(--muted)}\n\n/\* ---------- controls and small buttons ---------- *\/\n.frow{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}\n.btn{flex:1 1 auto;min-width:0;height:32px;padding:0 10px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:600 11.5px/1 inherit;cursor:pointer;white-space:nowrap;\n  transition:border-color .18s var(--ease),color .18s var(--ease)}\n.btn:hover{border-color:var(--rule-3)}\n.btn.solid{background:transparent;color:var(--ink);border-color:var(--accent-line)}\n.btn.solid:hover{border-color:var(--accent)}\n.btn.sm{height:24px;padding:0 8px;font-size:10px;font-weight:600;border-radius:6px;flex:0 0 auto}\n.actions-row{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:4px 0 1px}\n.err-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;margin:4px 0 2px}\n.inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 10px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:12px/1 -apple-system,sans-serif;outline:none;margin:0 0 8px}\n.inp:focus{border-color:var(--accent-line)}\n\n/\* debug toggle: compact, full text, indicator light with white glow, no blue checkmark *\/\n.dbg-toggle{display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;margin:5px 0;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);cursor:pointer;position:relative}\n.dbg-native{position:absolute;opacity:0;width:0;height:0;pointer-events:none}\n.dbg-light{flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:var(--rule-2);border:1px solid var(--rule-3);\n  transition:background .2s,box-shadow .2s,border-color .2s}\n.dbg-light.on{background:var(--accent);border-color:#fff;\n  box-shadow:0 0 6px rgba(255,255,255,.85),0 0 12px rgba(255,255,255,.4)}\n.dbg-text{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}\n.dbg-title{font:600 11px/1.25 inherit;color:var(--ink)}\n.dbg-sub{font:400 9.5px/1.2 inherit;color:var(--muted);word-break:break-word}\n\n/\* compact status screen *\/\n.status-grid{display:flex;flex-direction:column;gap:5px;margin:3px 0 6px}\n.status-item{display:flex;align-items:center;justify-content:space-between;padding:6px 9px;border-radius:var(--r);\n  background:var(--paper-2);border:1px solid var(--rule);font-size:11px}\n.status-item .k{color:var(--muted);font-weight:500}\n.status-item .v{color:var(--ink);font-weight:600}\n\n/\* the copy value: a row that is a tap target, the key above the value *\/\n.val{display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;margin:0 0 6px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink);\n  font:400 11.5px/1.35 ui-monospace,Menlo,monospace;text-align:left;cursor:pointer}\n.val .k{flex:0 0 46px;font:600 9px/1.3 -apple-system,sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}\n.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}\n.val.human{font:400 11.5px/1.35 -apple-system,sans-serif}\n.val.human .v{overflow-wrap:break-word}\n.val .copy{flex:0 0 auto;font:600 9px/1 -apple-system,sans-serif;color:var(--muted);letter-spacing:.06em}\n.val[disabled]{opacity:.55;cursor:default}\n.models{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 10px}\n.chip{padding:4px 8px;border-radius:999px;border:1px solid var(--rule-2);background:var(--paper-2);\n  font:500 10px/1 ui-monospace,Menlo,monospace;color:var(--ink-2)}\n\n/\* ---------- the journal: lines with air, a mark on the left ---------- *\/\n.log{font:400 10px/1.4 ui-monospace,Menlo,monospace;color:var(--ink-2);display:flex;flex-direction:column;gap:2px}\n.log .ln{display:flex;gap:7px;padding:5px 0;border-bottom:1px solid var(--rule);word-break:break-word}\n.log .ln:last-child{border-bottom:0}\n.log .ln .g{flex:0 0 auto;width:5px;height:5px;margin-top:4px;border-radius:50%;background:var(--rule-3)}\n.log .ln.ok .g{background:var(--accent)}\n.log .ln.warn,.log .ln.bad{color:var(--muted)}\n.log .ln .t{flex:0 0 auto;color:var(--muted)}\n.log .ln .m{flex:1 1 auto;min-width:0}\n.empty{padding:6px 4px;text-align:center;color:var(--muted);font-size:11.5px;line-height:1.4}\n.spin{width:14px;height:14px;margin:8px auto;border-radius:50%;border:1.5px solid var(--rule-2);border-top-color:var(--ink);animation:sp .7s linear infinite}\n@keyframes sp{to{transform:rotate(360deg)}}\n.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:8px 12px;\n  border-radius:999px;background:var(--paper-3);border:1px solid var(--rule-3);color:var(--ink);\n  font:11.5px/1.3 inherit;text-align:center;opacity:0;pointer-events:none;\n  transition:opacity .2s,transform .2s;z-index:2147483647}\n.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}\n@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}\n";
+  var CSS = ":host,*{box-sizing:border-box}\n/\* MSE theme: black and white, nothing else.\n   The panel is a sheet of dark glass over a page we do not own: one paper, one rule, one ink, one accent.\n   The accent is white — a border that lights up — so no hue is ever introduced by us. *\/\n.mse{\n  --paper:#0a0a0a;--paper-2:#111111;--paper-3:#161616;\n  --ink:#f2f2f2;--ink-2:#c8c8c8;--muted:#8a8a8a;\n  --rule:#2a2a2a;--rule-2:#3a3a3a;--rule-3:#4d4d4d;\n  --accent:#ffffff;--accent-soft:rgba(255,255,255,.14);--accent-line:rgba(255,255,255,.6);\n  --r:10px;--r-panel:14px;--pill:999px;\n  --ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);\n  --sp-1:4px;--sp-2:8px;--sp-3:12px;\n  font:13px/1.4 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif;\n  color:var(--ink);-webkit-font-smoothing:antialiased;\n}\n\n/\* ---------- the pill: tiny, quiet; only the letters carry any light ---------- *\/\n.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;\n  height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);\n  background:var(--paper-2);border:1px solid var(--rule-2);color:var(--ink);\n  font:700 10.5px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.16em;text-indent:.16em;\n  text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);\n  cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;\n  transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}\n.pill.dragging{opacity:.9}\n.pill:active{transform:scale(.97)}\n.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;\n  background:var(--accent);color:#000;font:700 9px/14px -apple-system,sans-serif;text-align:center;text-indent:0;text-shadow:none}\n.pill.lit{animation:pill-press .9s linear}\n@keyframes pill-press{\n  0%,100%{text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);border-color:var(--rule-2)}\n  8%{text-shadow:0 0 12px rgba(255,255,255,.95),0 0 26px rgba(255,255,255,.5);border-color:var(--accent-line)}\n  40%{text-shadow:0 0 10px rgba(255,255,255,.62),0 0 20px rgba(255,255,255,.3);border-color:var(--rule-2)}}\n\n/\* ---------- the press: a white edge that flashes and goes down slowly, no colour, no fill ---------- *\/\n.press{position:relative;isolation:isolate}\n.press::before,.press::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;\n  opacity:0;transition:opacity .2s var(--ease-out)}\n.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 0 1px rgba(255,255,255,.85),0 0 14px 2px rgba(255,255,255,.22)}\n.press::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px rgba(255,255,255,.28)}\n.press.hot{animation:press-light 1.5s linear forwards}\n@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}\n  4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}\n  18%{--press:.5;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.28}74%{--press:.12}to{--press:0}}\n.press.hot::before{opacity:var(--press)}\n.press.hot::after{opacity:calc(var(--press) * .9)}\n/\* the chosen row: a hairline that stays, no glow, no colour *\/\n.press.lit{border-color:var(--accent-line)!important}\n.press.lit::before{opacity:.5}\n.press.lit::after{opacity:.2}\n.press:active{transform:scale(.99)}\n\n/\* ---------- the panel ---------- *\/\n.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:290px;max-width:calc(100vw - 16px);\n  background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r-panel);\n  box-shadow:0 18px 48px rgba(0,0,0,.7);overflow:hidden;\n  transform-origin:var(--ox,100%) var(--oy,100%);\n  opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);\n  transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}\n.pop.in{opacity:1;transform:none;filter:none}\n.pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}\n.pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}\n@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}\n\n/\* the head: the name, the view, buttons, mini status bar — compact, no empty margins *\/\n.ph{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--rule)}\n.ph .t{flex:1 1 auto;min-width:0;font:700 11px/1 -apple-system,sans-serif;letter-spacing:.14em;\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:none}\n.ph .t em{font:400 10px/1 -apple-system,sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none;display:block;margin-top:3px}\n.ph .model-chip{flex:0 1 auto;min-width:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n  padding:3px 6px;border:1px solid rgba(255,255,255,.17);border-radius:7px;color:var(--ink-2);\n  font:500 9px/1.15 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.01em;\n  text-shadow:0 0 5px rgba(255,255,255,.55),0 0 11px rgba(255,255,255,.24);box-shadow:0 0 7px rgba(255,255,255,.08)}\n.mini-status{display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:6px;\n  background:transparent;border:1px solid transparent;cursor:pointer;\n  font:500 9.5px/1 -apple-system,sans-serif;color:var(--muted);\n  transition:border-color .18s var(--ease),color .18s var(--ease);flex:0 0 auto}\n.mini-status:hover{border-color:var(--rule-2);color:var(--ink)}\n.mini-status .dot{width:5px;height:5px;border-radius:50%;background:var(--rule-3)}\n.mini-status .dot.ok{background:var(--accent);box-shadow:0 0 5px rgba(255,255,255,.6)}\n.mini-status .dot.warn,.mini-status .dot.bad{background:var(--muted)}\n.ib{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;\n  border-radius:8px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);\n  font:600 12.5px/1 Georgia,serif;cursor:pointer;transition:border-color .18s var(--ease),color .18s var(--ease)}\n.ib:hover{border-color:var(--rule-3);color:var(--ink)}\n.ib.x{font:400 14px/1 -apple-system,sans-serif}\n.ib.back{font:400 13px/1 -apple-system,sans-serif}\n\n/\* the body: compact and tight, sized to content *\/\n.pb{max-height:min(50vh,320px);overflow:auto;-webkit-overflow-scrolling:touch;padding:6px 8px}\n.pb::-webkit-scrollbar{width:0}\n.sec{font:700 9px/1 -apple-system,sans-serif;letter-spacing:.16em;color:var(--muted);margin:8px 0 4px}\n.sec:first-child{margin-top:0}\n.group{display:flex;flex-direction:column;gap:5px}\n.group + .sec{margin-top:8px}\n\n/\* ---------- answers: one row a tap wide, a box on the left, a letter, the text, the share ---------- *\/\n.ans{display:flex;align-items:center;gap:9px;width:100%;min-height:36px;margin:0;padding:8px 10px;\n  border-radius:var(--r);border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:400 12.5px/1.3 inherit;text-align:left;cursor:pointer;\n  transition:border-color .18s var(--ease),background .18s var(--ease)}\n.ans:hover{border-color:var(--rule-3)}\n.ans .mark{flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:1px solid var(--rule-3);\n  display:flex;align-items:center;justify-content:center;font:700 9px/1 inherit;color:#000;\n  transition:border-color .2s,box-shadow .2s}\n.ans.best .mark{border-color:var(--accent-line)}\n.ans.agent .mark,.mark.agent{background:var(--paper-3);border:1px solid rgba(255,255,255,.85)!important;\n  box-shadow:0 0 6px rgba(255,255,255,.7),0 0 12px rgba(255,255,255,.28)}\n.ans.agent .mark::after,.mark.agent::after{content:\"\";display:block;width:6px;height:6px;border-radius:50%;\n  background:var(--accent);box-shadow:0 0 5px rgba(255,255,255,.95),0 0 10px rgba(255,255,255,.6)}\n.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}\n.ans .pct{flex:0 0 auto;font:600 10px/1 -apple-system,sans-serif;color:var(--muted)}\n.ans.agent,.ans.ai{border-style:dashed}\n.ans.ai.busy .lbl{color:var(--muted)}\n.tag{font:600 9px/1 -apple-system,sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:5px}\n.ans .tag.agent,.tag.agent{color:var(--ink);font-weight:700;letter-spacing:.14em;\n  text-shadow:0 0 6px rgba(255,255,255,.6),0 0 12px rgba(255,255,255,.25);opacity:1}\n\n/\* ---------- one status line, never a paragraph ---------- *\/\n.row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink-2);\n  font:400 11px/1.3 inherit;text-align:left;cursor:pointer;margin:5px 0 3px}\n.pb > .row:last-child{margin-bottom:0}\n.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--rule-3)}\n.row .dot.ok{background:var(--accent)}\n.row .dot.warn,.row .dot.bad{background:var(--muted)}\n.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.row .more{flex:0 0 auto;font-size:10px;color:var(--muted)}\n\n/\* ---------- controls and small buttons ---------- *\/\n.frow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}\n.btn{flex:1 1 auto;min-width:0;height:32px;padding:0 10px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:600 11.5px/1 inherit;cursor:pointer;white-space:nowrap;\n  transition:border-color .18s var(--ease),color .18s var(--ease)}\n.btn:hover{border-color:var(--rule-3)}\n.btn.solid{background:transparent;color:var(--ink);border-color:var(--accent-line)}\n.btn.solid:hover{border-color:var(--accent)}\n.btn.sm{height:24px;padding:0 8px;font-size:10px;font-weight:600;border-radius:6px;flex:0 0 auto}\n.actions-row{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:4px 0 1px}\n.err-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;margin:4px 0 2px}\n.inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 10px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:12px/1 -apple-system,sans-serif;outline:none;margin:0 0 8px}\n.inp:focus{border-color:var(--accent-line)}\n\n/\* debug toggle: compact, full text, indicator light with white glow, no blue checkmark *\/\n.dbg-toggle{display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;margin:5px 0;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);cursor:pointer;position:relative}\n.dbg-native{position:absolute;opacity:0;width:0;height:0;pointer-events:none}\n.dbg-light{flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:var(--rule-2);border:1px solid var(--rule-3);\n  transition:background .2s,box-shadow .2s,border-color .2s}\n.dbg-light.on{background:var(--accent);border-color:#fff;\n  box-shadow:0 0 6px rgba(255,255,255,.85),0 0 12px rgba(255,255,255,.4)}\n.dbg-text{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}\n.dbg-title{font:600 11px/1.25 inherit;color:var(--ink)}\n.dbg-sub{font:400 9.5px/1.2 inherit;color:var(--muted);word-break:break-word}\n\n/\* compact status screen *\/\n.status-grid{display:flex;flex-direction:column;gap:5px;margin:3px 0 6px}\n.status-item{display:flex;align-items:center;justify-content:space-between;padding:6px 9px;border-radius:var(--r);\n  background:var(--paper-2);border:1px solid var(--rule);font-size:11px}\n.status-item .k{color:var(--muted);font-weight:500}\n.status-item .v{color:var(--ink);font-weight:600}\n\n/\* the copy value: a row that is a tap target, the key above the value *\/\n.val{display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;margin:0 0 6px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink);\n  font:400 11.5px/1.35 ui-monospace,Menlo,monospace;text-align:left;cursor:pointer}\n.val .k{flex:0 0 46px;font:600 9px/1.3 -apple-system,sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}\n.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}\n.val.human{font:400 11.5px/1.35 -apple-system,sans-serif}\n.val.human .v{overflow-wrap:break-word}\n.val .copy{flex:0 0 auto;font:600 9px/1 -apple-system,sans-serif;color:var(--muted);letter-spacing:.06em}\n.val[disabled]{opacity:.55;cursor:default}\n.models{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 10px}\n.chip{padding:4px 8px;border-radius:999px;border:1px solid var(--rule-2);background:var(--paper-2);\n  font:500 10px/1 ui-monospace,Menlo,monospace;color:var(--ink-2)}\n\n/\* ---------- the journal: lines with air, a mark on the left ---------- *\/\n.log{font:400 10px/1.4 ui-monospace,Menlo,monospace;color:var(--ink-2);display:flex;flex-direction:column;gap:2px}\n.log .ln{display:flex;gap:7px;padding:5px 0;border-bottom:1px solid var(--rule);word-break:break-word}\n.log .ln:last-child{border-bottom:0}\n.log .ln .g{flex:0 0 auto;width:5px;height:5px;margin-top:4px;border-radius:50%;background:var(--rule-3)}\n.log .ln.ok .g{background:var(--accent)}\n.log .ln.warn,.log .ln.bad{color:var(--muted)}\n.log .ln .t{flex:0 0 auto;color:var(--muted)}\n.log .ln .m{flex:1 1 auto;min-width:0}\n.empty{padding:6px 4px;text-align:center;color:var(--muted);font-size:11.5px;line-height:1.4}\n.spin{width:14px;height:14px;margin:8px auto;border-radius:50%;border:1.5px solid var(--rule-2);border-top-color:var(--ink);animation:sp .7s linear infinite}\n@keyframes sp{to{transform:rotate(360deg)}}\n.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:8px 12px;\n  border-radius:999px;background:var(--paper-3);border:1px solid var(--rule-3);color:var(--ink);\n  font:11.5px/1.3 inherit;text-align:center;opacity:0;pointer-events:none;\n  transition:opacity .2s,transform .2s;z-index:2147483647}\n.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}\n@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}\n";
 
    
    
@@ -3973,6 +3973,7 @@ var __ssW=window,__msePageWindow=window;
           var image = holder && holder.querySelector('img');
           if (image) caption = image.getAttribute('alt') || ('image ' + (q.answers.length + 1));
         }
+        if (/^(очистить мой выбор|clear my choice)$/i.test(String(caption || '').trim())) continue;
         q.answers.push({ input: inp, kind: 'choice', text: caption, letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
       }
        
@@ -3987,7 +3988,7 @@ var __ssW=window,__msePageWindow=window;
       for (var t2 = 0; t2 < texts.length; t2++) {
         var box = texts[t2];
         if (!/^q\d+:\d+_/.test(box.name || '')) continue;
-        if (/_:flagged|_:sequencecheck/.test(box.name)) continue;
+        if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(box.name)) continue;
         q.controls.push({ kind: 'text', node: box });
       }
        
@@ -4097,10 +4098,27 @@ var __ssW=window,__msePageWindow=window;
       }
       var url = serviceUrl(q, meta);
       var params = {};
-      new URL(url).searchParams.forEach(function (value, key) { params[key] = value; });
+      try {
+        new URL(url).searchParams.forEach(function (value, key) { params[key] = value; });
+      } catch (_) {}
       var record = { questionIdentity: q.identity, request: { method: 'GET', url: url, params: params }, response: null };
       lastSyncRequest = record;
-      return fetch(url, { method: 'GET', headers: { accept: 'application/json' } }).then(function (r) {
+
+      var controller = typeof AbortController === 'function' ? new AbortController() : null;
+      var timer = null;
+      var timeoutPromise = new Promise(function (_, reject) {
+        timer = win.setTimeout(function () {
+          if (controller) try { controller.abort(); } catch (_) {}
+          reject(new Error('база не ответила'));
+        }, 10000);
+      });
+
+      var fetchPromise = fetch(url, {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+        signal: controller ? controller.signal : undefined
+      }).then(function (r) {
+        if (timer) { win.clearTimeout(timer); timer = null; }
         r.clone().text().then(function (raw) {
           var value; try { value = JSON.parse(raw); } catch (e) { value = raw; }
           record.response = { status: r.status, json: value };
@@ -4122,10 +4140,20 @@ var __ssW=window,__msePageWindow=window;
           return json;
         });
       }, function (e) {
-        record.response = { error: (e && e.name) || 'network' };
+        if (timer) { win.clearTimeout(timer); timer = null; }
+        var isTimeout = e && (e.name === 'AbortError' || e.message === 'база не ответила');
+        var errText = isTimeout ? 'база не ответила' : 'no connection to the answer database';
+        record.response = { error: isTimeout ? 'timeout' : ((e && e.name) || 'network') };
         debugTraffic(record);
-        logAdd('answers', false, 'database offline: ' + ((e && e.message) || 'network'), { ms: Date.now() - started });
-        throw new Error('no connection to the answer database');
+        logAdd('answers', false, isTimeout ? 'база не ответила' : ('database offline: ' + ((e && e.message) || 'network')), { ms: Date.now() - started });
+        throw new Error(errText);
+      });
+
+      return Promise.race([fetchPromise, timeoutPromise]).catch(function (e) {
+        if (timer) { win.clearTimeout(timer); timer = null; }
+        var isTimeout = e && (e.name === 'AbortError' || e.message === 'база не ответила');
+        if (isTimeout) throw new Error('база не ответила');
+        throw e;
       });
     }
     function nameOfParam(k) {
@@ -4626,10 +4654,7 @@ var __ssW=window,__msePageWindow=window;
           if (r.share != null) a.appendChild(el('span', 'pct', r.share + '%'));
           else if (r.count) a.appendChild(el('span', 'pct', r.count + '×'));
           if (r.agent) {
-            var tag = el('span', 'tag agent', 'агент');
-            var hid = el('span', 'mse-hidden', 'agent');
-            hid.style.display = 'none';
-            tag.appendChild(hid);
+            var tag = el('span', 'tag agent', 'agent');
             a.appendChild(tag);
           }
           if (r.correctness > 0) a.classList.add('lit');
@@ -4645,26 +4670,6 @@ var __ssW=window,__msePageWindow=window;
         });
       }
       if (aiAllowed() && (!state.agent || state.agent.state !== 'ok')) appendAi(q);
-      var actions = el('div', 'frow');
-      actions.style.margin = '6px 0 0';
-      var snif = press(el('button', 'btn', 'Snif'), function () {
-        snifText = JSON.stringify(snifDump(), null, 2);
-        state.route = 'snif';
-        render();
-      });
-      snif.setAttribute('data-mse', 'snif');
-      snif.style.minHeight = '44px';
-      snif.style.minWidth = '100px';
-      actions.appendChild(snif);
-      if (!state.agent || state.agent.state !== 'error') {
-        var report = press(el('button', 'btn', 'Report'), function () {
-          reportCurrent(report);
-        });
-        report.setAttribute('data-mse', 'report');
-        report.style.minHeight = '44px';
-        actions.appendChild(report);
-      }
-      body.appendChild(N(actions, 1));
     }
 
     
@@ -4682,13 +4687,7 @@ var __ssW=window,__msePageWindow=window;
       if (ai.state === 'error') {
         var errRow = el('div', 'row err-row');
         errRow.appendChild(el('span', 'dot bad'));
-        errRow.appendChild(el('span', 'txt', 'агент не ответил' + (ai.text ? ': ' + ai.text : '')));
-        var rep = press(el('button', 'btn sm', 'Report'), function (ev) {
-          if (ev) ev.stopPropagation();
-          reportCurrent(rep);
-        });
-        rep.setAttribute('data-mse', 'report');
-        errRow.appendChild(rep);
+        errRow.appendChild(el('span', 'txt', 'agent: ' + (ai.text || 'no response')));
         body.appendChild(N(errRow, 1));
         return;
       }
@@ -4721,6 +4720,38 @@ var __ssW=window,__msePageWindow=window;
       return row;
     }
 
+    function downscaleDataUrl(dataUrl, maxDim) {
+      return new Promise(function (resolve) {
+        if (!win.Image || !doc.createElement) { resolve(dataUrl); return; }
+        var im = new win.Image();
+        im.onload = function () {
+          var w = im.naturalWidth || im.width;
+          var h = im.naturalHeight || im.height;
+          if (!w || !h || (w <= maxDim && h <= maxDim && dataUrl.length < 200000)) {
+            resolve(dataUrl);
+            return;
+          }
+          var scale = Math.min(maxDim / w, maxDim / h, 1);
+          var nw = Math.max(1, Math.round(w * scale));
+          var nh = Math.max(1, Math.round(h * scale));
+          try {
+            var canvas = doc.createElement('canvas');
+            canvas.width = nw;
+            canvas.height = nh;
+            var ctx = canvas.getContext('2d');
+            if (!ctx) { resolve(dataUrl); return; }
+            ctx.drawImage(im, 0, 0, nw, nh);
+            var resized = canvas.toDataURL('image/jpeg', 0.85);
+            resolve(resized && resized.length < dataUrl.length ? resized : dataUrl);
+          } catch (_) {
+            resolve(dataUrl);
+          }
+        };
+        im.onerror = function () { resolve(dataUrl); };
+        im.src = dataUrl;
+      });
+    }
+
     function questionImages(q) {
       var images = Array.prototype.slice.call(q.node.querySelectorAll('.qtext img, .answer img'));
       if (images.length > 5) return Promise.reject(new Error('too many images'));
@@ -4733,20 +4764,23 @@ var __ssW=window,__msePageWindow=window;
             if (!response.ok) throw new Error('image unavailable');
             return response.blob();
           }).then(function (blob) {
-            if (blob.size > 120000) throw new Error('image too large');
+            if (blob.size > 2500000) throw new Error('image too large (>2.5MB)');
             return new Promise(function (resolve, reject) {
               var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); };
               reader.onerror = function () { reject(new Error('image unreadable')); }; reader.readAsDataURL(blob);
             });
           });
         })();
-        return source.then(function (data) {
-          if (!/^data:image\x2F(png|jpeg|gif|webp);base64,[A-Za-z0-9+\x2F=]+$/i.test(data) || data.length > 160000) throw new Error('image format or size unsupported');
+        return source.then(function (rawUrl) {
+          return downscaleDataUrl(rawUrl, 1024);
+        }).then(function (data) {
+          if (!/^data:image\x2F(png|jpeg|gif|webp);base64,[A-Za-z0-9+\x2F=]+$/i.test(data)) throw new Error('image format unsupported');
+          if (data.length > 800000) throw new Error('image too large (>512KB)');
           var related = q.answers.filter(function (a) { return a.input.parentNode && a.input.parentNode.contains(img); })[0];
           return {data:data, label:related ? 'option: ' + related.text : 'question image ' + (index+1)};
         });
       })).then(function (all) {
-        if (all.reduce(function (n, image) { return n + image.data.length; }, 0) > 180000) throw new Error('images too large');
+        if (all.reduce(function (n, image) { return n + image.data.length; }, 0) > 1500000) throw new Error('images too large (over 1.5MB total)');
         return all;
       });
     }
@@ -5036,25 +5070,44 @@ var __ssW=window,__msePageWindow=window;
           }), 1));
         }
       }
-      var toggle = el('label', 'dbg-toggle press');
-      var debug = el('input'); debug.type = 'checkbox'; debug.checked = br.debugEnabled(); debug.setAttribute('data-mse', 'debug-mode');
-      var light = el('span', 'dbg-light' + (debug.checked ? ' on' : ''));
-      debug.addEventListener('change', function () {
-        br.setDebugEnabled(debug.checked);
-        if (debug.checked) {
+      var toggle = el('div', 'dbg-toggle press');
+      toggle.setAttribute('role', 'button');
+      toggle.setAttribute('tabindex', '0');
+      toggle.setAttribute('data-mse', 'debug-mode');
+      var isDbg = br.debugEnabled();
+      var light = el('span', 'dbg-light' + (isDbg ? ' on' : ''));
+      toggle.addEventListener('click', function () {
+        var next = !br.debugEnabled();
+        br.setDebugEnabled(next);
+        if (next) {
           light.classList.add('on');
           debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now() });
         } else {
           light.classList.remove('on');
         }
       });
-      toggle.appendChild(debug);
       toggle.appendChild(light);
       var dbgText = el('div', 'dbg-text');
       dbgText.appendChild(el('span', 'dbg-title', 'Debug mode'));
       dbgText.appendChild(el('span', 'dbg-sub', 'sends diagnostics to owner (may include personal data)'));
       toggle.appendChild(dbgText);
       body.appendChild(N(toggle, 1));
+
+      var actions = el('div', 'frow');
+      actions.style.margin = '8px 0 0';
+      var snif = press(el('button', 'btn', 'Snif'), function () {
+        snifText = JSON.stringify(snifDump(), null, 2);
+        state.route = 'snif';
+        render();
+      });
+      snif.setAttribute('data-mse', 'snif');
+      actions.appendChild(snif);
+      var report = press(el('button', 'btn', 'Report'), function () {
+        reportCurrent(report);
+      });
+      report.setAttribute('data-mse', 'report');
+      actions.appendChild(report);
+      body.appendChild(N(actions, 1));
     }
 
      
@@ -5140,6 +5193,23 @@ var __ssW=window,__msePageWindow=window;
         method: formEl.getAttribute('method') || 'POST',
         elementsCount: formEl.elements ? formEl.elements.length : 0
       } : null;
+      var protocolView = q ? {
+        page: null,
+        question: q.text,
+        question_hash: String(q.identity || ''),
+        qtype: q.type,
+        options: (q.answers || []).map(function (a) { return a.text; }),
+        option_kinds: (q.answers || []).map(function (a) { return a.kind; }),
+        checked: (q.answers || []).map(function (a) { return !!a.checked; }),
+        selects: q.controls.filter(function (c) { return c.kind === 'select'; }).map(function (c) {
+          return { options: Array.prototype.map.call(c.node.options, function (o) { return o.text; }), value: c.node.value };
+        }),
+        text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) { return c.node.value || ''; }),
+        images: images.map(function (im) { return im.src; }),
+        question_image: images.length ? images[0].src : null,
+        buttons: Array.prototype.map.call(doc.querySelectorAll('input[type=submit], button[type=submit]'), function (b) { return (b.name || '') + '=' + (b.value || b.textContent || ''); }),
+        url: String(win.location.href)
+      } : null;
       return {
         schema: 'mse-snif-1', capturedAt: new Date().toISOString(),
         warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
@@ -5150,6 +5220,7 @@ var __ssW=window,__msePageWindow=window;
         questions: questionsList,
         question: q ? { html: block.outerHTML, text: q.text, type: q.type, identity: q.identity,
           identityCalculation: questionIdentity.toString(), images: images, backgrounds: backgrounds, inputs: inputs } : null,
+        protocol: protocolView,
         requests: { syncshare: lastSyncRequest, agent: win.MSEBridge && win.MSEBridge.snifAgent ? win.MSEBridge.snifAgent() : null }
       };
     }
@@ -5194,7 +5265,7 @@ var __ssW=window,__msePageWindow=window;
       var leading = 'info';
       if (state.route === 'answers' && state.question) {
         var idx = Array.prototype.indexOf.call(doc.querySelectorAll('.que'), state.question.node) + 1;
-        sub = 'question ' + (idx || 1);
+        sub = 'куэшон ' + (idx || 1);
       } else if (state.route === 'account') { sub = 'account'; }
       else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
       else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
@@ -5295,6 +5366,7 @@ var __ssW=window,__msePageWindow=window;
             controls: controls()
           } : null,
           rows: state.rows,
+          loading: state.loading,
           error: state.error,
           agent: state.agent,
            

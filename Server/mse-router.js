@@ -47,7 +47,7 @@ process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
 process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
 const PORT = Number(process.env.MSE_PORT);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.7.0';
+const VERSION = '2.8.0';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
 const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
@@ -246,12 +246,51 @@ function quotaOf(rec) {
   if (rec.quotaDay !== day()) { rec.quotaDay = day(); rec.quotaUsed = 0; }
   return Math.max(0, CFG.dailyQuota - (rec.quotaUsed || 0));
 }
+
+const LOG_FILE = path.join(DATA_DIR, 'mse-router.log');
+const MAX_LOG_SIZE = 5 * 1024 * 1024;
+
+function rotateLogIfNeeded() {
+  try {
+    if (fs.existsSync(LOG_FILE)) {
+      const stats = fs.statSync(LOG_FILE);
+      if (stats.size > MAX_LOG_SIZE) {
+        const log2 = LOG_FILE + '.2';
+        const log1 = LOG_FILE + '.1';
+        if (fs.existsSync(log1)) {
+          try { fs.renameSync(log1, log2); } catch (_) {}
+        }
+        try { fs.renameSync(LOG_FILE, log1); } catch (_) {}
+      }
+    }
+  } catch (_) {}
+}
+
+function serverLog(level, event, message, meta) {
+  const at = new Date().toISOString();
+  const lvl = String(level || 'info').toUpperCase();
+  const metaObj = meta && typeof meta === 'object' ? meta : {};
+  const metaParts = Object.entries(metaObj)
+    .filter(([_, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`)
+    .join(' ');
+  const line = `[${at}] [${lvl}] [${event}] ${message}${metaParts ? ' ' + metaParts : ''}\n`;
+  rotateLogIfNeeded();
+  try {
+    fs.appendFileSync(LOG_FILE, line, { encoding: 'utf8', mode: 0o640 });
+  } catch (_) {}
+  if (lvl === 'WARN' || lvl === 'ERROR') {
+    process.stderr.write(line);
+  }
+}
+
 function note(text, rec) {
   const line = { at: new Date().toISOString(), text };
   if (rec) { line.deviceId = rec.deviceId; line.moodleId = rec.moodleId; }
   state.log.push(line);
   if (state.log.length > 500) state.log = state.log.slice(-400);
   saveState();
+  serverLog('info', 'event', text, rec ? { deviceId: rec.deviceId, moodleId: rec.moodleId } : null);
 }
 function isAdmin(req) {
   const t = String(req.headers['x-admin-token'] || req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -487,9 +526,16 @@ function buildAgentPrompt(body) {
   if (Number(body.textCount) > 1) user += 'Give one value for each of the ' + Math.min(20, Number(body.textCount)) + ' text fields, in order, joined by |.\n';
   const images = Array.isArray(body.image) ? body.image : [];
   if (images.length) {
-    const content = [{type:'text', text:user}];
-    images.forEach((image) => { content.push({type:'text', text:String(image.label || 'image').slice(0,200)}); content.push({type:'image_url', image_url:{url:image.data}}); });
-    return [{role:'system', content:system}, {role:'user', content}];
+    const content = [];
+    images.forEach((image) => {
+      content.push({ type: 'image_url', image_url: { url: image.data } });
+    });
+    content.push({
+      type: 'text',
+      text: 'Attached image(s) for this question are provided above.\n' + user
+    });
+    const imageSystem = system + ' Attached image(s) are provided in the user message. You MUST inspect the image(s) to determine the answer.';
+    return [{ role: 'system', content: imageSystem }, { role: 'user', content }];
   }
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
@@ -555,12 +601,21 @@ async function handleAgent(req, res, rec) {
   const left = quotaOf(rec);
   res.setHeader('x-quota-left', String(left));
   if (left <= 0) {
+    serverLog('warn', 'rate_limit', 'daily quota used up', {
+      deviceId: rec.deviceId, moodleId: rec.moodleId, quotaUsed: rec.quotaUsed, quotaLimit: CFG.dailyQuota
+    });
     res.setHeader('retry-after', '60');
     return send(req, res, 429, { ok: false, code: 'rate_limited', retry_after: 60, message: 'the daily quota is used up' });
   }
-  const body = parseJson(await readBody(req, 256 * 1024));
-  if (!body || !body.question) return oaiError(req, res, 400, 'question is required', 'bad_request');
-  if (body.image && (!Array.isArray(body.image) || body.image.length > 5 || body.image.some((x) => !x || !/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(String(x.data || ''))) || body.image.reduce((n,x) => n + String(x.data).length, 0) > 180000)) return oaiError(req, res, 400, 'image format or size unsupported', 'bad_image');
+  const body = parseJson(await readBody(req, 4 * 1024 * 1024));
+  if (!body || !body.question) {
+    serverLog('warn', 'agent_bad_request', 'question is required', { deviceId: rec.deviceId });
+    return oaiError(req, res, 400, 'question is required', 'bad_request');
+  }
+  if (body.image && (!Array.isArray(body.image) || body.image.length > 5 || body.image.some((x) => !x || !/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(String(x.data || ''))) || body.image.reduce((n,x) => n + String(x.data).length, 0) > 1500000)) {
+    serverLog('warn', 'agent_bad_image', 'image format or size unsupported', { deviceId: rec.deviceId });
+    return oaiError(req, res, 400, 'image format or size unsupported', 'bad_image');
+  }
   const candidateModels = getCandidateModels(CFG.model);
   if (!candidateModels.length) return send(req, res, 503, { ok: false, code: 'no_model', retry_after: 5, message: 'the backend offered no model yet' });
 
@@ -586,47 +641,91 @@ async function handleAgent(req, res, rec) {
 
   let up = null;
   let chosenModel = candidateModels[0];
+  let answerObj = null;
+  let parsed = null;
+  let prose = '';
+
   for (let ci = 0; ci < candidateModels.length; ci++) {
     chosenModel = candidateModels[ci];
     payload.model = chosenModel;
     up = await upstreamJson('POST', '/v1/chat/completions', payload, onContent);
     if (up && up.status === 503 && ci + 1 < candidateModels.length) {
+      serverLog('warn', 'model_503', 'model ' + chosenModel + ' 503 -> fallback to ' + candidateModels[ci + 1], { deviceId: rec.deviceId });
       note('agent model ' + chosenModel + ' 503 → fallback to ' + candidateModels[ci + 1], rec);
       continue;
+    }
+    if (up && up.status >= 200 && up.status < 300) {
+      parsed = parseJson(up.text);
+      if (parsed && parsed.choices && parsed.choices[0]) {
+        prose = String((parsed.choices[0].message || {}).content || '');
+        answerObj = extractJson(prose);
+        const noImageMsg = (answerObj && answerObj.error && /no image|cannot see (the )?image|no figure/i.test(answerObj.error)) ||
+          (answerObj && answerObj.answer && /no image provided|cannot see (the )?image|no image was provided|no figure provided/i.test(answerObj.answer)) ||
+          (!answerObj && /no image provided|cannot see (the )?image|no image was provided|no figure provided/i.test(prose));
+        if (noImageMsg && body.image && body.image.length) {
+          serverLog('warn', 'agent_no_image', 'model ' + chosenModel + ' missed image', { deviceId: rec.deviceId });
+          if (ci + 1 < candidateModels.length) {
+            note('model ' + chosenModel + ' missed image -> fallback to ' + candidateModels[ci + 1], rec);
+            continue;
+          }
+        }
+      }
     }
     break;
   }
   const ms = now() - started;
   if (!up.status) {
+    serverLog('error', 'backend_unreachable', 'model unavailable: ' + (up.error || 'network'), { deviceId: rec.deviceId, model: chosenModel });
     if (!streaming) res.setHeader('retry-after', '5');
     return reply(502, { ok: false, code: 'upstream_down', retry_after: 5, message: 'the model is unavailable: ' + (up.error || 'network') });
   }
   if (up.status === 429) {
+    serverLog('warn', 'model_rate_limit', 'upstream 429', { deviceId: rec.deviceId, model: chosenModel });
     if (!streaming) res.setHeader('retry-after', '5');
     return reply(429, { ok: false, code: 'rate_limited', retry_after: 5, message: 'the model rate-limited the call' });
   }
   if (up.status >= 500) {
+    serverLog('error', 'model_5xx', 'upstream ' + up.status, { deviceId: rec.deviceId, model: chosenModel });
     if (!streaming) res.setHeader('retry-after', '5');
     return reply(503, { ok: false, code: 'model_unavailable', retry_after: 5, message: 'model unavailable, try another model' });
   }
   if (up.status < 200 || up.status >= 300) {
+    serverLog('error', 'upstream_error', 'upstream ' + up.status, { deviceId: rec.deviceId, model: chosenModel });
     return reply(502, { ok: false, code: 'upstream_error', message: 'AI backend rejected the request (HTTP ' + up.status + ')' });
   }
-  const parsed = parseJson(up.text);
+  if (!parsed) parsed = parseJson(up.text);
   if (!parsed || !parsed.choices || !parsed.choices[0]) {
+    serverLog('error', 'upstream_bad', 'unexpected format', { deviceId: rec.deviceId, model: chosenModel });
     return reply(502, { ok: false, code: 'upstream_bad', retry_after: 5, message: 'the model answered in an unexpected format' });
   }
-  const prose = String((parsed.choices[0].message || {}).content || '');
-  const answerObj = extractJson(prose);
+  if (!prose) prose = String((parsed.choices[0].message || {}).content || '');
+  if (!answerObj) answerObj = extractJson(prose);
   const options = Array.isArray(body.options) ? body.options : [];
-  if (!answerObj) return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent could not parse the task', raw: prose.slice(0, 200) });
-  if (answerObj.error) return reply(200, { ok: false, code: 'agent_error', ms, message: String(answerObj.error).slice(0, 160) });
+  if (!answerObj) {
+    serverLog('warn', 'agent_parse_error', 'could not parse JSON', { deviceId: rec.deviceId, raw: prose.slice(0, 100) });
+    return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent could not parse the task', raw: prose.slice(0, 200) });
+  }
+  if (answerObj.error) {
+    serverLog('warn', 'agent_error', String(answerObj.error).slice(0, 100), { deviceId: rec.deviceId });
+    return reply(200, { ok: false, code: 'agent_error', ms, message: String(answerObj.error).slice(0, 160) });
+  }
   const answer = String(answerObj.answer || '').trim();
-  if (!answer) return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
+  if (!answer) {
+    serverLog('warn', 'agent_error', 'no option picked', { deviceId: rec.deviceId });
+    return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
+  }
+  const noImageMsg = (answer && /no image provided|cannot see (the )?image|no image was provided|no figure provided/i.test(answer));
+  if (noImageMsg && body.image && body.image.length) {
+    serverLog('warn', 'agent_no_image_refusal', 'model claimed no image was provided', { deviceId: rec.deviceId, model: chosenModel });
+    return reply(200, { ok: false, code: 'agent_error', ms, message: 'the model reported no image was provided' });
+  }
   const parts = answer.split('|').map((x) => x.trim()).filter(Boolean);
   let picked = answer;
   if (Array.isArray(body.selects) && body.selects.length) {
-    if (parts.length !== body.selects.length) return reply(200, {ok:false, code:'agent_error', ms, message:'wrong number of dropdown answers'});
+    if (parts.length !== body.selects.length) {
+      serverLog('warn', 'agent_error', 'wrong number of dropdown answers', { deviceId: rec.deviceId });
+      return reply(200, {ok:false, code:'agent_error', ms, message:'wrong number of dropdown answers'});
+    }
     const matches = body.selects.map((group,i) => {
       if (!Array.isArray(group)) return [];
       const part = parts[i];
@@ -638,10 +737,16 @@ async function handleAgent(req, res, rec) {
       }
       return [];
     });
-    if (matches.some((xs) => xs.length !== 1)) return reply(200, {ok:false, code:'agent_error', ms, message:'dropdown answer not in the task'});
+    if (matches.some((xs) => xs.length !== 1)) {
+      serverLog('warn', 'agent_error', 'dropdown answer not in the task', { deviceId: rec.deviceId });
+      return reply(200, {ok:false, code:'agent_error', ms, message:'dropdown answer not in the task'});
+    }
     picked = matches.map((xs) => xs[0]).join(' | ');
   } else if (options.length) {
-    if (!body.multiple && parts.length !== 1) return reply(200, {ok:false, code:'agent_error', ms, message:'agent picked multiple options'});
+    if (!body.multiple && parts.length !== 1) {
+      serverLog('warn', 'agent_error', 'agent picked multiple options', { deviceId: rec.deviceId });
+      return reply(200, {ok:false, code:'agent_error', ms, message:'agent picked multiple options'});
+    }
     const matches = parts.map((part) => {
       let m = options.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
       if (m.length === 1) return m;
@@ -651,11 +756,16 @@ async function handleAgent(req, res, rec) {
       }
       return [];
     });
-    if (matches.some((xs) => xs.length !== 1)) return reply(200, {ok:false, code:'agent_error', ms, message:'the agent named an option that is not in the task', answer});
+    if (matches.some((xs) => xs.length !== 1)) {
+      serverLog('warn', 'agent_error', 'option not in task: ' + answer, { deviceId: rec.deviceId });
+      return reply(200, {ok:false, code:'agent_error', ms, message:'the agent named an option that is not in the task', answer});
+    }
     picked = matches.map((xs) => xs[0]).join(' | ');
   } else if (Number(body.textCount) > 1 && parts.length !== Number(body.textCount)) {
+    serverLog('warn', 'agent_error', 'wrong number of text answers', { deviceId: rec.deviceId });
     return reply(200, {ok:false, code:'agent_error', ms, message:'wrong number of text answers'});
   }
+  serverLog('info', 'agent_ok', 'agent answered', { deviceId: rec.deviceId, model: chosenModel, ms });
   return reply(200, {
     ok: true, code: 'ok', ms, answer: picked || answer,
     confidence: typeof answerObj.confidence === 'number' ? answerObj.confidence : null,
@@ -683,6 +793,13 @@ async function handleAdmin(req, res, url) {
   if (/^\/admin\/dumps\/[a-f0-9]{32}$/.test(url.pathname) && req.method === 'GET') {
     const item = dumps.get(DATA_DIR, url.pathname.split('/').pop());
     return item ? send(req, res, 200, { ok: true, dump: item }) : oaiError(req, res, 404, 'dump not found', 'not_found');
+  }
+  if (url.pathname === '/admin/log' && req.method === 'GET') {
+    let logContent = '';
+    try {
+      if (fs.existsSync(LOG_FILE)) logContent = fs.readFileSync(LOG_FILE, 'utf8');
+    } catch (_) {}
+    return send(req, res, 200, { ok: true, journal: state.log, log: logContent });
   }
   if (url.pathname === '/admin/state' && req.method === 'GET') {
     return send(req, res, 200, {
@@ -726,9 +843,15 @@ async function handleAdmin(req, res, url) {
     const revoke = url.pathname === '/admin/revoke';
     rec.status = revoke ? 'revoked' : 'active';
     if (revoke) rec.banned = true; else delete rec.banned;
+    if (!revoke && rec.moodleId) {
+      const mId = String(rec.moodleId).trim();
+      if (mId && !state.allow.some((a) => String(a.moodleId) === mId)) {
+        state.allow.push({ moodleId: mId, name: String(rec.name || '').trim().slice(0, 120), added: now() });
+      }
+    }
     saveState();
     note((revoke ? 'revoke ' : 'approve ') + deviceId, rec);
-    return send(req, res, 200, { ok: true, device: publicDevice(rec) });
+    return send(req, res, 200, { ok: true, device: publicDevice(rec), allow: state.allow });
   }
   if (url.pathname === '/admin/disallow') {
     const moodleId = String(body.moodleId || '').trim();
@@ -822,34 +945,54 @@ const handler = async (req, res) => {
        the bug that answered "not found: /mse/v1/agent" on every question that had options */
     if (url.pathname === '/mse/v1/dump' && req.method === 'POST') {
       const key = keyOf(req), rec = deviceByKey(key);
-      if (!rec) return oaiError(req, res, 401, 'unknown key', 'invalid_key');
-      if (rec.status !== 'active') return oaiError(req, res, 403, 'device is ' + rec.status, 'device_' + rec.status);
+      if (!rec) {
+        serverLog('warn', 'invalid_key', 'dump rejected: unknown key', { ip: req.socket && req.socket.remoteAddress });
+        return oaiError(req, res, 401, 'unknown key', 'invalid_key');
+      }
+      if (rec.status !== 'active') {
+        serverLog('warn', 'device_forbidden', 'dump rejected: device is ' + rec.status, { deviceId: rec.deviceId, status: rec.status });
+        return oaiError(req, res, 403, 'device is ' + rec.status, 'device_' + rec.status);
+      }
       const body = parseJson(await readBody(req, 4 * 1024 * 1024));
       if (!body || !['report', 'debug'].includes(body.type) || !body.dump || typeof body.dump !== 'object')
         return oaiError(req, res, 400, 'type and dump required', 'bad_dump');
-      if (rec.dumpDay !== day()) { rec.dumpDay = day(); rec.dumpUsed = 0; }
-      if ((rec.dumpUsed || 0) >= 50) return oaiError(req, res, 429, 'dump quota reached', 'dump_quota');
       const meta = dumps.store(DATA_DIR, rec, body.type, body.dump, key);
-      rec.dumpUsed = (rec.dumpUsed || 0) + 1; rec.seen = now();
+      rec.seen = now();
       state.dumpNotifications.push(meta);
       if (state.dumpNotifications.length > 100) state.dumpNotifications.splice(0, state.dumpNotifications.length - 100);
       saveStateNow();
+      serverLog('info', 'dump_received', 'dump stored', { deviceId: rec.deviceId, moodleId: rec.moodleId, type: body.type, dumpId: meta.id });
       return send(req, res, 201, {ok:true, id:meta.id, truncated:meta.truncated});
     }
     if (url.pathname === '/mse/v1/agent' && req.method === 'POST') {
       const rec = deviceByKey(keyOf(req));
-      if (!rec) return oaiError(req, res, 401, 'unknown key: register the device first', 'invalid_key');
-      if (rec.status !== 'active') return oaiError(req, res, 403, 'device is ' + rec.status, 'device_' + rec.status);
+      if (!rec) {
+        serverLog('warn', 'invalid_key', 'agent rejected: unknown key', { path: url.pathname, ip: req.socket && req.socket.remoteAddress });
+        return oaiError(req, res, 401, 'unknown key: register the device first', 'invalid_key');
+      }
+      if (rec.status !== 'active') {
+        serverLog('warn', 'device_forbidden', 'agent rejected: device is ' + rec.status, { deviceId: rec.deviceId, status: rec.status });
+        return oaiError(req, res, 403, 'device is ' + rec.status, 'device_' + rec.status);
+      }
       return await handleAgent(req, res, rec);
     }
     /* everything else is the model: same rule as above — nobody without an active key gets through */
     const key = keyOf(req);
     const rec = deviceByKey(key);
-    if (!rec) return oaiError(req, res, 401, 'unknown key: register the device first', 'invalid_key');
-    if (rec.status !== 'active') return oaiError(req, res, 403, 'device is ' + rec.status, 'device_' + rec.status);
+    if (!rec) {
+      serverLog('warn', 'invalid_key', 'chat rejected: unknown key', { path: url.pathname, ip: req.socket && req.socket.remoteAddress });
+      return oaiError(req, res, 401, 'unknown key: register the device first', 'invalid_key');
+    }
+    if (rec.status !== 'active') {
+      serverLog('warn', 'device_forbidden', 'chat rejected: device is ' + rec.status, { deviceId: rec.deviceId, status: rec.status });
+      return oaiError(req, res, 403, 'device is ' + rec.status, 'device_' + rec.status);
+    }
     const left = quotaOf(rec);
     res.setHeader('x-quota-left', String(left));
     if (left <= 0) {
+      serverLog('warn', 'rate_limit', 'daily quota is over', {
+        deviceId: rec.deviceId, moodleId: rec.moodleId, quotaUsed: rec.quotaUsed, quotaLimit: CFG.dailyQuota
+      });
       res.setHeader('retry-after', '60');
       return oaiError(req, res, 429, 'daily quota is over', 'quota_exceeded');
     }

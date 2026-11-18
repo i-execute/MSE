@@ -31,6 +31,26 @@ from .client import Gateway, GatewayError, tunnel_do, tunnel_status
 
 log = logging.getLogger("mse.bot")
 
+ENV_FILE = os.environ.get("MSE_ENV_FILE", "/etc/mse/mse.env")
+
+def _load_env_fallback(path: str | None = None) -> None:
+    try:
+        p = Path(path or ENV_FILE)
+        if p.is_file():
+            for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or "=" not in stripped:
+                    continue
+                k, v = stripped.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if k not in os.environ:
+                    os.environ[k] = v
+    except Exception:
+        pass
+
+_load_env_fallback()
+
 GATEWAY_URL = os.environ.get("MSE_ADMIN_URL", "").rstrip("/") or ("http://127.0.0.1:" + os.environ.get("MSE_PORT", ""))
 ADMIN_TOKEN = os.environ.get("MSE_ADMIN_TOKEN", "")
 BOT_TOKEN = os.environ.get("MSE_BOT_TOKEN", "")
@@ -38,7 +58,6 @@ OWNER_ID = int(os.environ.get("MSE_OWNER_ID", "0") or 0)
 OWNER_USERNAME = os.environ.get("MSE_OWNER_USERNAME", "").lstrip("@").lower()
 TUNNEL_SCRIPT = os.environ.get("MSE_TUNNEL_SCRIPT", "/usr/local/bin/mse-tunnel.sh")
 GATEWAY_PORT = int(os.environ.get("MSE_PORT", "0") or 0)
-ENV_FILE = os.environ.get("MSE_ENV_FILE", "/etc/mse/mse.env")
 DATA_DIR = os.environ.get("MSE_DATA_DIR", os.environ.get("MSE_STATE_DIR", "/var/lib/mse"))
 SESSION_NAME = str(Path(DATA_DIR) / "mse-bot")   # goygram appends .vault: the session stays in the data directory
 INSTALL_SCRIPT = os.environ.get("MSE_INSTALL_SCRIPT", "/opt/mse/stack/install.sh")
@@ -324,15 +343,27 @@ class Bot:
             device = None
             if needle.isdigit():
                 device = await asyncio.to_thread(self.gw.device_of, needle)
+            else:
+                snap = await self.snap()
+                for d in snap.get("devices") or []:
+                    if str(d.get("deviceId") or "") == needle:
+                        device = d
+                        break
             if device is None:
                 await self.allow(chat_id, msg_id, needle)
                 return
             await asyncio.to_thread(self.gw.approve, str(device.get("deviceId")))
+            moodle_id = str(device.get("moodleId") or "")
+            if moodle_id and moodle_id.isdigit():
+                try:
+                    await asyncio.to_thread(self.gw.allow, moodle_id)
+                except Exception:
+                    pass
         except GatewayError as exc:
             await self.people(chat_id, msg_id, notice="")
             await self.deliver_raw(chat_id, "failed: " + exc.message)
             return
-        await self.people(chat_id, msg_id, notice="allowed")
+        await self.people(chat_id, msg_id, notice="allowed (device + Moodle id)")
 
     async def revoke(self, chat_id: int, msg_id: int, needle: str) -> None:
         needle = str(needle or "").strip()
@@ -605,6 +636,69 @@ class Bot:
                 raise GatewayError("Telegram rejected dump")
         await asyncio.to_thread(send_file)
 
+    async def send_all_dumps_and_logs(self, chat_id: int) -> None:
+        """Fetch all dumps and the server error/event log, package into a zip, and send to owner."""
+        target_chat = OWNER_ID or chat_id
+        if not target_chat or not BOT_TOKEN:
+            await self.deliver_raw(chat_id, "owner or bot token not configured")
+            return
+        import io
+        import zipfile
+
+        try:
+            dump_listing = await asyncio.to_thread(self.gw.dumps)
+            dump_items = dump_listing.get("dumps") or []
+        except Exception as exc:  # noqa: BLE001
+            log.warning("failed to fetch dumps list: %s", exc)
+            dump_items = []
+
+        try:
+            log_data = await asyncio.to_thread(self.gw.server_log)
+        except Exception:  # noqa: BLE001
+            log_data = {}
+
+        bio = io.BytesIO()
+        with zipfile.ZipFile(bio, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            server_log_txt = str(log_data.get("log") or "")
+            if server_log_txt:
+                zf.writestr("mse-router.log", server_log_txt.encode("utf-8"))
+            journal_txt = json.dumps(log_data.get("journal") or [], ensure_ascii=False, indent=2)
+            zf.writestr("journal.json", journal_txt.encode("utf-8"))
+
+            for item in dump_items:
+                d_id = str(item.get("id") or "")
+                if not d_id:
+                    continue
+                try:
+                    d_record = await asyncio.to_thread(self.gw.dump, d_id)
+                    d_content = json.dumps(d_record.get("dump") or d_record, ensure_ascii=False, indent=2).encode("utf-8")
+                    at_str = str(item.get("at") or "").replace(":", "-")
+                    filename = f"dumps/dump_{at_str}_{d_id[:8]}.json"
+                    zf.writestr(filename, d_content)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("failed to fetch dump %s: %s", d_id, exc)
+
+        zip_bytes = bio.getvalue()
+        def send_file() -> None:
+            boundary = "----mse" + uuid.uuid4().hex
+            prefix = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{target_chat}\r\n"
+                      f"--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"mse-dumps-logs.zip\"\r\n"
+                      "Content-Type: application/zip\r\n\r\n").encode()
+            payload = prefix + zip_bytes + f"\r\n--{boundary}--\r\n".encode()
+            req = urllib.request.Request("https://api.telegram.org/bot" + BOT_TOKEN + "/sendDocument", data=payload,
+                headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
+            with urllib.request.urlopen(req, timeout=45) as response:
+                result = json.load(response)
+            if not result.get("ok"):
+                raise GatewayError("Telegram rejected dump archive")
+
+        try:
+            await asyncio.to_thread(send_file)
+            await self.deliver_raw(chat_id, f"Архив отправлен: {len(dump_items)} дампов + журнал логов.")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("send_all_dumps_and_logs failed: %s", exc)
+            await self.deliver_raw(chat_id, f"Ошибка отправки архива: {exc}")
+
     # ------------------------------------------------------------------ callbacks
     async def on_callback(self, evt: object) -> None:
         if not is_owner(evt):
@@ -619,6 +713,9 @@ class Bot:
             if data in ("home", "") or head == "home":
                 await self.toast(evt, "refreshed")
                 await self.home(chat_id, msg_id)
+            elif data == "dump:all":
+                await self.toast(evt, "собираю дампы и логи…")
+                await self.send_all_dumps_and_logs(chat_id)
             elif data == "dump:list":
                 await self.toast(evt, "")
                 await self.show_dumps(chat_id, msg_id)
@@ -713,31 +810,17 @@ class Bot:
             log.warning("callback %s failed: %s", data, exc)
             await self.toast(evt, "error: " + str(exc)[:120], alert=True)
 
-    # ------------------------------------------------------------------ new applications
+    # ------------------------------------------------------------------ background watch
     async def watch_applications(self) -> None:
-        """Polls the router for people who knocked and nobody answered yet, and pings the owner about each one."""
-        if not OWNER_ID:
-            log.info("no MSE_OWNER_ID: the application watch is off")
-            return
+        """Background health watcher. Does NOT spam the owner with unprompted notifications."""
         while True:
             try:
-                res = await asyncio.to_thread(self.gw.applications, True)
-                for item in res.get("applications") or []:
-                    await self.announce(item)
-                pending_dumps = await asyncio.to_thread(self.gw.dump_notifications)
-                for item in pending_dumps.get("notifications") or []:
-                    rich = screens.screen("new dump", ui.muted(str(item.get("type") or "?") + " · " + str(item.get("at") or "?")),
-                        [ui.facts([("Moodle id", ui.code(item.get("moodleId") or "?")),
-                                   ("device", ui.code(item.get("deviceId") or "?"))], icon="bell")],
-                        [ui.row(ui.button("get dump", "dump:get:" + str(item.get("id") or ""), icon="logs"))], icon="bell")
-                    delivered = await self.render(OWNER_ID, 0, rich)
-                    if delivered:
-                        await asyncio.to_thread(self.gw.acknowledge_dump, str(item.get("id") or ""))
+                await asyncio.sleep(max(3.0, PING_EVERY))
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001
                 log.debug("application watch: %s", exc)
-            await asyncio.sleep(max(3.0, PING_EVERY))
+                await asyncio.sleep(max(3.0, PING_EVERY))
 
     async def announce(self, item: dict[str, Any]) -> None:
         moodle_id = str(item.get("moodleId") or "?")
@@ -766,7 +849,7 @@ class Bot:
         try:
             await self.render(OWNER_ID, 0, rich)
         except Exception as exc:  # noqa: BLE001
-            log.debug("announce failed: %s", exc)
+            log.warning("announce failed: %s", exc)
 
     # ------------------------------------------------------------------ run
     def build(self) -> GoyGram:
@@ -893,12 +976,8 @@ class Bot:
             log.debug("the owner was not told: %s", exc)
 
     async def notify_start(self) -> None:
-        if not OWNER_ID:
-            return
-        try:
-            await self.home(OWNER_ID, 0)
-        except Exception as exc:  # noqa: BLE001
-            log.debug("start notice failed: %s", exc)
+        # Quiet start by design: bot sends no unprompted notifications
+        return
 
 
 def main() -> int:

@@ -1,5 +1,5 @@
 {
-  "version": "2.7.0",
+  "version": "2.8.0",
   "brand": "MSE",
   "base": "2.22.0",
   "bundles": {
@@ -215,8 +215,8 @@
   },
   "pageScripts": {
     "mse-ui": {
-      "bytes": 87052,
-      "sha256": "8a5c62a3a7c06de03fea935fe0fc2b2af9ca013eb323dd5438ce8775a770c8ed",
+      "bytes": 90587,
+      "sha256": "9448cd3f07b904e927946a1c2a571015e99b66a2262a570761c665909daad279",
       "sanitizer": {
         "comments": 80,
         "strings": 3,
@@ -267,12 +267,12 @@
     "scripts": 1,
     "headers": 1,
     "requires": 0,
-    "bytes": 1643060
+    "bytes": 1646595
   },
   "userscript": {
     "file": "Storage/artifacts/mse.user.js",
-    "bytes": 1647171,
-    "sha256": "22856f231bca297b9aa4b273f9a797249c5b926d1cbf05c61827a1b90dd96bf6"
+    "bytes": 1650793,
+    "sha256": "9623fc6dd11d1d327415683479da407af45ba4c58ad56ce1405b3fcc82ac4c08"
   },
   "sanitizer": {
     "comments": 68,
