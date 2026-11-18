@@ -26,8 +26,7 @@ The bind probe cannot reserve a port until services start, so another process co
 A new application is queued (`/admin/applications`), and the bot drains that queue to ping the owner in Telegram.
 
 Flags: none of this is meant to be typed by hand on a fresh machine — `Storage/get.sh` installs everything and
-`sudo mse` is the panel. The full brief for an agent that brings it up is in `AGENT-TASK.md`.
-
+`sudo mse` is the panel. 
 `mse-server.js` is the older 1.0 gateway (no proxying); the tests keep it working as a reference.
 
 
