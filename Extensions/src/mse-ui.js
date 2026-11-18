@@ -44,6 +44,7 @@
     shortanswer: { label: 'short answer', kind: 'text' },
     numerical: { label: 'number', kind: 'text' },
     match: { label: 'matching', kind: 'select' },
+    matching: { label: 'matching', kind: 'select' },
     gapselect: { label: 'choose from a list', kind: 'select' },
     multianswer: { label: 'nested questions', kind: 'select' },
     gapfill: { label: 'gaps', kind: 'text' },
@@ -62,6 +63,28 @@
     essay: 'essay',
     description: 'description (not a question)'
   };
+
+  /* Layer 1 schema registry: questions conforming to constructor specification */
+  var LAYER_1_TYPES = [
+    'multichoice',
+    'truefalse',
+    'shortanswer',
+    'numerical',
+    'essay',
+    'matching',
+    'match',
+    'multianswer',
+    'ddwtos',
+    'ddmarker',
+    'ddimageortext',
+    'dragdrop',
+    'calculated',
+    'calculatedmulti',
+    'calculatedsimple',
+    'multichoiceset',
+    'gapselect',
+    'gapfill'
+  ];
 
   function boot() {
     var win = window;
@@ -328,7 +351,9 @@
         if (m) return m[1];
       }
       var m2 = /^question-(\d+)-/.exec(block.id || '');
-      return m2 ? null : null;
+      if (m2) return m2[1];
+      var m3 = /(?:^|-)(?:q|question-?)(\d+)(?:-|$)/i.exec(block.id || '');
+      return m3 ? m3[1] : null;
     }
 
     function readQuestion(block) {
@@ -744,7 +769,7 @@
       agent: null,             /* { state: 'idle'|'running'|'ok'|'error'|'retry', text, retryIn } */
       agentTimer: null,
       gw: { busy: null, probe: null, models: null, check: null, reg: null },
-      gatewayModel: null, modelEpoch: 0,
+      gatewayModel: ls.get('mse.gateway.lastModel', null), modelEpoch: 0,
       ai: null,                /* { state: 'idle'|'running'|'ok'|'error', text, model } — the AI row, owner tier only */
       tier: null,              /* 'base' | 'owner' — base sees only their answer service, owner also the AI row */
       t0: 0
@@ -862,17 +887,22 @@
         lead = press(el('button', 'ib settings-btn'), function () { state.route = state.route === 'account' ? 'answers' : 'account'; render(); });
         lead.setAttribute('aria-label', 'settings');
         lead.setAttribute('data-mse', 'settings-gear');
-        lead.innerHTML = '<svg class="gear-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
+        lead.innerHTML = '<span style="display:none">i</span><svg class="gear-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
       }
       h.appendChild(lead);
       var t = el('div', 't', titleText);
       if (sub) t.appendChild(el('em', '', sub));
       h.appendChild(t);
-      if (state.gatewayModel) {
-        var chip = el('span', 'model-chip', state.gatewayModel);
+      var br = win.MSEBridge;
+      var brMeta = br && br.meta && br.meta();
+      var activeKey = state.tier === 'owner' || (brMeta && (brMeta.status === 'active' || (brMeta.device && brMeta.device.status === 'active'))) || (state.gw && state.gw.check && state.gw.check.state === 'active') || (br && br.cachedCheck && br.cachedCheck() && br.cachedCheck().state === 'active');
+      var displayModel = state.gatewayModel || ls.get('mse.gateway.lastModel');
+      var showChip = displayModel && br && br.url() && (activeKey || state.route === 'gateway');
+      if (showChip) {
+        var chip = el('span', 'model-chip', displayModel);
         chip.setAttribute('data-mse', 'model-chip');
-        chip.setAttribute('title', state.gatewayModel);
-        chip.setAttribute('aria-label', 'AI model: ' + state.gatewayModel);
+        chip.setAttribute('title', displayModel);
+        chip.setAttribute('aria-label', 'AI model: ' + displayModel);
         h.appendChild(chip);
       }
       var mini = el('button', 'mini-status');
@@ -1055,8 +1085,10 @@
           var mark = el('span', 'mark' + (r.agent ? ' agent' : ''));
           a.appendChild(mark);
           a.appendChild(el('span', 'lbl', r.label));
-          if (r.share != null) a.appendChild(el('span', 'pct', r.share + '%'));
-          else if (r.count) a.appendChild(el('span', 'pct', r.count + '×'));
+          if (!r.agent) {
+            if (r.share != null) a.appendChild(el('span', 'pct', r.share + '%'));
+            else if (r.count) a.appendChild(el('span', 'pct', r.count + '×'));
+          }
           if (r.agent) {
             var tag = el('span', 'tag agent', 'agent');
             a.appendChild(tag);
@@ -1221,7 +1253,11 @@
         var ms = Date.now() - t0;
         if (res.ok && res.answer) {
           logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
-          if (typeof res.model === 'string' && res.model.trim()) { state.modelEpoch++; state.gatewayModel = res.model.trim(); }
+          if (typeof res.model === 'string' && res.model.trim()) {
+            state.modelEpoch++;
+            state.gatewayModel = res.model.trim();
+            ls.set('mse.gateway.lastModel', res.model.trim());
+          }
           state.agent = { state: 'ok', answer: res.answer };
           var existing = (state.rows || []).find(function (r) { return r.label === res.answer; });
           if (existing) {
@@ -1376,15 +1412,27 @@
       var devId = (meta && meta.device) || (win.MSEBridge && win.MSEBridge.deviceId ? win.MSEBridge.deviceId() : '');
       body.appendChild(N(valueRow('device', devId, !!devId, false, devId), 1));
       body.appendChild(N(valueRow('key', win.MSEBridge ? win.MSEBridge.maskedKey() : null, !!key, false, key), 1));
-      var st = state.gw.check || (win.MSEBridge && win.MSEBridge.cachedCheck ? win.MSEBridge.cachedCheck() : null);
       var line = el('div', 'row');
+      var gearSvg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      gearSvg.setAttribute('class', 'gear-icon');
+      gearSvg.setAttribute('width', '14');
+      gearSvg.setAttribute('height', '14');
+      gearSvg.setAttribute('viewBox', '0 0 24 24');
+      gearSvg.innerHTML = '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>';
+      line.appendChild(gearSvg);
+      line.appendChild(el('span', 'txt', 'gateway settings'));
+      var st = state.gw.check || (win.MSEBridge && win.MSEBridge.cachedCheck ? win.MSEBridge.cachedCheck() : null);
       var good = st && st.state === 'active';
-      line.appendChild(el('span', 'dot ' + (good ? 'ok' : st ? 'warn' : '')));
-      line.appendChild(el('span', 'txt', good ? 'key accepted' : (st && st.message ? st.message : 'settings')));
-      line.appendChild(el('span', 'more', 'open'));
+      line.appendChild(el('span', 'more', good ? 'active' : 'open'));
       body.appendChild(N(press(line, function () { state.route = 'gateway'; render(); }), 1));
       var net = el('div', 'row');
-      net.appendChild(el('span', 'dot'));
+      var netIcon = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      netIcon.setAttribute('class', 'log-icon');
+      netIcon.setAttribute('width', '14');
+      netIcon.setAttribute('height', '14');
+      netIcon.setAttribute('viewBox', '0 0 24 24');
+      netIcon.innerHTML = '<line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line>';
+      net.appendChild(netIcon);
       net.appendChild(el('span', 'txt', 'network log'));
       net.appendChild(el('span', 'more', 'open'));
       body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
@@ -1397,9 +1445,17 @@
       var epoch = ++state.modelEpoch;
       br.probe(url).then(function (r) {
         if (epoch !== state.modelEpoch || br.url() !== url) return;
-        state.gatewayModel = r.ok && typeof r.model === 'string' && r.model.trim() ? r.model.trim() : null;
+        state.gatewayModel = (r.ok || r.mine) && typeof r.model === 'string' && r.model.trim() ? r.model.trim() : null;
+        if (!state.gatewayModel) { ls.set('mse.gateway.lastModel', ''); }
+        else { ls.set('mse.gateway.lastModel', state.gatewayModel); }
         render();
-      }, function () { if (epoch === state.modelEpoch && br.url() === url) { state.gatewayModel = null; render(); } });
+      }, function () {
+        if (epoch === state.modelEpoch && br.url() === url) {
+          state.gatewayModel = null;
+          ls.set('mse.gateway.lastModel', '');
+          render();
+        }
+      });
     }
 
     function checkGateway(raw) {
@@ -1409,24 +1465,43 @@
       var epoch = ++state.modelEpoch;
       gw.busy = 'check';
       gw.probe = null;
-      gw.models = null;
       render();
       return br.probe(raw).then(function (r) {
         gw.probe = r;
-        if (!r.ok) { if (epoch === state.modelEpoch && raw === br.url()) state.gatewayModel = null; gw.busy = null; logAdd('gateway', false, 'AI gateway: ' + r.message); render(); return null; }
-        if (epoch === state.modelEpoch) { state.gatewayModel = typeof r.model === 'string' && r.model.trim() ? r.model.trim() : null; render(); }
-        /* the new address replaces the old one in every store before anything else can read it */
+        if (!r.mine && !r.ok) {
+          if (epoch === state.modelEpoch && raw === br.url()) state.gatewayModel = null;
+          gw.busy = null;
+          logAdd('gateway', false, 'AI gateway: ' + r.message);
+          render();
+          return null;
+        }
         br.setUrl(raw);
-        (br.audit ? br.audit() : Promise.resolve({ strays: [] })).then(function (audit) {
-          var cleared = br.cleared ? br.cleared() : [];
-          if (audit && audit.strays.length) logAdd('gateway', false, 'the old address is still in ' + audit.strays.length + ' place(s)');
-          else if (cleared.length) logAdd('gateway', true, 'the old address was cleared from ' + cleared.length + ' place(s)');
-        }, function () {});
-        /* the address answers: now ask it what it accepts and whether this key is welcome */
-        return br.check().then(function (res) {
+        logAdd('gateway', true, 'AI gateway is up' + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
+        if (epoch === state.modelEpoch && r.model) {
+          state.gatewayModel = r.model;
+          ls.set('mse.gateway.lastModel', r.model);
+        }
+        var id = identity();
+        return br.check(id.id).then(function (res) {
+          if (res.state === 'unregistered') {
+            return br.register(id).then(function () {
+              return br.check(id.id);
+            }, function (e) {
+              logAdd('gateway', false, 'integration: ' + (e && e.message || 'error'));
+              return res;
+            });
+          }
+          return res;
+        }).then(function (res) {
           gw.check = res;
           gw.busy = null;
-          logAdd('gateway', res.state === 'active', 'AI gateway is up' + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
+          if (res.state === 'active') {
+            refreshTier();
+            if (epoch === state.modelEpoch) {
+              state.gatewayModel = typeof r.model === 'string' && r.model.trim() ? r.model.trim() : (ls.get('mse.gateway.lastModel') || null);
+            }
+          }
+          logAdd('gateway', res.state === 'active', (res.message || res.state) + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
           render();
           return r;
         });
@@ -1452,7 +1527,6 @@
       input.spellcheck = false;
       input.placeholder = 'https://…';
       input.value = br.url() || '';
-      /* a typed address is not used until it is checked: the saved one is the only one that counts */
       input.addEventListener('input', function () {
         var typed = String(input.value || '').trim().replace(/\/+$/, '');
         var saved = br.url() || '';
@@ -1462,22 +1536,27 @@
       body.appendChild(N(el('div', 'sec', 'connection'), 0));
       var frow = el('div', 'frow');
       body.appendChild(N(frow, 0));
-      var check = press(el('button', 'btn solid', gw.busy ? 'checking…' : 'check'), function () {
+      var checkLabel = gw.busy === 'check' ? 'checking…'
+        : ((gw.check && gw.check.state === 'active') ? 'active'
+        : ((gw.check && gw.check.state === 'pending') ? 'waiting'
+        : ((gw.check && gw.check.state === 'revoked') ? 'denied' : 'check')));
+      var check = press(el('button', 'btn solid press', checkLabel), function () {
         return checkGateway(String(input.value || '').trim());
       });
+      check.setAttribute('data-mse', 'gateway-check');
       frow.appendChild(check);
-      if (gw.busy === 'check') check.textContent = 'checking…';
 
       var isDbg = br.debugEnabled();
-      var dbgBtn = press(el('button', 'btn dbg-toggle' + (isDbg ? ' on' : ''), 'DEBG'), function () {
+      var dbgBtn = el('button', 'btn dbg-toggle press' + (isDbg ? ' on' : ''), 'DEBG');
+      dbgBtn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        flash(dbgBtn);
         var next = !br.debugEnabled();
         br.setDebugEnabled(next);
-        if (next) {
-          dbgBtn.classList.add('on');
-          debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now() });
-        } else {
-          dbgBtn.classList.remove('on');
-        }
+        dbgBtn.classList.toggle('on', next);
+        var curLight = dbgBtn.querySelector('.dbg-light');
+        if (curLight) curLight.classList.toggle('on', next);
+        if (next) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
       });
       dbgBtn.setAttribute('data-mse', 'debug-mode');
       dbgBtn.setAttribute('title', 'Debug mode: sends diagnostics to owner');
@@ -1502,25 +1581,6 @@
         body.appendChild(N(el('div', 'sec', 'status'), 0));
         body.appendChild(N(statusRow, 1));
       }
-
-      var integBtn = press(el('button', 'btn', 'Integrate request'), function () {
-        gw.busy = 'reg';
-        render();
-        br.register(identity()).then(function () {
-          return br.check();
-        }).then(function (res) {
-          gw.check = res;
-          gw.busy = null;
-          logAdd('gateway', res.state === 'active', 'integration: ' + res.state);
-          render();
-        }, function (e) {
-          gw.busy = null;
-          logAdd('gateway', false, 'integration: ' + (e && e.message || 'error'));
-          render();
-        });
-      });
-      integBtn.setAttribute('data-mse', 'integrate-request');
-      body.appendChild(N(integBtn, 1));
     }
 
     /* ---------------- the network log ---------------- */
@@ -1537,22 +1597,24 @@
       });
       body.appendChild(N(box, 1));
       var frow = el('div', 'frow');
-      var copy = press(el('button', 'btn solid', 'Copy'), function () {
+      var copy = press(el('button', 'btn solid press', 'Copy'), function () {
         var lines = log.map(function (l) {
           return new Date(l.t).toISOString() + ' [' + l.kind + '] ' + (l.ok ? 'OK' : 'FAIL') + ': ' + l.text + (l.ms != null ? ' (' + l.ms + ' ms)' : '');
         });
         var text = lines.join('\n');
         if (win.MSEBridge) {
-          win.MSEBridge.copy(text).then(function (ok) { toast(ok ? 'log copied' : 'copy failed'); });
+          win.MSEBridge.copy(text).then(function (ok) {
+            flash(copy);
+            toast(ok ? 'log copied' : 'copy failed');
+          });
         }
       });
-      copy.setAttribute('data-mse', 'log-copy');
-      var clear = press(el('button', 'btn', 'clear'), function () {
+      copy.setAttribute('data-mse', 'copy-log');
+      frow.appendChild(copy);
+      var clear = press(el('button', 'btn press', 'Clear'), function () {
         log = [];
-        logAdd('answers', true, 'log cleared');
         render();
       });
-      frow.appendChild(copy);
       frow.appendChild(clear);
       body.appendChild(N(frow, 1));
     }
@@ -1606,6 +1668,34 @@
         method: formEl.getAttribute('method') || 'POST',
         elementsCount: formEl.elements ? formEl.elements.length : 0
       } : null;
+      var constructorData = q ? {
+        qtype: q.type,
+        stem: q.text,
+        options: (q.answers || []).map(function (a) { return a.text; }),
+        option_letters: (q.answers || []).map(function (a) { return a.letter; }),
+        checked: (q.answers || []).map(function (a) { return !!a.checked; }),
+        single: q.type === 'multichoice' || q.type === 'truefalse',
+        subquestions: [],
+        selects: q.controls.filter(function (c) { return c.kind === 'select'; }).map(function (c) {
+          var sel = c.node;
+          var parentRow = sel.closest('tr, .r0, .r1, .form-group, div');
+          var promptText = parentRow ? textOf(parentRow.querySelector('.text, label, p') || parentRow) : '';
+          return {
+            name: sel.name || '',
+            prompt: promptText,
+            options: Array.prototype.map.call(sel.options, function (o) { return o.text.trim(); }).filter(Boolean),
+            value: sel.value,
+            selected: (sel.selectedOptions && sel.selectedOptions[0]) ? sel.selectedOptions[0].text.trim() : ''
+          };
+        }),
+        text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) {
+          return { name: c.node.name || '', value: c.node.value || '', placeholder: c.node.placeholder || '' };
+        }),
+        images: images.map(function (im) { return { src: im.src, alt: im.alt || '' }; }),
+        drags: Array.prototype.map.call(block ? block.querySelectorAll('.draghomes .drag, .drags .drag') : [], function (d) { return textOf(d); }),
+        places: (q.controls.filter(function (c) { return c.kind === 'places'; })[0] || {}).count || 0
+      } : null;
+
       var protocolView = q ? {
         page: null,
         question: q.text,
@@ -1620,10 +1710,11 @@
         text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) { return c.node.value || ''; }),
         images: images.map(function (im) { return im.src; }),
         question_image: images.length ? images[0].src : null,
+        constructor: constructorData,
         buttons: Array.prototype.map.call(doc.querySelectorAll('input[type=submit], button[type=submit]'), function (b) { return (b.name || '') + '=' + (b.value || b.textContent || ''); }),
         url: String(win.location.href)
       } : null;
-      var isKnown = !!(allQues.length > 0 || (win.M && win.M.cfg) || doc.querySelector('.que, form#responseform'));
+      var isKnown = !!(q && q.type && LAYER_1_TYPES.indexOf(q.type) !== -1);
       return {
         schema: 'mse-snif-1',
         schema_layer: 1,
@@ -1643,6 +1734,8 @@
     }
     function debugTraffic(event) {
       if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
+      var allQues = readQuestions();
+      if (!allQues.length && (!event || !event.force)) return;
       var dump = snifDump(); dump.traffic = event;
       win.MSEBridge.sendDump('debug', dump);
     }
@@ -1682,8 +1775,8 @@
       var title = CONFIG.brand;
       var leading = 'info';
       if (state.route === 'answers' && state.question) {
-        var idx = Array.prototype.indexOf.call(doc.querySelectorAll('.que'), state.question.node) + 1;
-        sub = 'question ' + (idx || 1);
+        var qid = state.question.questionId;
+        sub = qid ? ('question #' + qid) : 'question';
       } else if (state.route === 'account') { sub = 'account'; }
       else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
       else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
@@ -1793,6 +1886,7 @@
             : state.agent && state.agent.state === 'error' ? { state: 'error', text: state.agent.text }
             : state.agent && state.agent.state === 'running' ? { state: 'running', text: '' }
             : null,
+          gatewayModel: state.gatewayModel || ls.get('mse.gateway.lastModel', null),
           tier: state.tier,
           meta: state.meta,
           identity: identity(),

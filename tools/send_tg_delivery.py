@@ -16,7 +16,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACTS = ROOT / "Storage" / "artifacts"
 CHAT_ID = os.environ.get("MSE_OWNER_ID") or os.environ.get("TELEGRAM_CHAT_ID") or "7610246474"
-TOKEN = (os.environ.get("MSE_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+
+def load_token() -> str:
+    t = (os.environ.get("MSE_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    if t:
+        return t
+    for env_path in (Path("/etc/mse/mse.env"), Path.home() / ".env"):
+        if env_path.exists():
+            try:
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("MSE_BOT_TOKEN="):
+                        return line.split("=", 1)[1].strip()
+            except Exception:
+                pass
+    return ""
+
+TOKEN = load_token()
 
 API = f"https://api.telegram.org/bot{TOKEN}/%s"
 

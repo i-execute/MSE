@@ -827,40 +827,44 @@ class Bot:
 
     # ------------------------------------------------------------------ background watch
     async def watch_applications(self) -> None:
-        """Background health watcher. Does NOT spam the owner with unprompted notifications."""
+        """Background application watcher. Delivers immediate notifications with inline approve/decline."""
         while True:
             try:
-                await asyncio.sleep(max(3.0, PING_EVERY))
+                await asyncio.sleep(max(2.0, PING_EVERY))
+                if not OWNER_ID:
+                    continue
+                res = await asyncio.to_thread(self.gw.applications, True)
+                items = res.get("applications") or []
+                for item in items:
+                    await self.announce(item)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001
                 log.debug("application watch: %s", exc)
-                await asyncio.sleep(max(3.0, PING_EVERY))
+                await asyncio.sleep(max(2.0, PING_EVERY))
 
     async def announce(self, item: dict[str, Any]) -> None:
         moodle_id = str(item.get("moodleId") or "?")
         name = str(item.get("name") or "").strip() or "a new device"
-        html = screens.home(
-            {"health": {}, "devices": [{"deviceId": str(item.get("deviceId") or moodle_id), "moodleId": moodle_id,
-                                        "name": name, "status": "pending", "site": item.get("site") or ""}]},
-            notice="",
-        )
+        dev_id = str(item.get("deviceId") or "")
+        cb_approve = f"dev:approve:{dev_id}:{moodle_id}" if moodle_id != "?" else f"dev:approve:{dev_id}"
+        cb_revoke = f"dev:revoke:{dev_id}:{moodle_id}" if moodle_id != "?" else f"dev:revoke:{dev_id}"
         rich = screens.screen(
             "new request",
             ui.muted("someone is waiting for you"),
             [
                 ui.facts([("person", ui.bold(name)), ("Moodle id", ui.code(moodle_id)),
-                          ("site", ui.code(item.get("site") or "—"))], icon="bell"),
-                ui.quote(ui.muted("give them the answer database, or let them in to the AI row as well"), "allow or decline"),
+                          ("site", ui.code(item.get("site") or "—")),
+                          ("device", ui.code(dev_id[:16]))], icon="bell"),
+                ui.quote(ui.muted("add this user to the answer database, or decline request"), "decision"),
             ],
             [
-                ui.row(ui.button("allow", "dev:approve:" + str(item.get("deviceId") or ""), icon="ok"),
-                       ui.button("decline", "dev:revoke:" + str(item.get("deviceId") or ""), icon="fail")),
+                ui.row(ui.button("добавить", cb_approve, icon="ok"),
+                       ui.button("отклонить", cb_revoke, icon="fail")),
                 ui.row(ui.button("all requests", "dev:pending", icon="bell")),
             ],
             icon="bell",
         )
-        del html
         try:
             await self.render(OWNER_ID, 0, rich)
         except Exception as exc:  # noqa: BLE001

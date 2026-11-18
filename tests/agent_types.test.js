@@ -5,7 +5,7 @@ const router=require('../Server/mse-router'); let upstream,base,lastPayload;
 const key='mse_'+ '8'.repeat(48);
 test.before(async()=>{
  upstream=http.createServer((req,res)=>{
-  if(req.url==='/v1/models')return res.end('{"data":[{"id":"mock"}]}');let raw='';req.on('data',c=>raw+=c);req.on('end',()=>{lastPayload=JSON.parse(raw);let content=lastPayload.messages[1].content;let text=Array.isArray(content)?content[0].text:content;let answer=text.includes('dropdown')?'Alpha | Beta':text.includes('all that apply')?'Alpha | Beta':'Alpha';res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({answer})}}]}));});
+  if(req.url==='/v1/models')return res.end('{"data":[{"id":"mock"}]}');let raw='';req.on('data',c=>raw+=c);req.on('end',()=>{lastPayload=JSON.parse(raw);let content=lastPayload.messages[1].content;let text=Array.isArray(content)?((content.find(c=>c.type==='text')||{}).text||''):String(content||'');let answer=text.includes('dropdown')?'Alpha | Beta':text.includes('all that apply')?'Alpha | Beta':'Alpha';res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({answer})}}]}));});
  }); await new Promise(r=>upstream.listen(0,'127.0.0.1',r));router.CFG.upstreamUrl='http://127.0.0.1:'+upstream.address().port; await new Promise(r=>router.server.listen(0,'127.0.0.1',r));base='http://127.0.0.1:'+router.server.address().port;
  const d=await(await post('/mse/v1/register',{key,moodleId:'9'})).json();await post('/admin/approve',{deviceId:d.device.deviceId},{'x-admin-token':'adm_test'});
 });
@@ -19,6 +19,7 @@ test('multi and dropdown answers are validated against every option',async()=>{
 });
 test('images travel as data only to the backend; a remote URL is rejected',async()=>{
  const image='data:image/png;base64,aGVsbG8=';const r=await ask({question:'image?',options:['Alpha'],image:[{data:image,label:'question'}]});assert.equal(r.body.ok,true);
- assert.equal(lastPayload.messages[1].content[2].image_url.url,image);
+ const imgObj = lastPayload.messages[1].content.find(c => c.type === 'image_url');
+ assert.equal(imgObj.image_url.url,image);
  const invalid=await ask({question:'image?',image:[{data:'https://other.example.edu/secret'}]});assert.equal(invalid.status,400);
 });

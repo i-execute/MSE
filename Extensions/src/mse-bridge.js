@@ -32,7 +32,8 @@
     keyKey: 'mse.gateway.key',
     keyMirrorKey: 'mse:local:gatewayKey',
     metaKey: 'mse.gateway.meta',
-    timeoutMs: 8000
+    timeoutMs: 8000,
+    agentTimeoutMs: 120000
   }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
 
   /* every place the address can hide: the site localStorage, the Stay storage (`ss:L:` area, the same keys the
@@ -478,15 +479,20 @@
         .then(function (r) {
           return r.json().then(function (j) {
             var d = (j && j.device) || {};
-            var st = (j && j.ok === false) ? (d.status || 'error') : (d.status || (r.ok ? 'active' : 'error'));
-            var meta = self.saveMeta({ device: d, ok: r.ok }, { key: key, moodleId: d.moodleId, name: d.name });
+            var headerStatus = r.headers.get('x-mse-status');
+            var effState = headerStatus || (j && j.status) || (j && j.state) || (r.ok ? 'active' : (d.status === 'revoked' ? 'revoked' : 'pending'));
+            var meta = self.saveMeta({ device: d, ok: r.ok }, { key: key, moodleId: d.moodleId || moodleId, name: d.name });
             var resObj;
-            if (r.status === 401 || st === 'unknown') {
+            if (r.status === 401 || effState === 'unregistered' || effState === 'unknown') {
               resObj = { state: 'unregistered', message: 'key is not bound', device: d, meta: meta };
-            } else if (!r.ok || st !== 'active') {
-              resObj = { state: st === 'revoked' ? 'revoked' : 'pending', message: st === 'revoked' ? 'key revoked' : 'waiting for approval', device: d, meta: meta };
-            } else {
+            } else if (effState === 'revoked') {
+              resObj = { state: 'revoked', message: 'key revoked', device: d, meta: meta };
+            } else if (effState === 'pending') {
+              resObj = { state: 'pending', message: 'waiting for approval', device: d, meta: meta };
+            } else if (effState === 'active') {
               resObj = { state: 'active', message: 'key accepted', device: d, meta: meta };
+            } else {
+              resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta };
             }
             try {
               lsSet('mse.cache.gw_check', JSON.stringify({ key: key, check: resObj, t: Date.now() }));

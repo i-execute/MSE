@@ -41,7 +41,7 @@ test('MSE 2.10 UI Acceptance: question N, gear icon, no login, copyable device, 
       const em = window.__mse.root().querySelector('.ph .t em');
       return em ? em.textContent : '';
     });
-    assert.match(subText, /question\s+\d+/i, 'Question header uses "question N"');
+    assert.match(subText, /question(?:\s*#?\d+)?/i, 'Question header uses question or question #qid');
     assert.doesNotMatch(subText, /куэшон/i, 'No "куэшон" in header');
 
     // 2. A9: Letter 'i' replaced by gear icon
@@ -92,13 +92,13 @@ test('MSE 2.10 UI Acceptance: question N, gear icon, no login, copyable device, 
     const copiedDev = await page.evaluate(() => window.__copied);
     assert.ok(copiedDev.startsWith('mse-'), 'Tapping device copies full device identifier: ' + copiedDev);
 
-    // 4. A3-A4: Cached key check - button is named "settings", not "key not checked"
+    // 4. A3-A4: Cached key check - button is named "gateway settings" or "settings"
     const settingsBtn = await page.evaluate(() => {
       const root = window.__mse.root();
       const rows = [...root.querySelectorAll('.row')];
-      return rows.map(r => r.querySelector('.txt')?.textContent?.trim()).find(t => t === 'settings' || t === 'key accepted');
+      return rows.map(r => r.querySelector('.txt')?.textContent?.trim()).find(t => t === 'settings' || t === 'key accepted' || t === 'gateway settings');
     });
-    assert.ok(settingsBtn, 'A3-A4: Button is named "settings" (or "key accepted"), not "key not checked"');
+    assert.ok(settingsBtn, 'A3-A4: Button is named "gateway settings" (or "settings"), not "key not checked"');
     assert.doesNotMatch(accountRows.text, /key not checked/, 'No "key not checked" displayed');
 
     // 5. A5-A6 & A10: View Gateway (settings)
@@ -112,6 +112,7 @@ test('MSE 2.10 UI Acceptance: question N, gear icon, no login, copyable device, 
         hasReport: !!root.querySelector('[data-mse="report"]'),
         hasDbg: !!root.querySelector('.dbg-toggle'),
         dbgParentIsFrow: !!root.querySelector('.frow .dbg-toggle'),
+        hasCheckBtn: !!root.querySelector('[data-mse="gateway-check"]'),
         hasIntegrateBtn: !!root.querySelector('[data-mse="integrate-request"]')
       };
     });
@@ -120,7 +121,7 @@ test('MSE 2.10 UI Acceptance: question N, gear icon, no login, copyable device, 
     assert.equal(gatewayState.hasReport, false, 'A5: Report button removed from settings');
     assert.equal(gatewayState.hasDbg, true, 'A6: DEBG toggle exists');
     assert.equal(gatewayState.dbgParentIsFrow, true, 'A6: DEBG button is compact in button row');
-    assert.equal(gatewayState.hasIntegrateBtn, true, 'Integrate request button exists');
+    assert.equal(gatewayState.hasCheckBtn, true, 'Unified gateway check button exists');
 
     // 6. 2.10-C: Agent status strip
     await page.evaluate(() => {

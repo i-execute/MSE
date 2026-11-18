@@ -48,7 +48,7 @@ process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
 process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
 const PORT = Number(process.env.MSE_PORT);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.10.0';
+const VERSION = '2.11.0';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
 const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
@@ -113,6 +113,27 @@ const CFG = {
   timeoutMs: Number(process.env.MSE_TIMEOUT_MS || 120000),
   aiProxy: String(process.env.AI_PROXY || '').trim()
 };
+
+const LAYER_1_TYPES = new Set([
+  'multichoice',
+  'truefalse',
+  'shortanswer',
+  'numerical',
+  'essay',
+  'matching',
+  'match',
+  'multianswer',
+  'ddwtos',
+  'ddmarker',
+  'ddimageortext',
+  'dragdrop',
+  'calculated',
+  'calculatedmulti',
+  'calculatedsimple',
+  'multichoiceset',
+  'gapselect',
+  'gapfill'
+]);
 
 /* ------------------------------------------------------------------ state */
 function ensureDataDir() {
@@ -317,20 +338,17 @@ function publicDevice(rec) {
 
 /* ------------------------------------------------------------------ devices */
 function isDeviceAllowed(rec, moodleId) {
-  if (!rec || rec.banned || rec.status === 'revoked') return false;
+  if (!rec || rec.banned || rec.status !== 'active') return false;
   if (moodleId) {
     const mStr = String(moodleId).trim();
-    if (state.allow.some((a) => String(a.moodleId) === mStr)) return true;
+    if (String(rec.moodleId) === mStr) return true;
     if (Array.isArray(rec.accounts)) {
       const acc = rec.accounts.find((a) => String(a.moodleId) === mStr);
       if (acc && acc.status === 'active') return true;
     }
     return false;
   }
-  if (rec.status === 'active') return true;
-  if (Array.isArray(rec.accounts) && rec.accounts.some((a) => a.status === 'active')) return true;
-  if (rec.moodleId && state.allow.some((a) => String(a.moodleId) === String(rec.moodleId))) return true;
-  return false;
+  return rec.status === 'active';
 }
 
 function registerDevice(body) {
@@ -1116,10 +1134,15 @@ const handler = async (req, res) => {
       if (!body) return oaiError(req, res, 400, 'body must be JSON', 'bad_json');
       const r = registerDevice(body);
       if (r.error) return oaiError(req, res, 400, r.error, 'bad_register');
-      res.setHeader('x-mse-status', r.device.status);
-      return send(req, res, r.device.status === 'active' ? 200 : 202, {
-        ok: true, device: publicDevice(r.device),
-        hint: r.device.status === 'active'
+      const effStatus = r.device.status;
+      res.setHeader('x-mse-status', effStatus);
+      return send(req, res, effStatus === 'active' ? 200 : 202, {
+        ok: true,
+        status: effStatus,
+        state: effStatus,
+        message: effStatus === 'active' ? 'key accepted' : (effStatus === 'revoked' ? 'key revoked' : 'waiting for approval'),
+        device: publicDevice(r.device),
+        hint: effStatus === 'active'
           ? 'the key is live: use it as the api key of any OpenAI-compatible client'
           : 'waiting for the owner: Moodle id ' + r.device.moodleId + ' must be allowed (/admin/allow)'
       });
@@ -1130,11 +1153,27 @@ const handler = async (req, res) => {
       rec.seen = now(); saveState();
       const moodleHeader = req.headers['x-moodle-id'];
       const allowed = isDeviceAllowed(rec, moodleHeader);
-      res.setHeader('x-mse-status', allowed ? 'active' : rec.status);
+      const effStatus = allowed ? 'active' : (rec.status === 'revoked' ? 'revoked' : 'pending');
+      res.setHeader('x-mse-status', effStatus);
       if (!allowed) {
-        return send(req, res, 403, { ok: false, device: publicDevice(rec), hint: rec.status === 'revoked' ? 'the key was revoked' : 'waiting for approval' });
+        return send(req, res, 403, {
+          ok: false,
+          status: effStatus,
+          state: effStatus,
+          message: effStatus === 'revoked' ? 'key revoked' : 'waiting for approval',
+          device: publicDevice(rec),
+          hint: rec.status === 'revoked' ? 'the key was revoked' : 'waiting for approval'
+        });
       }
-      return send(req, res, 200, { ok: true, device: publicDevice(rec), model: CFG.model, quota: quotaOf(rec) });
+      return send(req, res, 200, {
+        ok: true,
+        status: 'active',
+        state: 'active',
+        message: 'key accepted',
+        device: publicDevice(rec),
+        model: CFG.model,
+        quota: quotaOf(rec)
+      });
     }
     if (url.pathname === '/v1/models' && req.method === 'GET') {
       if (!isAdmin(req)) {
@@ -1163,7 +1202,18 @@ const handler = async (req, res) => {
       state.dumpNotifications.push(meta);
       if (state.dumpNotifications.length > 100) state.dumpNotifications.splice(0, state.dumpNotifications.length - 100);
       saveStateNow();
-      serverLog('info', 'dump_received', 'dump stored', { deviceId: rec.deviceId, moodleId: rec.moodleId, type: body.type, dumpId: meta.id });
+      const d = body.dump || {};
+      const proto = d.protocol || {};
+      const qtype = String(proto.qtype || (d.question && d.question.type) || 'none').toLowerCase();
+      const isKnown = typeof d.is_known_layer === 'boolean' ? d.is_known_layer : LAYER_1_TYPES.has(qtype);
+      serverLog('info', 'dump_received', 'dump stored', {
+        deviceId: rec.deviceId,
+        moodleId: rec.moodleId,
+        type: body.type,
+        dumpId: meta.id,
+        qtype,
+        is_known_layer: isKnown
+      });
       return send(req, res, 201, {ok:true, id:meta.id, truncated:meta.truncated});
     }
     if (url.pathname === '/mse/v1/agent' && req.method === 'POST') {

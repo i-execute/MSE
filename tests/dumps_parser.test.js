@@ -33,7 +33,7 @@ test('C: Moodle 11-inputs multichoice parser extracts all 4 options and excludes
       window.__mse.open();
     });
 
-    await page.waitForFunction(() => !!window.__mse.state().question);
+    await page.waitForFunction(() => !window.__mse.state().loading && !!window.__mse.state().question);
 
     const qInfo = await page.evaluate(() => {
       const q = window.__mse.current();
