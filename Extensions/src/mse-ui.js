@@ -51,11 +51,11 @@
     coderunner: { label: 'code', kind: 'text' },
     calculated: { label: 'calculated', kind: 'text' },
     calculatedsimple: { label: 'calculated', kind: 'text' },
-    calculatedmulti: { label: 'calculated', kind: 'text' }
+    calculatedmulti: { label: 'calculated', kind: 'choice' },
+    ddwtos: { label: 'drag into text', kind: 'ddwtos' }
   };
   /* the ones nobody can answer through their service: said plainly instead of a silent failure */
   var UNSUPPORTED = {
-    ddwtos: 'drag into text',
     ddimageortext: 'drag onto an image',
     ddmarker: 'markers on an image',
     dragdrop: 'drag and drop',
@@ -383,7 +383,7 @@
       var inputs = block.querySelectorAll('input[type=radio], input[type=checkbox]');
       for (var i = 0; i < inputs.length; i++) {
         var inp = inputs[i];
-        if (!/^q\d+:\d+_answer/.test(inp.name || '')) continue;
+        if (!/^q\d+:\d+(_sub\d+)?_(answer|choice\d*)/.test(inp.name || '')) continue;
         if (String(inp.getAttribute('value')) === '-1') continue; /* the hidden "clear my choice" */
         if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;
         var caption = answerText(inp);
@@ -395,24 +395,46 @@
         if (/^(очистить мой выбор|clear my choice)$/i.test(String(caption || '').trim())) continue;
         q.answers.push({ input: inp, kind: 'choice', text: caption, letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
       }
-      /* selects: match, gapselect, cloze */
-      var selects = block.querySelectorAll('select');
-      for (var s = 0; s < selects.length; s++) {
-        var sel = selects[s];
-        if (!/^q\d+:\d+_/.test(sel.name || '')) continue;
-        q.controls.push({ kind: 'select', node: sel });
+
+      /* ddwtos drag items */
+      var dragHomes = block.querySelectorAll('.draggrouphomes .draghome, .draghome');
+      var seenDrag = {};
+      for (var dh = 0; dh < dragHomes.length; dh++) {
+        var dNode = dragHomes[dh];
+        if (dNode.classList.contains('dragplaceholder')) continue;
+        var cloneD = dNode.cloneNode(true);
+        Array.prototype.forEach.call(cloneD.querySelectorAll('.accesshide'), function (x) {
+          if (x.parentNode) x.parentNode.removeChild(x);
+        });
+        var dCaption = textOf(cloneD);
+        if (!dCaption) continue;
+        var cMatch = /choice(\d+)/.exec(dNode.className || '');
+        var choiceIdx = cMatch ? parseInt(cMatch[1], 10) : (q.answers.length + 1);
+        var key = choiceIdx + ':' + dCaption;
+        if (!seenDrag[key]) {
+          seenDrag[key] = true;
+          q.answers.push({ node: dNode, kind: 'drag', text: dCaption, choiceIndex: choiceIdx, letter: LETTERS[q.answers.length] || '' });
+        }
       }
-      /* text fields: shortanswer, numerical, gapfill, coderunner */
-      var texts = block.querySelectorAll('input[type=text][name], textarea[name]');
-      for (var t2 = 0; t2 < texts.length; t2++) {
-        var box = texts[t2];
-        if (!/^q\d+:\d+_/.test(box.name || '')) continue;
-        if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(box.name)) continue;
-        q.controls.push({ kind: 'text', node: box });
+
+      /* interactive controls in DOM order: select, text, hidden placeinput */
+      var controlNodes = block.querySelectorAll('select, input[type=text][name], textarea[name], input.placeinput');
+      for (var cn = 0; cn < controlNodes.length; cn++) {
+        var node = controlNodes[cn];
+        var tag = node.tagName.toLowerCase();
+        if (tag === 'select') {
+          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
+          q.controls.push({ kind: 'select', node: node });
+        } else if (tag === 'input' && node.classList.contains('placeinput')) {
+          var pMatch = /place(\d+)/.exec(node.className || '') || /_p(\d+)/.exec(node.name || '');
+          var pNo = pMatch ? parseInt(pMatch[1], 10) : (q.controls.filter(function (c) { return c.kind === 'place'; }).length + 1);
+          q.controls.push({ kind: 'place', placeNo: pNo, node: node });
+        } else {
+          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
+          if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(node.name || '')) continue;
+          q.controls.push({ kind: 'text', node: node });
+        }
       }
-      // ddwtos and friends keep their state in hidden inputs nobody can set for the user
-      var places = block.querySelectorAll('input.placeinput');
-      if (places.length) q.controls.push({ kind: 'places', count: places.length });
       return q;
     }
 
@@ -625,8 +647,63 @@
     function applyAnswer(q, row) {
       var parts = String(row.label || '').split('|').map(function (x) { return x.trim(); }).filter(Boolean);
       if (!parts.length) return {ok:false};
-      var checks = q.answers.filter(function (a) { return a.input.type === 'checkbox'; });
-      if (checks.length) {
+
+      /* ddwtos: drag into text */
+      var places = q.controls.filter(function (c) { return c.kind === 'place'; });
+      if (!places.length) {
+        var rawPlaces = q.node.querySelectorAll('input.placeinput');
+        if (rawPlaces.length) {
+          places = Array.prototype.map.call(rawPlaces, function (p, idx) {
+            var m = /place(\d+)/.exec(p.className || '') || /_p(\d+)/.exec(p.name || '');
+            return { kind: 'place', placeNo: m ? parseInt(m[1], 10) : (idx + 1), node: p };
+          });
+        }
+      }
+      if (places.length) {
+        if (parts.length !== places.length) return {ok:false};
+        var dragHomes = q.answers.filter(function (a) { return a.kind === 'drag'; });
+        if (!dragHomes.length) {
+          var rawHomes = q.node.querySelectorAll('.draggrouphomes .draghome, .draghome');
+          dragHomes = Array.prototype.filter.call(rawHomes, function (d) { return !d.classList.contains('dragplaceholder'); }).map(function (d, idx) {
+            var m = /choice(\d+)/.exec(d.className || '');
+            return { kind: 'drag', text: (d.textContent || '').trim(), choiceIndex: m ? parseInt(m[1], 10) : (idx + 1), node: d };
+          });
+        }
+        var matched = parts.map(function (part) {
+          var hit = dragHomes.find(function (d) { return norm(d.text) === norm(part); });
+          if (!hit && /^\d+$/.test(part)) {
+            var num = parseInt(part, 10);
+            hit = dragHomes.find(function (d) { return d.choiceIndex === num; });
+          }
+          return hit || null;
+        });
+        if (matched.some(function (x) { return !x; })) return {ok:false};
+        places.forEach(function (p, i) {
+          var choiceVal = String(matched[i].choiceIndex);
+          p.node.value = choiceVal;
+          p.node.dispatchEvent(new win.Event('input', {bubbles:true}));
+          p.node.dispatchEvent(new win.Event('change', {bubbles:true}));
+          var placeNo = p.placeNo || (i + 1);
+          var dropZone = q.node.querySelector('.place' + placeNo + '.drop') || p.node.closest('.place' + placeNo) || (p.node.parentNode && p.node.parentNode.classList && p.node.parentNode.classList.contains('drop') ? p.node.parentNode : null);
+          if (dropZone) {
+            dropZone.classList.add('active', 'filled');
+            var existingText = dropZone.querySelector('.draghome');
+            if (existingText) {
+              existingText.textContent = matched[i].text;
+            } else {
+              var span = doc.createElement('span');
+              span.className = 'draghome choice' + choiceVal + ' placed';
+              span.textContent = matched[i].text;
+              dropZone.appendChild(span);
+            }
+          }
+        });
+        return {ok:true, how:'ddwtos'};
+      }
+
+      /* choice questions: checkboxes */
+      var checks = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; });
+      if (checks.length && (!q.controls.length || q.type === 'multichoiceset')) {
         var chosen = parts.map(function (part) {
           var hits = checks.filter(function (a) { return norm(a.text) === norm(part); });
           return hits.length === 1 ? hits[0] : null;
@@ -639,30 +716,70 @@
         }
         return {ok:true, how:'choice'};
       }
-      if (parts.length === 1) {
-        var hits = q.answers.filter(function (a) { return norm(a.text) === norm(parts[0]); });
-        if (hits.length === 1) { if (!hits[0].input.checked) hits[0].input.click(); return {ok:true, how:'choice'}; }
+
+      /* choice questions: single radio */
+      var radios = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'radio'; });
+      if (radios.length && (!q.controls.length || q.type === 'multichoice' || q.type === 'truefalse' || q.type === 'calculatedmulti')) {
+        if (parts.length === 1) {
+          var hits = radios.filter(function (a) { return norm(a.text) === norm(parts[0]); });
+          if (hits.length === 1) { if (!hits[0].input.checked) hits[0].input.click(); return {ok:true, how:'choice'}; }
+        }
       }
+
+      /* single dropdown target via selectIndex */
       var selects = q.controls.filter(function (c) { return c.kind === 'select'; });
-      if (selects.length) {
-        var indexed = typeof row.selectIndex === 'number';
-        var targets = indexed ? [selects[row.selectIndex]] : selects;
-        if (targets.some(function (x) { return !x; }) || parts.length !== targets.length) return {ok:false};
-        var chosenOptions = targets.map(function (control, i) {
-          var matches = Array.prototype.filter.call(control.node.options, function (o) {
-            return norm(o.textContent) === norm(parts[i]) || String(o.value) === parts[i];
-          });
-          return matches.length === 1 ? matches[0] : null;
+      if (typeof row.selectIndex === 'number' && selects[row.selectIndex]) {
+        var target = selects[row.selectIndex];
+        var matches = Array.prototype.filter.call(target.node.options, function (o) {
+          return norm(o.textContent) === norm(parts[0]) || String(o.value) === parts[0];
         });
-        if (chosenOptions.some(function (x) { return !x; })) return {ok:false};
-        targets.forEach(function (c, i) { c.node.value = chosenOptions[i].value; c.node.dispatchEvent(new win.Event('change', {bubbles:true})); });
-        return {ok:true, how:'select'};
+        if (matches.length === 1) {
+          target.node.value = matches[0].value;
+          target.node.dispatchEvent(new win.Event('change', {bubbles:true}));
+          return {ok:true, how:'select'};
+        }
+        return {ok:false};
       }
-      var boxes = q.controls.filter(function (c) { return c.kind === 'text'; });
-      if (boxes.length && boxes.length === parts.length) {
-        boxes.forEach(function (c,i) { c.node.value = parts[i]; c.node.dispatchEvent(new win.Event('input', {bubbles:true})); c.node.dispatchEvent(new win.Event('change', {bubbles:true})); });
-        return {ok:true, how:'text'};
+
+      /* multi-control or mixed controls (Cloze, Matching, Gapselect, Gapfill) */
+      var interactive = q.controls.filter(function (c) { return c.kind === 'select' || c.kind === 'text'; });
+      if (interactive.length && interactive.length === parts.length) {
+        var planned = [];
+        for (var idx = 0; idx < interactive.length; idx++) {
+          var ctrl = interactive[idx];
+          var val = parts[idx];
+          if (ctrl.kind === 'select') {
+            var opts = Array.prototype.filter.call(ctrl.node.options, function (o) {
+              return norm(o.textContent) === norm(val) || String(o.value) === val;
+            });
+            if (opts.length !== 1) return {ok:false};
+            planned.push({ kind: 'select', node: ctrl.node, value: opts[0].value });
+          } else if (ctrl.kind === 'text') {
+            planned.push({ kind: 'text', node: ctrl.node, value: val });
+          }
+        }
+        planned.forEach(function (act) {
+          if (act.kind === 'select') {
+            act.node.value = act.value;
+            act.node.dispatchEvent(new win.Event('change', {bubbles:true}));
+          } else if (act.kind === 'text') {
+            act.node.value = act.value;
+            act.node.dispatchEvent(new win.Event('input', {bubbles:true}));
+            act.node.dispatchEvent(new win.Event('change', {bubbles:true}));
+          }
+        });
+        return {ok:true, how: interactive.every(function (c) { return c.kind === 'select'; }) ? 'select' : (interactive.every(function (c) { return c.kind === 'text'; }) ? 'text' : 'multi')};
       }
+
+      /* fallback for single radio / single checkbox when parts.length === 1 */
+      if (parts.length === 1) {
+        var anyHits = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && norm(a.text) === norm(parts[0]); });
+        if (anyHits.length === 1) {
+          if (!anyHits[0].input.checked) anyHits[0].input.click();
+          return {ok:true, how:'choice'};
+        }
+      }
+
       return {ok:false, how:null};
     }
 
@@ -1241,8 +1358,9 @@
         question: q.text,
         type: q.type,
         options: q.answers.map(function (a) { return a.text; }),
-        multiple: q.type === 'multichoiceset' || q.answers.some(function (a) { return a.input.type === 'checkbox'; }),
+        multiple: q.type === 'multichoiceset' || q.answers.some(function (a) { return a.input && a.input.type === 'checkbox'; }),
         selects: q.controls.filter(function (c) { return c.kind === 'select'; }).map(function (c) { return Array.prototype.filter.call(c.node.options, function (o) { return !!o.value && !o.disabled; }).map(function (o) { return o.textContent.trim(); }); }),
+        placesCount: q.controls.filter(function (c) { return c.kind === 'place'; }).length,
         textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
         image: images.length ? images : null
       }, function (stage) {
@@ -1899,7 +2017,8 @@
             supported: state.question.supported,
             identity: state.question.identity,
             questionId: state.question.questionId,
-            answers: state.question.answers.map(function (a) { return a.text; })
+            answers: state.question.answers.map(function (a) { return a.text; }),
+            controls: (state.question.controls || []).map(function (c) { return { kind: c.kind, placeNo: c.placeNo }; })
           } : null
         };
       }

@@ -1,0 +1,38 @@
+'use strict';
+const test=require('node:test'), assert=require('node:assert/strict'), fs=require('fs'), os=require('os'), path=require('path');
+const data=fs.mkdtempSync(path.join(os.tmpdir(),'mse-dumps-'));
+Object.assign(process.env,{MSE_DATA_DIR:data,MSE_ADMIN_TOKEN:'adm_test',MSE_UPSTREAM_PORT:'1'});
+const {server}=require('../Server/mse-router'), dumps=require('../Server/mse-dumps'); let base;
+const key='mse_'+ '9'.repeat(48), admin={'x-admin-token':'adm_test'}, auth={authorization:'Bearer '+key};
+const post=(p,b,h={})=>fetch(base+p,{method:'POST',headers:{'content-type':'application/json',...h},body:JSON.stringify(b)});
+const get=(p,h={})=>fetch(base+p,{headers:h});
+test.before(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));base='http://127.0.0.1:'+server.address().port});
+test.after(()=>server.close());
+test('dumps need active key, are redacted, rotated, limited, admin-only',async()=>{
+ const reg=await (await post('/mse/v1/register',{key,moodleId:'44',site:'school'})).json();
+ assert.equal((await post('/mse/v1/dump',{type:'report',dump:{}},auth)).status,403);
+ await post('/admin/approve',{deviceId:reg.device.deviceId},admin);
+ assert.equal((await post('/mse/v1/dump',{type:'oops',dump:{}},auth)).status,400);
+ assert.equal((await post('/mse/v1/dump',{type:'report',dump:{}},{authorization:'Bearer mse_wrong'})).status,401);
+ const payload={page:{location:'https://school.example.edu/page?sesskey=secretvalue',inlineMoodleScripts:['session secret'],cookieNamesVisibleToJavaScript:['MoodleSession']},question:{html:'<input type="hidden" value="hidden_secret"><input type="password" value="pass_secret">'},key, authorization:'Bearer '+key, nested:{cookie:'secretcookie', text:'Bearer '+key+' token=secretword'}, inputs:[{name:'sesskey',value:'hidden_field_secret'},{type:'hidden',name:'custom',value:'arbitrary_hidden_secret'}]};
+ const r=await post('/mse/v1/dump',{type:'report',dump:payload},auth); assert.equal(r.status,201); const id=(await r.json()).id;
+ assert.equal((await get('/admin/dumps')).status,401); assert.equal((await get('/admin/dumps/'+id)).status,401);
+ const item=await (await get('/admin/dumps/'+id,admin)).json(); let raw=JSON.stringify(item);
+ for(const secret of [key,'secretvalue','hidden_secret','pass_secret','secretcookie','secretword','session secret','hidden_field_secret','arbitrary_hidden_secret']) assert.ok(!raw.includes(secret),secret);
+ assert.match(raw,/MoodleSession/); assert.equal(item.dump.moodleId,'44');
+ const file=path.join(data,'dumps',id+'.json'); assert.equal(fs.statSync(file).mode&0o777,0o600); assert.equal(fs.statSync(path.dirname(file)).mode&0o777,0o700);
+ const big=await (await post('/mse/v1/dump',{type:'debug',dump:{text:'🙂'.repeat(140000)}},auth)).json();
+ assert.equal(big.truncated,true); assert.ok(fs.statSync(path.join(data,'dumps',big.id+'.json')).size<=dumps.MAX_BYTES);
+ const list=await (await get('/admin/dumps',admin)).json(); assert.equal(list.dumps.length,2);
+ assert.equal((await (await get('/admin/dump-notifications',admin)).json()).notifications.length,2);
+ await post('/admin/dump-notifications/ack',{id},admin);
+ assert.equal((await (await get('/admin/dump-notifications',admin)).json()).notifications.length,1);
+ for(let i=2;i<50;i++) assert.equal((await post('/mse/v1/dump',{type:'debug',dump:{i}},auth)).status,201);
+ assert.equal((await post('/mse/v1/dump',{type:'report',dump:{}},auth)).status,429);
+ const state=JSON.parse(fs.readFileSync(path.join(data,'state.json'),'utf8')); assert.equal(state.devices[reg.device.deviceId].dumpUsed,50);
+});
+test('rotation retains at most 100 files',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'mse-rotate-')); const rec={moodleId:'2',deviceId:'mse-device'};
+ for(let i=0;i<102;i++) dumps.store(dir,rec,'debug',{i},key);
+ assert.equal(fs.readdirSync(path.join(dir,'dumps')).length,100); assert.equal(dumps.list(dir).length,10);
+});

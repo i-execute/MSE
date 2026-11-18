@@ -48,7 +48,7 @@ process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
 process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
 const PORT = Number(process.env.MSE_PORT);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.11.0';
+const VERSION = '2.12.0';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
 const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
@@ -587,21 +587,40 @@ function extractJson(text) {
 }
 function buildAgentPrompt(body) {
   const options = Array.isArray(body.options) ? body.options.map((o, i) => (i + 1) + '. ' + o).join('\n') : '';
-  const system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
-    '{"answer": "<verbatim option text>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
-    'If there is no correct answer or data is missing, return {"error": "<short reason>"}. Add nothing outside the JSON. ' +
-    'MANDATORY: Return the EXACT VERBATIM text of the option as listed. Do NOT return numbers, digits, indexes, or letters. Numbering is strictly forbidden.';
+  const type = String(body.type || '').toLowerCase();
+  const isNumeric = /^(numerical|calculated|calculatedsimple)$/.test(type);
+  const isDdwtos = type === 'ddwtos' || Number(body.placesCount) > 0;
+
+  let system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
+    '{"answer": "<verbatim option text or exact answer value>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
+    'If there is no correct answer or data is missing, return {"error": "<short reason>"}. Add nothing outside the JSON.';
+  if (options && !isDdwtos) {
+    system += ' MANDATORY: For choice questions, return the EXACT VERBATIM text of the chosen option as listed. Do NOT prefix with option numbers or index numbers.';
+  }
+
   let user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
-  if (options) {
+  if (isDdwtos) {
+    const places = Number(body.placesCount) || 1;
+    user += 'This is a drag-and-drop into text question with ' + places + ' blank(s) marked [[1]]' + (places > 1 ? ', [[2]], etc.' : '') + '.\n';
+    if (options) user += 'Available options:\n' + options + '\n';
+    user += 'Choose one option for each blank in order, joined by | (exact verbatim option text only).\n';
+  } else if (options) {
     user += (body.multiple ? 'Options (pick all that apply):\n' : 'Options (pick exactly one):\n') + options + '\n';
-    user += 'Return the exact verbatim text of the chosen option as listed. Do NOT return numbers or option indexes; numbers are strictly forbidden.\n';
+    user += 'Return the exact verbatim text of the chosen option as listed. Do not include option numbers or letters.\n';
   }
-  if (body.multiple) user += 'Return selected option captions joined by |, exactly as listed (verbatim text only, no numbers).\n';
+  if (body.multiple && !isDdwtos) user += 'Return selected option captions joined by |, exactly as listed.\n';
   if (Array.isArray(body.selects) && body.selects.length) {
-    user += 'For each numbered dropdown choose one option, in order, joined by | (exact verbatim option text, no numbers):\n';
-    body.selects.forEach((values,i) => { user += (i+1) + ': ' + (Array.isArray(values) ? values.join(' / ') : '') + '\n'; });
+    user += 'For each numbered dropdown choose one option, in order, joined by | (exact verbatim option text):\n';
+    body.selects.forEach((values, i) => { user += (i + 1) + ': ' + (Array.isArray(values) ? values.join(' / ') : '') + '\n'; });
   }
-  if (Number(body.textCount) > 1) user += 'Give one value for each of the ' + Math.min(20, Number(body.textCount)) + ' text fields, in order, joined by |.\n';
+  if (Number(body.textCount) > 1) {
+    user += 'Give one value for each of the ' + Math.min(20, Number(body.textCount)) + ' text fields, in order, joined by |.\n';
+  } else if (isNumeric) {
+    user += 'Give the exact numerical answer as a number (e.g. 42 or 3.14). Do not include units unless explicitly asked.\n';
+  } else if (!options && !Array.isArray(body.selects)) {
+    user += 'Give the exact answer to fill in the field.\n';
+  }
+
   const images = Array.isArray(body.image) ? body.image : [];
   if (images.length) {
     const content = [];
@@ -885,6 +904,26 @@ async function handleAgent(req, res, rec) {
     if (matches.some((xs) => xs.length !== 1)) {
       serverLog('warn', 'agent_error', 'dropdown answer not in the task', { deviceId: rec.deviceId });
       return reply(200, { ok: false, code: 'agent_error', ms, message: 'dropdown answer not in the task' });
+    }
+    picked = matches.map((xs) => xs[0]).join(' | ');
+  } else if (String(body.type || '').toLowerCase() === 'ddwtos' || (Number(body.placesCount) > 0 && options.length)) {
+    const expected = Number(body.placesCount) || 1;
+    if (parts.length !== expected) {
+      serverLog('warn', 'agent_error', 'wrong number of ddwtos answers', { deviceId: rec.deviceId });
+      return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of drag answers' });
+    }
+    const matches = parts.map((part) => {
+      let m = options.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
+      if (m.length === 1) return m;
+      if (/^\d+$/.test(part)) {
+        const idx = parseInt(part, 10);
+        if (idx >= 1 && idx <= options.length) return [options[idx - 1]];
+      }
+      return [];
+    });
+    if (matches.some((xs) => xs.length !== 1)) {
+      serverLog('warn', 'agent_error', 'ddwtos option not in task: ' + answer, { deviceId: rec.deviceId });
+      return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
     }
     picked = matches.map((xs) => xs[0]).join(' | ');
   } else if (options.length) {

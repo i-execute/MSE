@@ -66,17 +66,21 @@ def main():
         print("ERROR: MSE_BOT_TOKEN is not set", file=sys.stderr)
         return 1
 
-    report_text = """<b>MSE 2.10.0 Release Delivered</b>
+    report_text = """<b>MSE 2.11.0 Release Delivered</b>
 
 <b>Key Highlights:</b>
-• <b>UI Polish (A1–A10)</b>: Header restored to <code>question N</code>; <code>login</code> field removed; cached key check status (no 'key not checked'); 'settings' button; compact DEBG toggle; copyable device ID; strictly English UI (0 Cyrillic strings); monochrome gear SVG icon; unified single-line status.
-• <b>SSE Agent Streaming</b>: Stage events (reasoning, looking at image, writing answer), heartbeat pings every ~10s, abort on client disconnect, zero comments in router agent code, and plain JSON fallback.
-• <b>Multi-Account Support (2.10-B)</b>: One device associates with multiple Moodle IDs; 'Integrate request' button in UI; separate approval/revocation and disassociation in bot.
-• <b>Sniffer Schema Layers (2.10-A)</b>: <code>schema_layer=1</code> and <code>is_known_layer</code> boolean in diagnostic dumps.
-• <b>Endpoint Hardening (C & 2.10-E)</b>: Minimal public <code>/health</code> (<code>{"name":"MSE","version":"2.10.0","layer":1}</code>); <code>/v1/models</code> restricted to admin (403 for client keys); extension does not call /v1/models.
-• <b>Network Resilience (D1–D3)</b>: 2 automatic retry attempts on network failure with UI stage updates; structured <code>agent_bad_image</code> logging.
-• <b>Bot & Unified Proxy (D4–D5)</b>: Quiet single notification on new registration; silent dumps; standardized <code>AI_PROXY</code> naming.
-• <b>Strict Audit</b>: 117 files audited, 0 hits (clean)."""
+• <b>Unified Button UI Kit (A4)</b>: Standardized 28px height, 8px border-radius, typography, and glowing borders across all screens.
+• <b>Single Dynamic Check Button (A2)</b>: Merged "Integrate request" into a unified <code>check</code> control that dynamically reflects status (check / checking… / active / waiting / denied).
+• <b>Instant DEBUG Light (A1)</b>: Immediate toggle of the DEBG indicator on tap; triggers instant diagnostic event.
+• <b>Network Log Enhancements (A3, A5)</b>: Styled copy button with press glow/toast; monochrome list/lines icon for account menu.
+• <b>Clean Question Subtitle (A7)</b>: Removed "question 1" bug; popover header displays <code>question #qid</code> or generic <code>question</code>.
+• <b>Active Model Chip (A8)</b>: Caches model from agent responses into <code>localStorage</code>; persistently displayed for active verified keys without calling <code>/v1/models</code>.
+• <b>Agent UI Cleanup (A6)</b>: Removed percentage/count indicators from agent answer rows; detailed stats preserved in dumps.
+• <b>Gateway Settings (A9, A11)</b>: Renamed to "gateway settings" with monochrome gear icon; explicit status in API (accepted/pending/revoked).
+• <b>Immediate Bot Alerts (A10)</b>: Telegram bot immediately delivers new registration alerts with inline <b>добавить</b> and <b>отклонить</b> buttons directly in the card; silent otherwise.
+• <b>Schema-Layer 1 Constructor (D1–D5)</b>: Registry of 18 question types, full constructor reconstruction protocol in dumps, questionless page dump suppression, server-side qtype logging.
+• <b>Live Stand Reliability (B1–B2)</b>: Probe accepts both "MSE" and "MSE gateway"; client SSE agent timeout extended to 120s.
+• <b>Strict Audit</b>: 123 files audited, 0 hits (clean)."""
 
     print(f"Sending message to chat {CHAT_ID}...")
     res = call("sendMessage", {"chat_id": CHAT_ID, "text": report_text, "parse_mode": "HTML"})
@@ -86,10 +90,10 @@ def main():
     print("Message sent successfully.")
 
     files_to_send = [
-        ARTIFACTS / "mse-2.10.0-delivery.zip",
+        ARTIFACTS / "mse-2.11.0-delivery.zip",
         ARTIFACTS / "mse.user.js",
-        ARTIFACTS / "mse-2.10.0.patch",
-        ROOT / "RELEASE_2.10.0.md"
+        ARTIFACTS / "mse-2.11.0.patch",
+        ROOT / "RELEASE_2.11.0.md"
     ]
 
     for p in files_to_send:
@@ -97,7 +101,7 @@ def main():
             print(f"File not found: {p}", file=sys.stderr)
             continue
         print(f"Sending {p.name} ({p.stat().st_size} bytes)...")
-        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.10.0 — {p.name}"}, {"document": p})
+        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.11.0 — {p.name}"}, {"document": p})
         if res.get("ok"):
             print(f"Successfully sent {p.name}")
         else:

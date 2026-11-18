@@ -352,14 +352,29 @@ function extractJson(text) {
 }
 function buildAgentPrompt(body) {
   var options = Array.isArray(body.options) ? body.options.map(function (o, i) { return (i + 1) + '. ' + o; }).join('\n') : '';
+  var type = String(body.type || '').toLowerCase();
+  var isNumeric = /^(numerical|calculated|calculatedsimple)$/.test(type);
+  var isDdwtos = type === 'ddwtos' || Number(body.placesCount) > 0;
+
   var system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
-    '{"answer": "<verbatim option text>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
+    '{"answer": "<verbatim option text or exact answer value>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
     'If there is no correct option or the data is missing, return {"error": "<short reason>"}. ' +
-    'Add nothing outside the JSON. ' +
-    'MANDATORY: Return the EXACT VERBATIM text of the option as listed. Do NOT return numbers, digits, indexes, or letters. Numbering is strictly forbidden.';
+    'Add nothing outside the JSON.';
+  if (options && !isDdwtos) {
+    system += ' MANDATORY: For choice questions, return the EXACT VERBATIM text of the option as listed. Do NOT prefix with option numbers or index numbers.';
+  }
   var user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
-  if (options) user += 'Options (pick exactly one; return exact verbatim text, numbers forbidden):\n' + options + '\n';
-  if (body.multiple) user += 'Several may be correct: list them separated by "|" in answer (verbatim text only, no numbers).\n';
+  if (isDdwtos) {
+    var places = Number(body.placesCount) || 1;
+    user += 'This is a drag-and-drop into text question with ' + places + ' blank(s) marked [[1]]' + (places > 1 ? ', [[2]], etc.' : '') + '.\n';
+    if (options) user += 'Available options:\n' + options + '\n';
+    user += 'Choose one option for each blank in order, joined by | (exact verbatim option text only).\n';
+  } else if (options) {
+    user += (body.multiple ? 'Options (pick all that apply):\n' : 'Options (pick exactly one):\n') + options + '\n';
+    user += 'Return the exact verbatim text of the chosen option as listed. Do not include option numbers or letters.\n';
+  }
+  if (body.multiple && !isDdwtos) user += 'Several may be correct: list them separated by "|" in answer (verbatim text only, no numbers).\n';
+  if (isNumeric) user += 'Give the exact numerical answer as a number (e.g. 42 or 3.14). Do not include units unless explicitly asked.\n';
   if (body.image) user += 'The question has an image attached, but it was not passed as text.\n';
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }

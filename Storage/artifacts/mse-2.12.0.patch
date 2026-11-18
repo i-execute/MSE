@@ -204,10 +204,10 @@ index f15bc4e..2bdb61d 100644
      },
      debugEnabled: function () { return lsGet('mse.debug.enabled') === '1'; },
 diff --git a/Extensions/src/mse-ui.js b/Extensions/src/mse-ui.js
-index ebf8183..64950c1 100644
+index ebf8183..92c29a5 100644
 --- a/Extensions/src/mse-ui.js
 +++ b/Extensions/src/mse-ui.js
-@@ -44,6 +44,7 @@
+@@ -44,17 +44,18 @@
      shortanswer: { label: 'short answer', kind: 'text' },
      numerical: { label: 'number', kind: 'text' },
      match: { label: 'matching', kind: 'select' },
@@ -215,6 +215,19 @@ index ebf8183..64950c1 100644
      gapselect: { label: 'choose from a list', kind: 'select' },
      multianswer: { label: 'nested questions', kind: 'select' },
      gapfill: { label: 'gaps', kind: 'text' },
+     coderunner: { label: 'code', kind: 'text' },
+     calculated: { label: 'calculated', kind: 'text' },
+     calculatedsimple: { label: 'calculated', kind: 'text' },
+-    calculatedmulti: { label: 'calculated', kind: 'text' }
++    calculatedmulti: { label: 'calculated', kind: 'choice' },
++    ddwtos: { label: 'drag into text', kind: 'ddwtos' }
+   };
+   /* the ones nobody can answer through their service: said plainly instead of a silent failure */
+   var UNSUPPORTED = {
+-    ddwtos: 'drag into text',
+     ddimageortext: 'drag onto an image',
+     ddmarker: 'markers on an image',
+     dragdrop: 'drag and drop',
 @@ -63,6 +64,28 @@
      description: 'description (not a question)'
    };
@@ -290,7 +303,79 @@ index ebf8183..64950c1 100644
      }
  
      function readQuestion(block) {
-@@ -426,7 +445,7 @@
+@@ -364,7 +383,7 @@
+       var inputs = block.querySelectorAll('input[type=radio], input[type=checkbox]');
+       for (var i = 0; i < inputs.length; i++) {
+         var inp = inputs[i];
+-        if (!/^q\d+:\d+_answer/.test(inp.name || '')) continue;
++        if (!/^q\d+:\d+(_sub\d+)?_(answer|choice\d*)/.test(inp.name || '')) continue;
+         if (String(inp.getAttribute('value')) === '-1') continue; /* the hidden "clear my choice" */
+         if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;
+         var caption = answerText(inp);
+@@ -376,24 +395,46 @@
+         if (/^(очистить мой выбор|clear my choice)$/i.test(String(caption || '').trim())) continue;
+         q.answers.push({ input: inp, kind: 'choice', text: caption, letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
+       }
+-      /* selects: match, gapselect, cloze */
+-      var selects = block.querySelectorAll('select');
+-      for (var s = 0; s < selects.length; s++) {
+-        var sel = selects[s];
+-        if (!/^q\d+:\d+_/.test(sel.name || '')) continue;
+-        q.controls.push({ kind: 'select', node: sel });
++
++      /* ddwtos drag items */
++      var dragHomes = block.querySelectorAll('.draggrouphomes .draghome, .draghome');
++      var seenDrag = {};
++      for (var dh = 0; dh < dragHomes.length; dh++) {
++        var dNode = dragHomes[dh];
++        if (dNode.classList.contains('dragplaceholder')) continue;
++        var cloneD = dNode.cloneNode(true);
++        Array.prototype.forEach.call(cloneD.querySelectorAll('.accesshide'), function (x) {
++          if (x.parentNode) x.parentNode.removeChild(x);
++        });
++        var dCaption = textOf(cloneD);
++        if (!dCaption) continue;
++        var cMatch = /choice(\d+)/.exec(dNode.className || '');
++        var choiceIdx = cMatch ? parseInt(cMatch[1], 10) : (q.answers.length + 1);
++        var key = choiceIdx + ':' + dCaption;
++        if (!seenDrag[key]) {
++          seenDrag[key] = true;
++          q.answers.push({ node: dNode, kind: 'drag', text: dCaption, choiceIndex: choiceIdx, letter: LETTERS[q.answers.length] || '' });
++        }
+       }
+-      /* text fields: shortanswer, numerical, gapfill, coderunner */
+-      var texts = block.querySelectorAll('input[type=text][name], textarea[name]');
+-      for (var t2 = 0; t2 < texts.length; t2++) {
+-        var box = texts[t2];
+-        if (!/^q\d+:\d+_/.test(box.name || '')) continue;
+-        if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(box.name)) continue;
+-        q.controls.push({ kind: 'text', node: box });
++
++      /* interactive controls in DOM order: select, text, hidden placeinput */
++      var controlNodes = block.querySelectorAll('select, input[type=text][name], textarea[name], input.placeinput');
++      for (var cn = 0; cn < controlNodes.length; cn++) {
++        var node = controlNodes[cn];
++        var tag = node.tagName.toLowerCase();
++        if (tag === 'select') {
++          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
++          q.controls.push({ kind: 'select', node: node });
++        } else if (tag === 'input' && node.classList.contains('placeinput')) {
++          var pMatch = /place(\d+)/.exec(node.className || '') || /_p(\d+)/.exec(node.name || '');
++          var pNo = pMatch ? parseInt(pMatch[1], 10) : (q.controls.filter(function (c) { return c.kind === 'place'; }).length + 1);
++          q.controls.push({ kind: 'place', placeNo: pNo, node: node });
++        } else {
++          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
++          if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(node.name || '')) continue;
++          q.controls.push({ kind: 'text', node: node });
++        }
+       }
+-      // ddwtos and friends keep their state in hidden inputs nobody can set for the user
+-      var places = block.querySelectorAll('input.placeinput');
+-      if (places.length) q.controls.push({ kind: 'places', count: places.length });
+       return q;
+     }
+ 
+@@ -426,7 +467,7 @@
      function attemptMeta() {
        var meta = { host: String(win.location.host), courseId: null, quizId: null, attemptId: null, moodleId: null, missing: [] };
        var id = identity();
@@ -299,7 +384,7 @@ index ebf8183..64950c1 100644
        if (id.id) meta.moodleId = id.id;
        var bodyCls = (doc.body && doc.body.className) || '';
        var bodyId = (doc.body && doc.body.id) || '';
-@@ -509,7 +528,7 @@
+@@ -509,7 +550,7 @@
        var timeoutPromise = new Promise(function (_, reject) {
          timer = win.setTimeout(function () {
            if (controller) try { controller.abort(); } catch (_) {}
@@ -308,7 +393,7 @@ index ebf8183..64950c1 100644
          }, 10000);
        });
  
-@@ -541,18 +560,18 @@
+@@ -541,18 +582,18 @@
          });
        }, function (e) {
          if (timer) { win.clearTimeout(timer); timer = null; }
@@ -332,7 +417,163 @@ index ebf8183..64950c1 100644
          throw e;
        });
      }
-@@ -750,7 +769,7 @@
+@@ -606,8 +647,63 @@
+     function applyAnswer(q, row) {
+       var parts = String(row.label || '').split('|').map(function (x) { return x.trim(); }).filter(Boolean);
+       if (!parts.length) return {ok:false};
+-      var checks = q.answers.filter(function (a) { return a.input.type === 'checkbox'; });
+-      if (checks.length) {
++
++      /* ddwtos: drag into text */
++      var places = q.controls.filter(function (c) { return c.kind === 'place'; });
++      if (!places.length) {
++        var rawPlaces = q.node.querySelectorAll('input.placeinput');
++        if (rawPlaces.length) {
++          places = Array.prototype.map.call(rawPlaces, function (p, idx) {
++            var m = /place(\d+)/.exec(p.className || '') || /_p(\d+)/.exec(p.name || '');
++            return { kind: 'place', placeNo: m ? parseInt(m[1], 10) : (idx + 1), node: p };
++          });
++        }
++      }
++      if (places.length) {
++        if (parts.length !== places.length) return {ok:false};
++        var dragHomes = q.answers.filter(function (a) { return a.kind === 'drag'; });
++        if (!dragHomes.length) {
++          var rawHomes = q.node.querySelectorAll('.draggrouphomes .draghome, .draghome');
++          dragHomes = Array.prototype.filter.call(rawHomes, function (d) { return !d.classList.contains('dragplaceholder'); }).map(function (d, idx) {
++            var m = /choice(\d+)/.exec(d.className || '');
++            return { kind: 'drag', text: (d.textContent || '').trim(), choiceIndex: m ? parseInt(m[1], 10) : (idx + 1), node: d };
++          });
++        }
++        var matched = parts.map(function (part) {
++          var hit = dragHomes.find(function (d) { return norm(d.text) === norm(part); });
++          if (!hit && /^\d+$/.test(part)) {
++            var num = parseInt(part, 10);
++            hit = dragHomes.find(function (d) { return d.choiceIndex === num; });
++          }
++          return hit || null;
++        });
++        if (matched.some(function (x) { return !x; })) return {ok:false};
++        places.forEach(function (p, i) {
++          var choiceVal = String(matched[i].choiceIndex);
++          p.node.value = choiceVal;
++          p.node.dispatchEvent(new win.Event('input', {bubbles:true}));
++          p.node.dispatchEvent(new win.Event('change', {bubbles:true}));
++          var placeNo = p.placeNo || (i + 1);
++          var dropZone = q.node.querySelector('.place' + placeNo + '.drop') || p.node.closest('.place' + placeNo) || (p.node.parentNode && p.node.parentNode.classList && p.node.parentNode.classList.contains('drop') ? p.node.parentNode : null);
++          if (dropZone) {
++            dropZone.classList.add('active', 'filled');
++            var existingText = dropZone.querySelector('.draghome');
++            if (existingText) {
++              existingText.textContent = matched[i].text;
++            } else {
++              var span = doc.createElement('span');
++              span.className = 'draghome choice' + choiceVal + ' placed';
++              span.textContent = matched[i].text;
++              dropZone.appendChild(span);
++            }
++          }
++        });
++        return {ok:true, how:'ddwtos'};
++      }
++
++      /* choice questions: checkboxes */
++      var checks = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; });
++      if (checks.length && (!q.controls.length || q.type === 'multichoiceset')) {
+         var chosen = parts.map(function (part) {
+           var hits = checks.filter(function (a) { return norm(a.text) === norm(part); });
+           return hits.length === 1 ? hits[0] : null;
+@@ -620,30 +716,70 @@
+         }
+         return {ok:true, how:'choice'};
+       }
+-      if (parts.length === 1) {
+-        var hits = q.answers.filter(function (a) { return norm(a.text) === norm(parts[0]); });
+-        if (hits.length === 1) { if (!hits[0].input.checked) hits[0].input.click(); return {ok:true, how:'choice'}; }
++
++      /* choice questions: single radio */
++      var radios = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'radio'; });
++      if (radios.length && (!q.controls.length || q.type === 'multichoice' || q.type === 'truefalse' || q.type === 'calculatedmulti')) {
++        if (parts.length === 1) {
++          var hits = radios.filter(function (a) { return norm(a.text) === norm(parts[0]); });
++          if (hits.length === 1) { if (!hits[0].input.checked) hits[0].input.click(); return {ok:true, how:'choice'}; }
++        }
+       }
++
++      /* single dropdown target via selectIndex */
+       var selects = q.controls.filter(function (c) { return c.kind === 'select'; });
+-      if (selects.length) {
+-        var indexed = typeof row.selectIndex === 'number';
+-        var targets = indexed ? [selects[row.selectIndex]] : selects;
+-        if (targets.some(function (x) { return !x; }) || parts.length !== targets.length) return {ok:false};
+-        var chosenOptions = targets.map(function (control, i) {
+-          var matches = Array.prototype.filter.call(control.node.options, function (o) {
+-            return norm(o.textContent) === norm(parts[i]) || String(o.value) === parts[i];
+-          });
+-          return matches.length === 1 ? matches[0] : null;
++      if (typeof row.selectIndex === 'number' && selects[row.selectIndex]) {
++        var target = selects[row.selectIndex];
++        var matches = Array.prototype.filter.call(target.node.options, function (o) {
++          return norm(o.textContent) === norm(parts[0]) || String(o.value) === parts[0];
+         });
+-        if (chosenOptions.some(function (x) { return !x; })) return {ok:false};
+-        targets.forEach(function (c, i) { c.node.value = chosenOptions[i].value; c.node.dispatchEvent(new win.Event('change', {bubbles:true})); });
+-        return {ok:true, how:'select'};
++        if (matches.length === 1) {
++          target.node.value = matches[0].value;
++          target.node.dispatchEvent(new win.Event('change', {bubbles:true}));
++          return {ok:true, how:'select'};
++        }
++        return {ok:false};
+       }
+-      var boxes = q.controls.filter(function (c) { return c.kind === 'text'; });
+-      if (boxes.length && boxes.length === parts.length) {
+-        boxes.forEach(function (c,i) { c.node.value = parts[i]; c.node.dispatchEvent(new win.Event('input', {bubbles:true})); c.node.dispatchEvent(new win.Event('change', {bubbles:true})); });
+-        return {ok:true, how:'text'};
++
++      /* multi-control or mixed controls (Cloze, Matching, Gapselect, Gapfill) */
++      var interactive = q.controls.filter(function (c) { return c.kind === 'select' || c.kind === 'text'; });
++      if (interactive.length && interactive.length === parts.length) {
++        var planned = [];
++        for (var idx = 0; idx < interactive.length; idx++) {
++          var ctrl = interactive[idx];
++          var val = parts[idx];
++          if (ctrl.kind === 'select') {
++            var opts = Array.prototype.filter.call(ctrl.node.options, function (o) {
++              return norm(o.textContent) === norm(val) || String(o.value) === val;
++            });
++            if (opts.length !== 1) return {ok:false};
++            planned.push({ kind: 'select', node: ctrl.node, value: opts[0].value });
++          } else if (ctrl.kind === 'text') {
++            planned.push({ kind: 'text', node: ctrl.node, value: val });
++          }
++        }
++        planned.forEach(function (act) {
++          if (act.kind === 'select') {
++            act.node.value = act.value;
++            act.node.dispatchEvent(new win.Event('change', {bubbles:true}));
++          } else if (act.kind === 'text') {
++            act.node.value = act.value;
++            act.node.dispatchEvent(new win.Event('input', {bubbles:true}));
++            act.node.dispatchEvent(new win.Event('change', {bubbles:true}));
++          }
++        });
++        return {ok:true, how: interactive.every(function (c) { return c.kind === 'select'; }) ? 'select' : (interactive.every(function (c) { return c.kind === 'text'; }) ? 'text' : 'multi')};
+       }
++
++      /* fallback for single radio / single checkbox when parts.length === 1 */
++      if (parts.length === 1) {
++        var anyHits = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && norm(a.text) === norm(parts[0]); });
++        if (anyHits.length === 1) {
++          if (!anyHits[0].input.checked) anyHits[0].input.click();
++          return {ok:true, how:'choice'};
++        }
++      }
++
+       return {ok:false, how:null};
+     }
+ 
+@@ -750,7 +886,7 @@
        agent: null,             /* { state: 'idle'|'running'|'ok'|'error'|'retry', text, retryIn } */
        agentTimer: null,
        gw: { busy: null, probe: null, models: null, check: null, reg: null },
@@ -341,7 +582,7 @@ index ebf8183..64950c1 100644
        ai: null,                /* { state: 'idle'|'running'|'ok'|'error', text, model } — the AI row, owner tier only */
        tier: null,              /* 'base' | 'owner' — base sees only their answer service, owner also the AI row */
        t0: 0
-@@ -860,20 +879,30 @@
+@@ -860,20 +996,30 @@
  
      function head(titleText, sub, leading) {
        var h = el('div', 'ph');
@@ -381,7 +622,7 @@ index ebf8183..64950c1 100644
          h.appendChild(chip);
        }
        var mini = el('button', 'mini-status');
-@@ -1056,8 +1085,10 @@
+@@ -1056,8 +1202,10 @@
            var mark = el('span', 'mark' + (r.agent ? ' agent' : ''));
            a.appendChild(mark);
            a.appendChild(el('span', 'lbl', r.label));
@@ -394,7 +635,7 @@ index ebf8183..64950c1 100644
            if (r.agent) {
              var tag = el('span', 'tag agent', 'agent');
              a.appendChild(tag);
-@@ -1082,10 +1113,11 @@
+@@ -1082,10 +1230,11 @@
      function appendAi(q) {
        var ai = state.agent || { state: 'idle' };
        if (ai.state === 'running' || ai.state === 'retry') {
@@ -410,7 +651,7 @@ index ebf8183..64950c1 100644
          body.appendChild(N(run, 1));
          return;
        }
-@@ -1190,15 +1222,18 @@
+@@ -1190,15 +1339,18 @@
        });
      }
  
@@ -431,7 +672,18 @@ index ebf8183..64950c1 100644
        render();
        var t0 = Date.now();
        Promise.resolve().then(function () { return questionImages(q); }).then(function (images) { return win.MSEBridge.agent({
-@@ -1218,7 +1253,11 @@
+@@ -1206,8 +1358,9 @@
+         question: q.text,
+         type: q.type,
+         options: q.answers.map(function (a) { return a.text; }),
+-        multiple: q.type === 'multichoiceset' || q.answers.some(function (a) { return a.input.type === 'checkbox'; }),
++        multiple: q.type === 'multichoiceset' || q.answers.some(function (a) { return a.input && a.input.type === 'checkbox'; }),
+         selects: q.controls.filter(function (c) { return c.kind === 'select'; }).map(function (c) { return Array.prototype.filter.call(c.node.options, function (o) { return !!o.value && !o.disabled; }).map(function (o) { return o.textContent.trim(); }); }),
++        placesCount: q.controls.filter(function (c) { return c.kind === 'place'; }).length,
+         textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
+         image: images.length ? images : null
+       }, function (stage) {
+@@ -1218,7 +1371,11 @@
          var ms = Date.now() - t0;
          if (res.ok && res.answer) {
            logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
@@ -444,7 +696,7 @@ index ebf8183..64950c1 100644
            state.agent = { state: 'ok', answer: res.answer };
            var existing = (state.rows || []).find(function (r) { return r.label === res.answer; });
            if (existing) {
-@@ -1235,16 +1274,37 @@
+@@ -1235,16 +1392,37 @@
            startRetry(automatic);
            return;
          }
@@ -484,7 +736,7 @@ index ebf8183..64950c1 100644
          render();
        });
      }
-@@ -1345,22 +1405,34 @@
+@@ -1345,22 +1523,34 @@
        var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
        body.appendChild(N(el('div', 'sec', 'account')));
        body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
@@ -526,7 +778,7 @@ index ebf8183..64950c1 100644
        net.appendChild(el('span', 'txt', 'network log'));
        net.appendChild(el('span', 'more', 'open'));
        body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
-@@ -1373,9 +1445,17 @@
+@@ -1373,9 +1563,17 @@
        var epoch = ++state.modelEpoch;
        br.probe(url).then(function (r) {
          if (epoch !== state.modelEpoch || br.url() !== url) return;
@@ -546,7 +798,7 @@ index ebf8183..64950c1 100644
      }
  
      function checkGateway(raw) {
-@@ -1385,26 +1465,43 @@
+@@ -1385,26 +1583,43 @@
        var epoch = ++state.modelEpoch;
        gw.busy = 'check';
        gw.probe = null;
@@ -605,7 +857,7 @@ index ebf8183..64950c1 100644
            render();
            return r;
          });
-@@ -1430,7 +1527,6 @@
+@@ -1430,7 +1645,6 @@
        input.spellcheck = false;
        input.placeholder = 'https://…';
        input.value = br.url() || '';
@@ -613,7 +865,7 @@ index ebf8183..64950c1 100644
        input.addEventListener('input', function () {
          var typed = String(input.value || '').trim().replace(/\/+$/, '');
          var saved = br.url() || '';
-@@ -1440,79 +1536,51 @@
+@@ -1440,79 +1654,51 @@
        body.appendChild(N(el('div', 'sec', 'connection'), 0));
        var frow = el('div', 'frow');
        body.appendChild(N(frow, 0));
@@ -678,11 +930,7 @@ index ebf8183..64950c1 100644
 -        } else {
 -          light.classList.remove('on');
 -        }
-+        dbgBtn.classList.toggle('on', next);
-+        var curLight = dbgBtn.querySelector('.dbg-light');
-+        if (curLight) curLight.classList.toggle('on', next);
-+        if (next) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
-       });
+-      });
 -      toggle.appendChild(light);
 -      var dbgText = el('div', 'dbg-text');
 -      dbgText.appendChild(el('span', 'dbg-title', 'Debug mode'));
@@ -701,7 +949,11 @@ index ebf8183..64950c1 100644
 -      actions.appendChild(snif);
 -      var report = press(el('button', 'btn', 'Report'), function () {
 -        reportCurrent(report);
--      });
++        dbgBtn.classList.toggle('on', next);
++        var curLight = dbgBtn.querySelector('.dbg-light');
++        if (curLight) curLight.classList.toggle('on', next);
++        if (next) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
+       });
 -      report.setAttribute('data-mse', 'report');
 -      actions.appendChild(report);
 -      body.appendChild(N(actions, 1));
@@ -731,7 +983,7 @@ index ebf8183..64950c1 100644
      }
  
      /* ---------------- the network log ---------------- */
-@@ -1529,22 +1597,24 @@
+@@ -1529,22 +1715,24 @@
        });
        body.appendChild(N(box, 1));
        var frow = el('div', 'frow');
@@ -762,7 +1014,7 @@ index ebf8183..64950c1 100644
        frow.appendChild(clear);
        body.appendChild(N(frow, 1));
      }
-@@ -1598,6 +1668,34 @@
+@@ -1598,6 +1786,34 @@
          method: formEl.getAttribute('method') || 'POST',
          elementsCount: formEl.elements ? formEl.elements.length : 0
        } : null;
@@ -797,7 +1049,7 @@ index ebf8183..64950c1 100644
        var protocolView = q ? {
          page: null,
          question: q.text,
-@@ -1612,11 +1710,16 @@
+@@ -1612,11 +1828,16 @@
          text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) { return c.node.value || ''; }),
          images: images.map(function (im) { return im.src; }),
          question_image: images.length ? images[0].src : null,
@@ -815,7 +1067,7 @@ index ebf8183..64950c1 100644
          warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
          page: { location: String(win.location.href), title: doc.title, headings: Array.prototype.map.call(doc.querySelectorAll('h1,h2,h3'), function (n) { return n.textContent.trim(); }),
            httpHeaders: 'unavailable to page JavaScript', cookieNamesVisibleToJavaScript: cookies, inlineMoodleScripts: scripts },
-@@ -1631,6 +1734,8 @@
+@@ -1631,6 +1852,8 @@
      }
      function debugTraffic(event) {
        if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
@@ -824,7 +1076,7 @@ index ebf8183..64950c1 100644
        var dump = snifDump(); dump.traffic = event;
        win.MSEBridge.sendDump('debug', dump);
      }
-@@ -1644,6 +1749,7 @@
+@@ -1644,6 +1867,7 @@
      }
      var snifText = '';
      function viewSnif() {
@@ -832,7 +1084,7 @@ index ebf8183..64950c1 100644
        body.appendChild(N(el('div', 'sec', 'Snif · local only')));
        body.appendChild(N(el('div', 'empty', 'May contain session keys and personal data. Review before sharing.')));
        var copy = el('button', 'btn solid', 'Copy');
-@@ -1669,8 +1775,8 @@
+@@ -1669,8 +1893,8 @@
        var title = CONFIG.brand;
        var leading = 'info';
        if (state.route === 'answers' && state.question) {
@@ -843,7 +1095,7 @@ index ebf8183..64950c1 100644
        } else if (state.route === 'account') { sub = 'account'; }
        else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
        else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
-@@ -1733,6 +1839,7 @@
+@@ -1733,6 +1957,7 @@
          if (!q) return false;
          return applyAnswer(q, { label: label });
        },
@@ -851,7 +1103,7 @@ index ebf8183..64950c1 100644
        agent: function () { return state.agent; },
        runAgent: function () { runAgent(false); return true; },
        log: function () { return log.slice(-40); },
-@@ -1779,6 +1886,7 @@
+@@ -1779,6 +2004,7 @@
              : state.agent && state.agent.state === 'error' ? { state: 'error', text: state.agent.text }
              : state.agent && state.agent.state === 'running' ? { state: 'running', text: '' }
              : null,
@@ -859,6 +1111,16 @@ index ebf8183..64950c1 100644
            tier: state.tier,
            meta: state.meta,
            identity: identity(),
+@@ -1791,7 +2017,8 @@
+             supported: state.question.supported,
+             identity: state.question.identity,
+             questionId: state.question.questionId,
+-            answers: state.question.answers.map(function (a) { return a.text; })
++            answers: state.question.answers.map(function (a) { return a.text; }),
++            controls: (state.question.controls || []).map(function (c) { return { kind: c.kind, placeNo: c.placeNo }; })
+           } : null
+         };
+       }
 diff --git a/Extensions/src/theme.css b/Extensions/src/theme.css
 index 4e8c3b8..2731619 100644
 --- a/Extensions/src/theme.css
@@ -952,7 +1214,7 @@ index 4e8c3b8..2731619 100644
  /* compact status screen */
  .status-grid{display:flex;flex-direction:column;gap:5px;margin:3px 0 6px}
 diff --git a/Extensions/tools/build-mse.js b/Extensions/tools/build-mse.js
-index c9d9c7c..c160c4c 100644
+index c9d9c7c..bf93f5f 100644
 --- a/Extensions/tools/build-mse.js
 +++ b/Extensions/tools/build-mse.js
 @@ -29,7 +29,7 @@ const VENDOR = LAYOUT.VENDOR;
@@ -960,10 +1222,93 @@ index c9d9c7c..c160c4c 100644
  const SRC = LAYOUT.SRC;
  const BRAND = 'MSE';
 -const VERSION = '2.8.0';
-+const VERSION = '2.11.0';
++const VERSION = '2.12.0';
  
  const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
  const read = (p) => fs.readFileSync(path.join(VENDOR, p), 'utf8');
+diff --git a/RELEASE_2.12.0.md b/RELEASE_2.12.0.md
+new file mode 100644
+index 0000000..2f65716
+--- /dev/null
++++ b/RELEASE_2.12.0.md
+@@ -0,0 +1,77 @@
++# MSE 2.12.0 Release Notes
++
++**Release Date:** 2026-11-18  
++**Codename:** Universal Question Constructor & Multi-Control Engine (Layer 1)  
++**Target:** Moodle Quiz Assistant (Stay Userscript + Router / Bot Gateway)
++
++---
++
++## 1. Executive Summary
++
++MSE 2.12.0 brings complete, end-to-end support for question types across all 18 Layer 1 constructor families on both the Server (`Server/mse-router.js`) and the iPhone/Safari Userscript (`Extensions/src/mse-ui.js`, `mse.user.js`).
++
++This release resolves the long-standing limitation where multi-choice checkboxes in real Moodle instances (`qX:N_choice*`) were skipped, unlocks full drag-and-drop into text (`ddwtos`) with automated placeinput population and visual drop zone rendering, introduces sequential multi-control handling for mixed Cloze (`multianswer`) sub-questions in document order, eliminates prompt restrictions that blocked numbers and digits for numerical/calculated questions, and provides an exhaustive WebKit Playwright test suite guaranteeing DOM auto-fill correctness.
++
++---
++
++## 2. Key Features & Changes
++
++### A. Universal Question Parsing & Detection (`readQuestion`)
++* **Real Moodle Checkbox Recognition:** Expanded input detection regex from `/^q\d+:\d+_answer/` to `/^q\d+:\d+(_sub\d+)?_(answer|choice\d*)/`, successfully detecting real Moodle multi-choice checkboxes (`name="qX:N_choice0"`) and Cloze sub-question checkboxes.
++* **Document-Order Interactive Controls:** Re-architected control gathering to query interactive elements (`select, input[type=text][name], textarea[name], input.placeinput`) in exact DOM document order, ensuring multi-part answers match questions sequentially without field scrambling.
++* **`calculatedmulti` Reclassification:** Corrected `TYPE_INFO.calculatedmulti` kind to `'choice'` (previously incorrectly designated as `'text'`).
++* **`ddwtos` Parsing:** Added full extractor for draggable choices (`.draggrouphomes .draghome`) and hidden place inputs (`input.placeinput`), identifying choice index keys and target slot numbers.
++
++### B. Intelligent Auto-Filling (`applyAnswer`)
++* **Sequential Multi-Control Auto-Fill:** Implemented mixed-control sequencing for Cloze (`multianswer`), Matching (`match`), and Gapselect questions. If a question contains combinations of text inputs and select dropdowns, all slots are validated against prospective answers and applied in sequential order with proper `change` and `input` events.
++* **Drag-and-Drop Into Text (`ddwtos`):** Unlocked `ddwtos` in `TYPE_INFO` and removed it from `UNSUPPORTED`. Answers matching drag items are mapped to choice indices, populated into hidden `input.placeinput` elements, and rendered visually into `.drop` slots with clean placed styles.
++* **Real Moodle Checkboxes:** Multi-choice checkbox questions now correctly toggle multiple selections simultaneously and uncheck unselected options.
++* **Robust Single & Fallback Handling:** Single text inputs (`numerical`, `shortanswer`, `calculated`, `coderunner`) and single radio choices execute reliably with event dispatching.
++
++### C. Server & Agent Solver Prompts (`Server/mse-router.js` & `mse-server.js`)
++* **Digit Ban Lifted for Numeric & Calculated Questions:** Removed the blanket rule prohibiting digits and numbers in agent prompts. Numerical (`numerical`) and calculated (`calculated`, `calculatedsimple`, `calculatedmulti`) questions now instruct the LLM to provide exact numbers or decimals (e.g. 42 or 3.14).
++* **Dedicated DDWTOS Prompting & Validation:** Added specialized prompts for drag-into-text questions with `N` blanks, instructing the agent to return choices in order separated by `|`. The router validates that every slot corresponds to an available draggable option.
++* **Free Text & Code Support:** Short answer and free-form fields now allow arbitrary text without requiring options matching.
++
++### D. Quality Assurance & WebKit Verification
++* **Exhaustive WebKit Test Suite:** Added `tests/question_types_real.test.js`, `tests/cloze_multianswer.test.js`, and `tests/ddwtos_real.test.js` running in Apple WebKit under Playwright to verify DOM interaction, event firing, and value propagation against real Moodle HTML.
++* **Comprehensive Test Pass:** All 23 router/gateway unit tests, 13 full end-to-end WebKit Playwright scenarios (`tests/mse.test.js`), 5 python bot tests, and all specialized type tests pass cleanly.
++* **Zero-Fingerprint Strict Audit:** Verified via `python3 scripts/audit.py --strict` with 0 hits across all files.
++
++---
++
++## 3. Layer 1 Support Matrix
++
++| Question Type | Category | Status in 2.12.0 | Form Field Mechanics |
++| :--- | :--- | :--- | :--- |
++| `multichoice` (radio) | Choice | Supported | `<input type="radio" name="qX:N_answer">` |
++| `multichoice` (checkbox) | Choice | Supported | `<input type="checkbox" name="qX:N_choice\d+">` |
++| `multichoiceset` | Choice | Supported | `<input type="checkbox" name="qX:N_choice\d+">` |
++| `truefalse` | Choice | Supported | `<input type="radio" name="qX:N_answer">` |
++| `shortanswer` | Text | Supported | `<input type="text" name="qX:N_answer">` |
++| `numerical` | Text/Number | Supported | `<input type="text" name="qX:N_answer">` (digits allowed) |
++| `calculated` | Text/Number | Supported | `<input type="text" name="qX:N_answer">` (digits allowed) |
++| `calculatedsimple` | Text/Number | Supported | `<input type="text" name="qX:N_answer">` (digits allowed) |
++| `calculatedmulti` | Choice | Supported | `<input type="radio" / "checkbox">` |
++| `match` / `matching` | Select | Supported | Multiple `<select name="qX:N_sub\d+">` |
++| `gapselect` | Select | Supported | Multiple `<select name="qX:N_p\d+">` |
++| `multianswer` (Cloze) | Mixed | Supported | Sequential document-order `<select>`, `<input type="text">` |
++| `gapfill` | Text | Supported | Multiple `<input type="text" name="qX:N_p\d+">` |
++| `coderunner` | Text/Code | Supported | `<textarea name="qX:N_answer">` |
++| `ddwtos` | Drag/Drop | Supported | Hidden `input.placeinput` + `.draggrouphomes .draghome` |
++| `ddimageortext` | Visual Image | Described | Visual image drag (requires visual coordinate detection) |
++| `ddmarker` | Visual Image | Described | Visual canvas coordinates (requires image dropzone mapping) |
++| `essay` | Longform | Described | Manual submission / review required |
++
++---
++
++## 4. Verification Evidence
++
++1. `SS_BROWSER=webkit node --test tests/question_types_real.test.js`: PASS
++2. `SS_BROWSER=webkit node --test tests/cloze_multianswer.test.js`: PASS
++3. `SS_BROWSER=webkit node --test tests/ddwtos_real.test.js`: PASS
++4. `node --test tests/agent_types.test.js`: PASS
++5. `npm test`: PASS (23/23 tests)
++6. `npm run test:ext`: PASS (13/13 tests)
++7. `python3 tests/bot_selftest.py`: PASS (14 screens, 30 callbacks)
++8. `python3 scripts/audit.py --strict`: PASS (0 hits)
 diff --git a/Server/bot/client.py b/Server/bot/client.py
 index eb4dae6..2a3e3c9 100644
 --- a/Server/bot/client.py
@@ -1138,7 +1483,7 @@ index 3ef8e8e..ad0d377 100644
              await self.render(OWNER_ID, 0, rich)
          except Exception as exc:  # noqa: BLE001
 diff --git a/Server/bot/screens.py b/Server/bot/screens.py
-index 35ad6de..f70bdaf 100644
+index 35ad6de..5009406 100644
 --- a/Server/bot/screens.py
 +++ b/Server/bot/screens.py
 @@ -81,7 +81,7 @@ def home(snap: dict[str, Any], notice: str = "") -> Rich:
@@ -1146,7 +1491,7 @@ index 35ad6de..f70bdaf 100644
      if not router_ok:
          subtitle = status_chip(False, "router is not answering") + " " + muted(SEP + " everything below may be stale")
 -    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.8.0"), icon="bot")
-+    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.11.0"), icon="bot")
++    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.12.0"), icon="bot")
  
  
  def _pending_list(devices: list[dict[str, Any]]) -> str:
@@ -1196,7 +1541,7 @@ index 35ad6de..f70bdaf 100644
      if allow:
          ids = ", ".join(code(a.get("moodleId") if isinstance(a, dict) else a) for a in allow[:20]
 diff --git a/Server/mse-router.js b/Server/mse-router.js
-index 941517b..8906466 100644
+index 941517b..0d0f52b 100644
 --- a/Server/mse-router.js
 +++ b/Server/mse-router.js
 @@ -32,6 +32,7 @@ const fs = require('fs');
@@ -1212,7 +1557,7 @@ index 941517b..8906466 100644
  const PORT = Number(process.env.MSE_PORT);
  const HOST = process.env.MSE_HOST || '127.0.0.1';
 -const VERSION = '2.8.0';
-+const VERSION = '2.11.0';
++const VERSION = '2.12.0';
  const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
  const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
  const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
@@ -1344,7 +1689,58 @@ index 941517b..8906466 100644
  }
  
  function getCandidateModels(requestedModel) {
-@@ -540,7 +618,7 @@ function buildAgentPrompt(body) {
+@@ -509,21 +587,40 @@ function extractJson(text) {
+ }
+ function buildAgentPrompt(body) {
+   const options = Array.isArray(body.options) ? body.options.map((o, i) => (i + 1) + '. ' + o).join('\n') : '';
+-  const system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
+-    '{"answer": "<verbatim option text>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
+-    'If there is no correct answer or data is missing, return {"error": "<short reason>"}. Add nothing outside the JSON. ' +
+-    'MANDATORY: Return the EXACT VERBATIM text of the option as listed. Do NOT return numbers, digits, indexes, or letters. Numbering is strictly forbidden.';
++  const type = String(body.type || '').toLowerCase();
++  const isNumeric = /^(numerical|calculated|calculatedsimple)$/.test(type);
++  const isDdwtos = type === 'ddwtos' || Number(body.placesCount) > 0;
++
++  let system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
++    '{"answer": "<verbatim option text or exact answer value>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
++    'If there is no correct answer or data is missing, return {"error": "<short reason>"}. Add nothing outside the JSON.';
++  if (options && !isDdwtos) {
++    system += ' MANDATORY: For choice questions, return the EXACT VERBATIM text of the chosen option as listed. Do NOT prefix with option numbers or index numbers.';
++  }
++
+   let user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
+-  if (options) {
++  if (isDdwtos) {
++    const places = Number(body.placesCount) || 1;
++    user += 'This is a drag-and-drop into text question with ' + places + ' blank(s) marked [[1]]' + (places > 1 ? ', [[2]], etc.' : '') + '.\n';
++    if (options) user += 'Available options:\n' + options + '\n';
++    user += 'Choose one option for each blank in order, joined by | (exact verbatim option text only).\n';
++  } else if (options) {
+     user += (body.multiple ? 'Options (pick all that apply):\n' : 'Options (pick exactly one):\n') + options + '\n';
+-    user += 'Return the exact verbatim text of the chosen option as listed. Do NOT return numbers or option indexes; numbers are strictly forbidden.\n';
++    user += 'Return the exact verbatim text of the chosen option as listed. Do not include option numbers or letters.\n';
+   }
+-  if (body.multiple) user += 'Return selected option captions joined by |, exactly as listed (verbatim text only, no numbers).\n';
++  if (body.multiple && !isDdwtos) user += 'Return selected option captions joined by |, exactly as listed.\n';
+   if (Array.isArray(body.selects) && body.selects.length) {
+-    user += 'For each numbered dropdown choose one option, in order, joined by | (exact verbatim option text, no numbers):\n';
+-    body.selects.forEach((values,i) => { user += (i+1) + ': ' + (Array.isArray(values) ? values.join(' / ') : '') + '\n'; });
++    user += 'For each numbered dropdown choose one option, in order, joined by | (exact verbatim option text):\n';
++    body.selects.forEach((values, i) => { user += (i + 1) + ': ' + (Array.isArray(values) ? values.join(' / ') : '') + '\n'; });
+   }
+-  if (Number(body.textCount) > 1) user += 'Give one value for each of the ' + Math.min(20, Number(body.textCount)) + ' text fields, in order, joined by |.\n';
++  if (Number(body.textCount) > 1) {
++    user += 'Give one value for each of the ' + Math.min(20, Number(body.textCount)) + ' text fields, in order, joined by |.\n';
++  } else if (isNumeric) {
++    user += 'Give the exact numerical answer as a number (e.g. 42 or 3.14). Do not include units unless explicitly asked.\n';
++  } else if (!options && !Array.isArray(body.selects)) {
++    user += 'Give the exact answer to fill in the field.\n';
++  }
++
+   const images = Array.isArray(body.image) ? body.image : [];
+   if (images.length) {
+     const content = [];
+@@ -540,7 +637,7 @@ function buildAgentPrompt(body) {
    return [{ role: 'system', content: system }, { role: 'user', content: user }];
  }
  
@@ -1353,7 +1749,7 @@ index 941517b..8906466 100644
    return new Promise((resolve) => {
      const url = new URL(CFG.upstreamUrl + pathname);
      const lib = url.protocol === 'https:' ? https : http;
-@@ -561,35 +639,57 @@ function upstreamJson(method, pathname, payload, onContent) {
+@@ -561,35 +658,57 @@ function upstreamJson(method, pathname, payload, onContent) {
      }
      const req = lib.request(reqOpts, (up) => {
        const streaming = onContent && /text\/event-stream/i.test(String(up.headers['content-type'] || ''));
@@ -1423,7 +1819,7 @@ index 941517b..8906466 100644
      req.on('timeout', () => req.destroy(new Error('the model did not answer in time')));
      req.on('error', (e) => finish({ status: 0, text: '', error: e.message }));
      if (body) req.write(body);
-@@ -612,27 +712,68 @@ async function handleAgent(req, res, rec) {
+@@ -612,27 +731,68 @@ async function handleAgent(req, res, rec) {
      serverLog('warn', 'agent_bad_request', 'question is required', { deviceId: rec.deviceId });
      return oaiError(req, res, 400, 'question is required', 'bad_request');
    }
@@ -1468,12 +1864,12 @@ index 941517b..8906466 100644
 +      if (pingTimer) clearInterval(pingTimer);
 +      abortEmitter.emit('abort');
 +    });
-   }
--  function event(type, value) { if (!res.destroyed) res.write('event: ' + type + '\ndata: ' + JSON.stringify(value) + '\n\n'); }
++  }
 +
 +  function event(type, value) {
 +    if (!res.destroyed) res.write('event: ' + type + '\ndata: ' + JSON.stringify(value) + '\n\n');
-+  }
+   }
+-  function event(type, value) { if (!res.destroyed) res.write('event: ' + type + '\ndata: ' + JSON.stringify(value) + '\n\n'); }
 +
    function reply(status, result) {
 +    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
@@ -1501,7 +1897,7 @@ index 941517b..8906466 100644
    const started = now();
    rec.requests = (rec.requests || 0) + 1;
    rec.quotaUsed = (rec.quotaUsed || 0) + 1;
-@@ -648,7 +789,11 @@ async function handleAgent(req, res, rec) {
+@@ -648,7 +808,11 @@ async function handleAgent(req, res, rec) {
    for (let ci = 0; ci < candidateModels.length; ci++) {
      chosenModel = candidateModels[ci];
      payload.model = chosenModel;
@@ -1514,7 +1910,7 @@ index 941517b..8906466 100644
      if (up && up.status === 503 && ci + 1 < candidateModels.length) {
        serverLog('warn', 'model_503', 'model ' + chosenModel + ' 503 -> fallback to ' + candidateModels[ci + 1], { deviceId: rec.deviceId });
        note('agent model ' + chosenModel + ' 503 → fallback to ' + candidateModels[ci + 1], rec);
-@@ -724,9 +869,9 @@ async function handleAgent(req, res, rec) {
+@@ -724,9 +888,9 @@ async function handleAgent(req, res, rec) {
    if (Array.isArray(body.selects) && body.selects.length) {
      if (parts.length !== body.selects.length) {
        serverLog('warn', 'agent_error', 'wrong number of dropdown answers', { deviceId: rec.deviceId });
@@ -1526,12 +1922,32 @@ index 941517b..8906466 100644
        if (!Array.isArray(group)) return [];
        const part = parts[i];
        let m = group.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
-@@ -739,13 +884,13 @@ async function handleAgent(req, res, rec) {
+@@ -739,13 +903,33 @@ async function handleAgent(req, res, rec) {
      });
      if (matches.some((xs) => xs.length !== 1)) {
        serverLog('warn', 'agent_error', 'dropdown answer not in the task', { deviceId: rec.deviceId });
 -      return reply(200, {ok:false, code:'agent_error', ms, message:'dropdown answer not in the task'});
 +      return reply(200, { ok: false, code: 'agent_error', ms, message: 'dropdown answer not in the task' });
++    }
++    picked = matches.map((xs) => xs[0]).join(' | ');
++  } else if (String(body.type || '').toLowerCase() === 'ddwtos' || (Number(body.placesCount) > 0 && options.length)) {
++    const expected = Number(body.placesCount) || 1;
++    if (parts.length !== expected) {
++      serverLog('warn', 'agent_error', 'wrong number of ddwtos answers', { deviceId: rec.deviceId });
++      return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of drag answers' });
++    }
++    const matches = parts.map((part) => {
++      let m = options.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
++      if (m.length === 1) return m;
++      if (/^\d+$/.test(part)) {
++        const idx = parseInt(part, 10);
++        if (idx >= 1 && idx <= options.length) return [options[idx - 1]];
++      }
++      return [];
++    });
++    if (matches.some((xs) => xs.length !== 1)) {
++      serverLog('warn', 'agent_error', 'ddwtos option not in task: ' + answer, { deviceId: rec.deviceId });
++      return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
      }
      picked = matches.map((xs) => xs[0]).join(' | ');
    } else if (options.length) {
@@ -1542,7 +1958,7 @@ index 941517b..8906466 100644
      }
      const matches = parts.map((part) => {
        let m = options.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
-@@ -758,18 +903,21 @@ async function handleAgent(req, res, rec) {
+@@ -758,18 +942,21 @@ async function handleAgent(req, res, rec) {
      });
      if (matches.some((xs) => xs.length !== 1)) {
        serverLog('warn', 'agent_error', 'option not in task: ' + answer, { deviceId: rec.deviceId });
@@ -1567,7 +1983,7 @@ index 941517b..8906466 100644
    });
  }
  
-@@ -831,7 +979,15 @@ async function handleAdmin(req, res, url) {
+@@ -831,7 +1018,15 @@ async function handleAdmin(req, res, url) {
      if (!state.allow.some((a) => String(a.moodleId) === moodleId)) {
        state.allow.push({ moodleId, name: String(body.name || '').trim().slice(0, 120), added: now() });
      }
@@ -1584,7 +2000,7 @@ index 941517b..8906466 100644
      saveState();
      note('allow ' + moodleId);
      return send(req, res, 200, { ok: true, allow: state.allow });
-@@ -841,22 +997,78 @@ async function handleAdmin(req, res, url) {
+@@ -841,22 +1036,78 @@ async function handleAdmin(req, res, url) {
      const rec = state.devices[deviceId];
      if (!rec) return oaiError(req, res, 404, 'no such device', 'no_device');
      const revoke = url.pathname === '/admin/revoke';
@@ -1671,7 +2087,7 @@ index 941517b..8906466 100644
      saveState();
      note('disallow ' + moodleId);
      return send(req, res, 200, { ok: true, allow: state.allow });
-@@ -898,15 +1110,22 @@ const handler = async (req, res) => {
+@@ -898,15 +1149,22 @@ const handler = async (req, res) => {
    try {
      if (url.pathname === '/health' || url.pathname === '/') {
        res.setHeader('cache-control', 'no-store');
@@ -1702,7 +2118,7 @@ index 941517b..8906466 100644
        });
      }
      if (url.pathname.startsWith('/admin/')) return await handleAdmin(req, res, url);
-@@ -915,10 +1134,15 @@ const handler = async (req, res) => {
+@@ -915,10 +1173,15 @@ const handler = async (req, res) => {
        if (!body) return oaiError(req, res, 400, 'body must be JSON', 'bad_json');
        const r = registerDevice(body);
        if (r.error) return oaiError(req, res, 400, r.error, 'bad_register');
@@ -1722,7 +2138,7 @@ index 941517b..8906466 100644
            ? 'the key is live: use it as the api key of any OpenAI-compatible client'
            : 'waiting for the owner: Moodle id ' + r.device.moodleId + ' must be allowed (/admin/allow)'
        });
-@@ -927,17 +1151,34 @@ const handler = async (req, res) => {
+@@ -927,17 +1190,34 @@ const handler = async (req, res) => {
        const rec = deviceByKey(keyOf(req));
        if (!rec) return oaiError(req, res, 401, 'unknown key: register the device first', 'invalid_key');
        rec.seen = now(); saveState();
@@ -1765,7 +2181,7 @@ index 941517b..8906466 100644
        const ids = CFG.models.length ? CFG.models : (CFG.model ? [CFG.model] : []);
        return send(req, res, 200, { object: 'list', data: ids.map((id) => ({ id, object: 'model', created: 1700000000, owned_by: 'backend' })) });
      }
-@@ -961,7 +1202,18 @@ const handler = async (req, res) => {
+@@ -961,7 +1241,18 @@ const handler = async (req, res) => {
        state.dumpNotifications.push(meta);
        if (state.dumpNotifications.length > 100) state.dumpNotifications.splice(0, state.dumpNotifications.length - 100);
        saveStateNow();
@@ -1785,14 +2201,53 @@ index 941517b..8906466 100644
        return send(req, res, 201, {ok:true, id:meta.id, truncated:meta.truncated});
      }
      if (url.pathname === '/mse/v1/agent' && req.method === 'POST') {
+diff --git a/Server/mse-server.js b/Server/mse-server.js
+index 1359b14..ecc9ec6 100644
+--- a/Server/mse-server.js
++++ b/Server/mse-server.js
+@@ -352,14 +352,29 @@ function extractJson(text) {
+ }
+ function buildAgentPrompt(body) {
+   var options = Array.isArray(body.options) ? body.options.map(function (o, i) { return (i + 1) + '. ' + o; }).join('\n') : '';
++  var type = String(body.type || '').toLowerCase();
++  var isNumeric = /^(numerical|calculated|calculatedsimple)$/.test(type);
++  var isDdwtos = type === 'ddwtos' || Number(body.placesCount) > 0;
++
+   var system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
+-    '{"answer": "<verbatim option text>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
++    '{"answer": "<verbatim option text or exact answer value>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
+     'If there is no correct option or the data is missing, return {"error": "<short reason>"}. ' +
+-    'Add nothing outside the JSON. ' +
+-    'MANDATORY: Return the EXACT VERBATIM text of the option as listed. Do NOT return numbers, digits, indexes, or letters. Numbering is strictly forbidden.';
++    'Add nothing outside the JSON.';
++  if (options && !isDdwtos) {
++    system += ' MANDATORY: For choice questions, return the EXACT VERBATIM text of the option as listed. Do NOT prefix with option numbers or index numbers.';
++  }
+   var user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
+-  if (options) user += 'Options (pick exactly one; return exact verbatim text, numbers forbidden):\n' + options + '\n';
+-  if (body.multiple) user += 'Several may be correct: list them separated by "|" in answer (verbatim text only, no numbers).\n';
++  if (isDdwtos) {
++    var places = Number(body.placesCount) || 1;
++    user += 'This is a drag-and-drop into text question with ' + places + ' blank(s) marked [[1]]' + (places > 1 ? ', [[2]], etc.' : '') + '.\n';
++    if (options) user += 'Available options:\n' + options + '\n';
++    user += 'Choose one option for each blank in order, joined by | (exact verbatim option text only).\n';
++  } else if (options) {
++    user += (body.multiple ? 'Options (pick all that apply):\n' : 'Options (pick exactly one):\n') + options + '\n';
++    user += 'Return the exact verbatim text of the chosen option as listed. Do not include option numbers or letters.\n';
++  }
++  if (body.multiple && !isDdwtos) user += 'Several may be correct: list them separated by "|" in answer (verbatim text only, no numbers).\n';
++  if (isNumeric) user += 'Give the exact numerical answer as a number (e.g. 42 or 3.14). Do not include units unless explicitly asked.\n';
+   if (body.image) user += 'The question has an image attached, but it was not passed as text.\n';
+   return [{ role: 'system', content: system }, { role: 'user', content: user }];
+ }
 diff --git a/Storage/artifacts/build-report.json b/Storage/artifacts/build-report.json
-index 40706a0..31b0771 100644
+index 40706a0..0826011 100644
 --- a/Storage/artifacts/build-report.json
 +++ b/Storage/artifacts/build-report.json
 @@ -1,5 +1,5 @@
  {
 -  "version": "2.8.0",
-+  "version": "2.11.0",
++  "version": "2.12.0",
    "brand": "MSE",
    "base": "2.22.0",
    "bundles": {
@@ -1802,12 +2257,12 @@ index 40706a0..31b0771 100644
      "mse-ui": {
 -      "bytes": 90587,
 -      "sha256": "9448cd3f07b904e927946a1c2a571015e99b66a2262a570761c665909daad279",
-+      "bytes": 99061,
-+      "sha256": "85d17da7b97c8fa3472ffe75b6ad049d2f6eb52b574d21fe661f3ebf78829709",
++      "bytes": 104843,
++      "sha256": "15bd3649342497f2bfc8ebc8345910504cba3214da62051e5cc172b46e399e49",
        "sanitizer": {
 -        "comments": 80,
 -        "strings": 3,
-+        "comments": 77,
++        "comments": 82,
 +        "strings": 5,
          "templates": 0,
          "regexps": 11,
@@ -1831,19 +2286,19 @@ index 40706a0..31b0771 100644
      "headers": 1,
      "requires": 0,
 -    "bytes": 1646595
-+    "bytes": 1658164
++    "bytes": 1663946
    },
    "userscript": {
      "file": "Storage/artifacts/mse.user.js",
 -    "bytes": 1650793,
 -    "sha256": "9623fc6dd11d1d327415683479da407af45ba4c58ad56ce1405b3fcc82ac4c08"
-+    "bytes": 1662268,
-+    "sha256": "fb83f89a274d3d1bfd120b233a84a7e98b3efdf45d9b6ed16425a436389d3ac2"
++    "bytes": 1668050,
++    "sha256": "08a2c87bc6dbd1744d8fe8784c777e3a36dafd12695d29b615dd3305477d621a"
    },
    "sanitizer": {
      "comments": 68,
 diff --git a/Storage/artifacts/mse.user.js b/Storage/artifacts/mse.user.js
-index 2f684ea..0a2d582 100644
+index 2f684ea..89ef3f4 100644
 --- a/Storage/artifacts/mse.user.js
 +++ b/Storage/artifacts/mse.user.js
 @@ -2,7 +2,7 @@
@@ -1851,7 +2306,7 @@ index 2f684ea..0a2d582 100644
  // @name:ru      MSE — Moodle Solver Extension
  // @namespace    https://github.com/mse
 -// @version      2.8.0
-+// @version      2.11.0
++// @version      2.12.0
  // @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.
  // @description Answers and hints for Moodle quizzes: the MSE button, a built-in traffic sniffer and the id of the signed-in user.
  // @author       MSE
@@ -2065,7 +2520,7 @@ index 2f684ea..0a2d582 100644
  
     
     
-@@ -3655,6 +3724,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -3655,17 +3724,18 @@ var __ssW=window,__msePageWindow=window;
      shortanswer: { label: 'short answer', kind: 'text' },
      numerical: { label: 'number', kind: 'text' },
      match: { label: 'matching', kind: 'select' },
@@ -2073,6 +2528,19 @@ index 2f684ea..0a2d582 100644
      gapselect: { label: 'choose from a list', kind: 'select' },
      multianswer: { label: 'nested questions', kind: 'select' },
      gapfill: { label: 'gaps', kind: 'text' },
+     coderunner: { label: 'code', kind: 'text' },
+     calculated: { label: 'calculated', kind: 'text' },
+     calculatedsimple: { label: 'calculated', kind: 'text' },
+-    calculatedmulti: { label: 'calculated', kind: 'text' }
++    calculatedmulti: { label: 'calculated', kind: 'choice' },
++    ddwtos: { label: 'drag into text', kind: 'ddwtos' }
+   };
+    
+   var UNSUPPORTED = {
+-    ddwtos: 'drag into text',
+     ddimageortext: 'drag onto an image',
+     ddmarker: 'markers on an image',
+     dragdrop: 'drag and drop',
 @@ -3674,6 +3744,28 @@ var __ssW=window,__msePageWindow=window;
      description: 'description (not a question)'
    };
@@ -2148,7 +2616,77 @@ index 2f684ea..0a2d582 100644
      }
  
      function readQuestion(block) {
-@@ -4026,7 +4114,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -3964,7 +4052,7 @@ var __ssW=window,__msePageWindow=window;
+       var inputs = block.querySelectorAll('input[type=radio], input[type=checkbox]');
+       for (var i = 0; i < inputs.length; i++) {
+         var inp = inputs[i];
+-        if (!/^q\d+:\d+_answer/.test(inp.name || '')) continue;
++        if (!/^q\d+:\d+(_sub\d+)?_(answer|choice\d*)/.test(inp.name || '')) continue;
+         if (String(inp.getAttribute('value')) === '-1') continue;  
+         if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;
+         var caption = answerText(inp);
+@@ -3976,24 +4064,46 @@ var __ssW=window,__msePageWindow=window;
+         if (/^(очистить мой выбор|clear my choice)$/i.test(String(caption || '').trim())) continue;
+         q.answers.push({ input: inp, kind: 'choice', text: caption, letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
+       }
++
+        
+-      var selects = block.querySelectorAll('select');
+-      for (var s = 0; s < selects.length; s++) {
+-        var sel = selects[s];
+-        if (!/^q\d+:\d+_/.test(sel.name || '')) continue;
+-        q.controls.push({ kind: 'select', node: sel });
++      var dragHomes = block.querySelectorAll('.draggrouphomes .draghome, .draghome');
++      var seenDrag = {};
++      for (var dh = 0; dh < dragHomes.length; dh++) {
++        var dNode = dragHomes[dh];
++        if (dNode.classList.contains('dragplaceholder')) continue;
++        var cloneD = dNode.cloneNode(true);
++        Array.prototype.forEach.call(cloneD.querySelectorAll('.accesshide'), function (x) {
++          if (x.parentNode) x.parentNode.removeChild(x);
++        });
++        var dCaption = textOf(cloneD);
++        if (!dCaption) continue;
++        var cMatch = /choice(\d+)/.exec(dNode.className || '');
++        var choiceIdx = cMatch ? parseInt(cMatch[1], 10) : (q.answers.length + 1);
++        var key = choiceIdx + ':' + dCaption;
++        if (!seenDrag[key]) {
++          seenDrag[key] = true;
++          q.answers.push({ node: dNode, kind: 'drag', text: dCaption, choiceIndex: choiceIdx, letter: LETTERS[q.answers.length] || '' });
++        }
+       }
++
+        
+-      var texts = block.querySelectorAll('input[type=text][name], textarea[name]');
+-      for (var t2 = 0; t2 < texts.length; t2++) {
+-        var box = texts[t2];
+-        if (!/^q\d+:\d+_/.test(box.name || '')) continue;
+-        if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(box.name)) continue;
+-        q.controls.push({ kind: 'text', node: box });
++      var controlNodes = block.querySelectorAll('select, input[type=text][name], textarea[name], input.placeinput');
++      for (var cn = 0; cn < controlNodes.length; cn++) {
++        var node = controlNodes[cn];
++        var tag = node.tagName.toLowerCase();
++        if (tag === 'select') {
++          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
++          q.controls.push({ kind: 'select', node: node });
++        } else if (tag === 'input' && node.classList.contains('placeinput')) {
++          var pMatch = /place(\d+)/.exec(node.className || '') || /_p(\d+)/.exec(node.name || '');
++          var pNo = pMatch ? parseInt(pMatch[1], 10) : (q.controls.filter(function (c) { return c.kind === 'place'; }).length + 1);
++          q.controls.push({ kind: 'place', placeNo: pNo, node: node });
++        } else {
++          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
++          if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(node.name || '')) continue;
++          q.controls.push({ kind: 'text', node: node });
++        }
+       }
+-       
+-      var places = block.querySelectorAll('input.placeinput');
+-      if (places.length) q.controls.push({ kind: 'places', count: places.length });
+       return q;
+     }
+ 
+@@ -4026,7 +4136,7 @@ var __ssW=window,__msePageWindow=window;
      function attemptMeta() {
        var meta = { host: String(win.location.host), courseId: null, quizId: null, attemptId: null, moodleId: null, missing: [] };
        var id = identity();
@@ -2157,7 +2695,7 @@ index 2f684ea..0a2d582 100644
        if (id.id) meta.moodleId = id.id;
        var bodyCls = (doc.body && doc.body.className) || '';
        var bodyId = (doc.body && doc.body.id) || '';
-@@ -4109,7 +4197,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -4109,7 +4219,7 @@ var __ssW=window,__msePageWindow=window;
        var timeoutPromise = new Promise(function (_, reject) {
          timer = win.setTimeout(function () {
            if (controller) try { controller.abort(); } catch (_) {}
@@ -2166,7 +2704,7 @@ index 2f684ea..0a2d582 100644
          }, 10000);
        });
  
-@@ -4141,18 +4229,18 @@ var __ssW=window,__msePageWindow=window;
+@@ -4141,18 +4251,18 @@ var __ssW=window,__msePageWindow=window;
          });
        }, function (e) {
          if (timer) { win.clearTimeout(timer); timer = null; }
@@ -2190,7 +2728,163 @@ index 2f684ea..0a2d582 100644
          throw e;
        });
      }
-@@ -4350,7 +4438,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -4206,8 +4316,63 @@ var __ssW=window,__msePageWindow=window;
+     function applyAnswer(q, row) {
+       var parts = String(row.label || '').split('|').map(function (x) { return x.trim(); }).filter(Boolean);
+       if (!parts.length) return {ok:false};
+-      var checks = q.answers.filter(function (a) { return a.input.type === 'checkbox'; });
+-      if (checks.length) {
++
++       
++      var places = q.controls.filter(function (c) { return c.kind === 'place'; });
++      if (!places.length) {
++        var rawPlaces = q.node.querySelectorAll('input.placeinput');
++        if (rawPlaces.length) {
++          places = Array.prototype.map.call(rawPlaces, function (p, idx) {
++            var m = /place(\d+)/.exec(p.className || '') || /_p(\d+)/.exec(p.name || '');
++            return { kind: 'place', placeNo: m ? parseInt(m[1], 10) : (idx + 1), node: p };
++          });
++        }
++      }
++      if (places.length) {
++        if (parts.length !== places.length) return {ok:false};
++        var dragHomes = q.answers.filter(function (a) { return a.kind === 'drag'; });
++        if (!dragHomes.length) {
++          var rawHomes = q.node.querySelectorAll('.draggrouphomes .draghome, .draghome');
++          dragHomes = Array.prototype.filter.call(rawHomes, function (d) { return !d.classList.contains('dragplaceholder'); }).map(function (d, idx) {
++            var m = /choice(\d+)/.exec(d.className || '');
++            return { kind: 'drag', text: (d.textContent || '').trim(), choiceIndex: m ? parseInt(m[1], 10) : (idx + 1), node: d };
++          });
++        }
++        var matched = parts.map(function (part) {
++          var hit = dragHomes.find(function (d) { return norm(d.text) === norm(part); });
++          if (!hit && /^\d+$/.test(part)) {
++            var num = parseInt(part, 10);
++            hit = dragHomes.find(function (d) { return d.choiceIndex === num; });
++          }
++          return hit || null;
++        });
++        if (matched.some(function (x) { return !x; })) return {ok:false};
++        places.forEach(function (p, i) {
++          var choiceVal = String(matched[i].choiceIndex);
++          p.node.value = choiceVal;
++          p.node.dispatchEvent(new win.Event('input', {bubbles:true}));
++          p.node.dispatchEvent(new win.Event('change', {bubbles:true}));
++          var placeNo = p.placeNo || (i + 1);
++          var dropZone = q.node.querySelector('.place' + placeNo + '.drop') || p.node.closest('.place' + placeNo) || (p.node.parentNode && p.node.parentNode.classList && p.node.parentNode.classList.contains('drop') ? p.node.parentNode : null);
++          if (dropZone) {
++            dropZone.classList.add('active', 'filled');
++            var existingText = dropZone.querySelector('.draghome');
++            if (existingText) {
++              existingText.textContent = matched[i].text;
++            } else {
++              var span = doc.createElement('span');
++              span.className = 'draghome choice' + choiceVal + ' placed';
++              span.textContent = matched[i].text;
++              dropZone.appendChild(span);
++            }
++          }
++        });
++        return {ok:true, how:'ddwtos'};
++      }
++
++       
++      var checks = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; });
++      if (checks.length && (!q.controls.length || q.type === 'multichoiceset')) {
+         var chosen = parts.map(function (part) {
+           var hits = checks.filter(function (a) { return norm(a.text) === norm(part); });
+           return hits.length === 1 ? hits[0] : null;
+@@ -4220,30 +4385,70 @@ var __ssW=window,__msePageWindow=window;
+         }
+         return {ok:true, how:'choice'};
+       }
+-      if (parts.length === 1) {
+-        var hits = q.answers.filter(function (a) { return norm(a.text) === norm(parts[0]); });
+-        if (hits.length === 1) { if (!hits[0].input.checked) hits[0].input.click(); return {ok:true, how:'choice'}; }
++
++       
++      var radios = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'radio'; });
++      if (radios.length && (!q.controls.length || q.type === 'multichoice' || q.type === 'truefalse' || q.type === 'calculatedmulti')) {
++        if (parts.length === 1) {
++          var hits = radios.filter(function (a) { return norm(a.text) === norm(parts[0]); });
++          if (hits.length === 1) { if (!hits[0].input.checked) hits[0].input.click(); return {ok:true, how:'choice'}; }
++        }
+       }
++
++       
+       var selects = q.controls.filter(function (c) { return c.kind === 'select'; });
+-      if (selects.length) {
+-        var indexed = typeof row.selectIndex === 'number';
+-        var targets = indexed ? [selects[row.selectIndex]] : selects;
+-        if (targets.some(function (x) { return !x; }) || parts.length !== targets.length) return {ok:false};
+-        var chosenOptions = targets.map(function (control, i) {
+-          var matches = Array.prototype.filter.call(control.node.options, function (o) {
+-            return norm(o.textContent) === norm(parts[i]) || String(o.value) === parts[i];
+-          });
+-          return matches.length === 1 ? matches[0] : null;
++      if (typeof row.selectIndex === 'number' && selects[row.selectIndex]) {
++        var target = selects[row.selectIndex];
++        var matches = Array.prototype.filter.call(target.node.options, function (o) {
++          return norm(o.textContent) === norm(parts[0]) || String(o.value) === parts[0];
++        });
++        if (matches.length === 1) {
++          target.node.value = matches[0].value;
++          target.node.dispatchEvent(new win.Event('change', {bubbles:true}));
++          return {ok:true, how:'select'};
++        }
++        return {ok:false};
++      }
++
++       
++      var interactive = q.controls.filter(function (c) { return c.kind === 'select' || c.kind === 'text'; });
++      if (interactive.length && interactive.length === parts.length) {
++        var planned = [];
++        for (var idx = 0; idx < interactive.length; idx++) {
++          var ctrl = interactive[idx];
++          var val = parts[idx];
++          if (ctrl.kind === 'select') {
++            var opts = Array.prototype.filter.call(ctrl.node.options, function (o) {
++              return norm(o.textContent) === norm(val) || String(o.value) === val;
++            });
++            if (opts.length !== 1) return {ok:false};
++            planned.push({ kind: 'select', node: ctrl.node, value: opts[0].value });
++          } else if (ctrl.kind === 'text') {
++            planned.push({ kind: 'text', node: ctrl.node, value: val });
++          }
++        }
++        planned.forEach(function (act) {
++          if (act.kind === 'select') {
++            act.node.value = act.value;
++            act.node.dispatchEvent(new win.Event('change', {bubbles:true}));
++          } else if (act.kind === 'text') {
++            act.node.value = act.value;
++            act.node.dispatchEvent(new win.Event('input', {bubbles:true}));
++            act.node.dispatchEvent(new win.Event('change', {bubbles:true}));
++          }
+         });
+-        if (chosenOptions.some(function (x) { return !x; })) return {ok:false};
+-        targets.forEach(function (c, i) { c.node.value = chosenOptions[i].value; c.node.dispatchEvent(new win.Event('change', {bubbles:true})); });
+-        return {ok:true, how:'select'};
++        return {ok:true, how: interactive.every(function (c) { return c.kind === 'select'; }) ? 'select' : (interactive.every(function (c) { return c.kind === 'text'; }) ? 'text' : 'multi')};
+       }
+-      var boxes = q.controls.filter(function (c) { return c.kind === 'text'; });
+-      if (boxes.length && boxes.length === parts.length) {
+-        boxes.forEach(function (c,i) { c.node.value = parts[i]; c.node.dispatchEvent(new win.Event('input', {bubbles:true})); c.node.dispatchEvent(new win.Event('change', {bubbles:true})); });
+-        return {ok:true, how:'text'};
++
++       
++      if (parts.length === 1) {
++        var anyHits = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && norm(a.text) === norm(parts[0]); });
++        if (anyHits.length === 1) {
++          if (!anyHits[0].input.checked) anyHits[0].input.click();
++          return {ok:true, how:'choice'};
++        }
+       }
++
+       return {ok:false, how:null};
+     }
+ 
+@@ -4350,7 +4555,7 @@ var __ssW=window,__msePageWindow=window;
        agent: null,              
        agentTimer: null,
        gw: { busy: null, probe: null, models: null, check: null, reg: null },
@@ -2199,7 +2893,7 @@ index 2f684ea..0a2d582 100644
        ai: null,                 
        tier: null,               
        t0: 0
-@@ -4460,20 +4548,30 @@ var __ssW=window,__msePageWindow=window;
+@@ -4460,20 +4665,30 @@ var __ssW=window,__msePageWindow=window;
  
      function head(titleText, sub, leading) {
        var h = el('div', 'ph');
@@ -2239,7 +2933,7 @@ index 2f684ea..0a2d582 100644
          h.appendChild(chip);
        }
        var mini = el('button', 'mini-status');
-@@ -4651,8 +4749,10 @@ var __ssW=window,__msePageWindow=window;
+@@ -4651,8 +4866,10 @@ var __ssW=window,__msePageWindow=window;
            var mark = el('span', 'mark' + (r.agent ? ' agent' : ''));
            a.appendChild(mark);
            a.appendChild(el('span', 'lbl', r.label));
@@ -2252,7 +2946,7 @@ index 2f684ea..0a2d582 100644
            if (r.agent) {
              var tag = el('span', 'tag agent', 'agent');
              a.appendChild(tag);
-@@ -4677,10 +4777,11 @@ var __ssW=window,__msePageWindow=window;
+@@ -4677,10 +4894,11 @@ var __ssW=window,__msePageWindow=window;
      function appendAi(q) {
        var ai = state.agent || { state: 'idle' };
        if (ai.state === 'running' || ai.state === 'retry') {
@@ -2268,7 +2962,7 @@ index 2f684ea..0a2d582 100644
          body.appendChild(N(run, 1));
          return;
        }
-@@ -4785,15 +4886,18 @@ var __ssW=window,__msePageWindow=window;
+@@ -4785,15 +5003,18 @@ var __ssW=window,__msePageWindow=window;
        });
      }
  
@@ -2289,7 +2983,18 @@ index 2f684ea..0a2d582 100644
        render();
        var t0 = Date.now();
        Promise.resolve().then(function () { return questionImages(q); }).then(function (images) { return win.MSEBridge.agent({
-@@ -4813,7 +4917,11 @@ var __ssW=window,__msePageWindow=window;
+@@ -4801,8 +5022,9 @@ var __ssW=window,__msePageWindow=window;
+         question: q.text,
+         type: q.type,
+         options: q.answers.map(function (a) { return a.text; }),
+-        multiple: q.type === 'multichoiceset' || q.answers.some(function (a) { return a.input.type === 'checkbox'; }),
++        multiple: q.type === 'multichoiceset' || q.answers.some(function (a) { return a.input && a.input.type === 'checkbox'; }),
+         selects: q.controls.filter(function (c) { return c.kind === 'select'; }).map(function (c) { return Array.prototype.filter.call(c.node.options, function (o) { return !!o.value && !o.disabled; }).map(function (o) { return o.textContent.trim(); }); }),
++        placesCount: q.controls.filter(function (c) { return c.kind === 'place'; }).length,
+         textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
+         image: images.length ? images : null
+       }, function (stage) {
+@@ -4813,7 +5035,11 @@ var __ssW=window,__msePageWindow=window;
          var ms = Date.now() - t0;
          if (res.ok && res.answer) {
            logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
@@ -2302,7 +3007,7 @@ index 2f684ea..0a2d582 100644
            state.agent = { state: 'ok', answer: res.answer };
            var existing = (state.rows || []).find(function (r) { return r.label === res.answer; });
            if (existing) {
-@@ -4830,16 +4938,37 @@ var __ssW=window,__msePageWindow=window;
+@@ -4830,16 +5056,37 @@ var __ssW=window,__msePageWindow=window;
            startRetry(automatic);
            return;
          }
@@ -2342,7 +3047,7 @@ index 2f684ea..0a2d582 100644
          render();
        });
      }
-@@ -4940,22 +5069,34 @@ var __ssW=window,__msePageWindow=window;
+@@ -4940,22 +5187,34 @@ var __ssW=window,__msePageWindow=window;
        var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
        body.appendChild(N(el('div', 'sec', 'account')));
        body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
@@ -2384,7 +3089,7 @@ index 2f684ea..0a2d582 100644
        net.appendChild(el('span', 'txt', 'network log'));
        net.appendChild(el('span', 'more', 'open'));
        body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
-@@ -4968,9 +5109,17 @@ var __ssW=window,__msePageWindow=window;
+@@ -4968,9 +5227,17 @@ var __ssW=window,__msePageWindow=window;
        var epoch = ++state.modelEpoch;
        br.probe(url).then(function (r) {
          if (epoch !== state.modelEpoch || br.url() !== url) return;
@@ -2404,7 +3109,7 @@ index 2f684ea..0a2d582 100644
      }
  
      function checkGateway(raw) {
-@@ -4980,26 +5129,43 @@ var __ssW=window,__msePageWindow=window;
+@@ -4980,26 +5247,43 @@ var __ssW=window,__msePageWindow=window;
        var epoch = ++state.modelEpoch;
        gw.busy = 'check';
        gw.probe = null;
@@ -2463,7 +3168,7 @@ index 2f684ea..0a2d582 100644
            render();
            return r;
          });
-@@ -5025,7 +5191,6 @@ var __ssW=window,__msePageWindow=window;
+@@ -5025,7 +5309,6 @@ var __ssW=window,__msePageWindow=window;
        input.spellcheck = false;
        input.placeholder = 'https:/\/…';
        input.value = br.url() || '';
@@ -2471,7 +3176,7 @@ index 2f684ea..0a2d582 100644
        input.addEventListener('input', function () {
          var typed = String(input.value || '').trim().replace(/\x2F+$/, '');
          var saved = br.url() || '';
-@@ -5035,79 +5200,51 @@ var __ssW=window,__msePageWindow=window;
+@@ -5035,79 +5318,51 @@ var __ssW=window,__msePageWindow=window;
        body.appendChild(N(el('div', 'sec', 'connection'), 0));
        var frow = el('div', 'frow');
        body.appendChild(N(frow, 0));
@@ -2536,11 +3241,7 @@ index 2f684ea..0a2d582 100644
 -        } else {
 -          light.classList.remove('on');
 -        }
-+        dbgBtn.classList.toggle('on', next);
-+        var curLight = dbgBtn.querySelector('.dbg-light');
-+        if (curLight) curLight.classList.toggle('on', next);
-+        if (next) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
-       });
+-      });
 -      toggle.appendChild(light);
 -      var dbgText = el('div', 'dbg-text');
 -      dbgText.appendChild(el('span', 'dbg-title', 'Debug mode'));
@@ -2554,7 +3255,11 @@ index 2f684ea..0a2d582 100644
 -        snifText = JSON.stringify(snifDump(), null, 2);
 -        state.route = 'snif';
 -        render();
--      });
++        dbgBtn.classList.toggle('on', next);
++        var curLight = dbgBtn.querySelector('.dbg-light');
++        if (curLight) curLight.classList.toggle('on', next);
++        if (next) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
+       });
 -      snif.setAttribute('data-mse', 'snif');
 -      actions.appendChild(snif);
 -      var report = press(el('button', 'btn', 'Report'), function () {
@@ -2589,7 +3294,7 @@ index 2f684ea..0a2d582 100644
      }
  
       
-@@ -5124,22 +5261,24 @@ var __ssW=window,__msePageWindow=window;
+@@ -5124,22 +5379,24 @@ var __ssW=window,__msePageWindow=window;
        });
        body.appendChild(N(box, 1));
        var frow = el('div', 'frow');
@@ -2620,7 +3325,7 @@ index 2f684ea..0a2d582 100644
        frow.appendChild(clear);
        body.appendChild(N(frow, 1));
      }
-@@ -5193,6 +5332,34 @@ var __ssW=window,__msePageWindow=window;
+@@ -5193,6 +5450,34 @@ var __ssW=window,__msePageWindow=window;
          method: formEl.getAttribute('method') || 'POST',
          elementsCount: formEl.elements ? formEl.elements.length : 0
        } : null;
@@ -2655,7 +3360,7 @@ index 2f684ea..0a2d582 100644
        var protocolView = q ? {
          page: null,
          question: q.text,
-@@ -5207,11 +5374,16 @@ var __ssW=window,__msePageWindow=window;
+@@ -5207,11 +5492,16 @@ var __ssW=window,__msePageWindow=window;
          text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) { return c.node.value || ''; }),
          images: images.map(function (im) { return im.src; }),
          question_image: images.length ? images[0].src : null,
@@ -2673,7 +3378,7 @@ index 2f684ea..0a2d582 100644
          warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
          page: { location: String(win.location.href), title: doc.title, headings: Array.prototype.map.call(doc.querySelectorAll('h1,h2,h3'), function (n) { return n.textContent.trim(); }),
            httpHeaders: 'unavailable to page JavaScript', cookieNamesVisibleToJavaScript: cookies, inlineMoodleScripts: scripts },
-@@ -5226,6 +5398,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -5226,6 +5516,8 @@ var __ssW=window,__msePageWindow=window;
      }
      function debugTraffic(event) {
        if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
@@ -2682,7 +3387,7 @@ index 2f684ea..0a2d582 100644
        var dump = snifDump(); dump.traffic = event;
        win.MSEBridge.sendDump('debug', dump);
      }
-@@ -5239,6 +5413,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5239,6 +5531,7 @@ var __ssW=window,__msePageWindow=window;
      }
      var snifText = '';
      function viewSnif() {
@@ -2690,7 +3395,7 @@ index 2f684ea..0a2d582 100644
        body.appendChild(N(el('div', 'sec', 'Snif · local only')));
        body.appendChild(N(el('div', 'empty', 'May contain session keys and personal data. Review before sharing.')));
        var copy = el('button', 'btn solid', 'Copy');
-@@ -5264,8 +5439,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -5264,8 +5557,8 @@ var __ssW=window,__msePageWindow=window;
        var title = CONFIG.brand;
        var leading = 'info';
        if (state.route === 'answers' && state.question) {
@@ -2701,7 +3406,7 @@ index 2f684ea..0a2d582 100644
        } else if (state.route === 'account') { sub = 'account'; }
        else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
        else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
-@@ -5328,6 +5503,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5328,6 +5621,7 @@ var __ssW=window,__msePageWindow=window;
          if (!q) return false;
          return applyAnswer(q, { label: label });
        },
@@ -2709,7 +3414,7 @@ index 2f684ea..0a2d582 100644
        agent: function () { return state.agent; },
        runAgent: function () { runAgent(false); return true; },
        log: function () { return log.slice(-40); },
-@@ -5374,6 +5550,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5374,6 +5668,7 @@ var __ssW=window,__msePageWindow=window;
              : state.agent && state.agent.state === 'error' ? { state: 'error', text: state.agent.text }
              : state.agent && state.agent.state === 'running' ? { state: 'running', text: '' }
              : null,
@@ -2717,15 +3422,25 @@ index 2f684ea..0a2d582 100644
            tier: state.tier,
            meta: state.meta,
            identity: identity(),
+@@ -5386,7 +5681,8 @@ var __ssW=window,__msePageWindow=window;
+             supported: state.question.supported,
+             identity: state.question.identity,
+             questionId: state.question.questionId,
+-            answers: state.question.answers.map(function (a) { return a.text; })
++            answers: state.question.answers.map(function (a) { return a.text; }),
++            controls: (state.question.controls || []).map(function (c) { return { kind: c.kind, placeNo: c.placeNo }; })
+           } : null
+         };
+       }
 diff --git a/package.json b/package.json
-index ae78558..be26955 100644
+index ae78558..3dd28a5 100644
 --- a/package.json
 +++ b/package.json
 @@ -1,6 +1,6 @@
  {
    "name": "mse",
 -  "version": "2.8.0",
-+  "version": "2.11.0",
++  "version": "2.12.0",
    "private": true,
    "description": "MSE — Moodle answer panel (userscript) and the gateway/router stack behind it",
    "license": "UNLICENSED",
@@ -2770,29 +3485,168 @@ index 84b7708..9fb7222 100644
          await new Promise((x) => setTimeout(x, 200));
        }
 diff --git a/tests/agent_types.test.js b/tests/agent_types.test.js
-index 460786e..d419ff3 100644
+index 460786e..6958d32 100644
 --- a/tests/agent_types.test.js
 +++ b/tests/agent_types.test.js
-@@ -5,7 +5,7 @@ const router=require('../Server/mse-router'); let upstream,base,lastPayload;
- const key='mse_'+ '8'.repeat(48);
- test.before(async()=>{
-  upstream=http.createServer((req,res)=>{
+@@ -1,24 +1,134 @@
+ 'use strict';
+-const test=require('node:test'), assert=require('node:assert/strict'), fs=require('fs'),os=require('os'),path=require('path'),http=require('http');
+-const data=fs.mkdtempSync(path.join(os.tmpdir(),'mse-types-')); Object.assign(process.env,{MSE_DATA_DIR:data,MSE_ADMIN_TOKEN:'adm_test',MSE_UPSTREAM_PORT:'1',MSE_MODEL:'mock'});
+-const router=require('../Server/mse-router'); let upstream,base,lastPayload;
+-const key='mse_'+ '8'.repeat(48);
+-test.before(async()=>{
+- upstream=http.createServer((req,res)=>{
 -  if(req.url==='/v1/models')return res.end('{"data":[{"id":"mock"}]}');let raw='';req.on('data',c=>raw+=c);req.on('end',()=>{lastPayload=JSON.parse(raw);let content=lastPayload.messages[1].content;let text=Array.isArray(content)?content[0].text:content;let answer=text.includes('dropdown')?'Alpha | Beta':text.includes('all that apply')?'Alpha | Beta':'Alpha';res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({answer})}}]}));});
-+  if(req.url==='/v1/models')return res.end('{"data":[{"id":"mock"}]}');let raw='';req.on('data',c=>raw+=c);req.on('end',()=>{lastPayload=JSON.parse(raw);let content=lastPayload.messages[1].content;let text=Array.isArray(content)?((content.find(c=>c.type==='text')||{}).text||''):String(content||'');let answer=text.includes('dropdown')?'Alpha | Beta':text.includes('all that apply')?'Alpha | Beta':'Alpha';res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({answer})}}]}));});
-  }); await new Promise(r=>upstream.listen(0,'127.0.0.1',r));router.CFG.upstreamUrl='http://127.0.0.1:'+upstream.address().port; await new Promise(r=>router.server.listen(0,'127.0.0.1',r));base='http://127.0.0.1:'+router.server.address().port;
-  const d=await(await post('/mse/v1/register',{key,moodleId:'9'})).json();await post('/admin/approve',{deviceId:d.device.deviceId},{'x-admin-token':'adm_test'});
- });
-@@ -19,6 +19,7 @@ test('multi and dropdown answers are validated against every option',async()=>{
- });
- test('images travel as data only to the backend; a remote URL is rejected',async()=>{
-  const image='data:image/png;base64,aGVsbG8=';const r=await ask({question:'image?',options:['Alpha'],image:[{data:image,label:'question'}]});assert.equal(r.body.ok,true);
+- }); await new Promise(r=>upstream.listen(0,'127.0.0.1',r));router.CFG.upstreamUrl='http://127.0.0.1:'+upstream.address().port; await new Promise(r=>router.server.listen(0,'127.0.0.1',r));base='http://127.0.0.1:'+router.server.address().port;
+- const d=await(await post('/mse/v1/register',{key,moodleId:'9'})).json();await post('/admin/approve',{deviceId:d.device.deviceId},{'x-admin-token':'adm_test'});
+-});
+-test.after(()=>{router.server.close();upstream.close()});
+-const post=(url,b,h={})=>fetch(base+url,{method:'POST',headers:{'content-type':'application/json',...h},body:JSON.stringify(b)});
+-const ask=async(body)=>{const r=await post('/mse/v1/agent',body,{authorization:'Bearer '+key});return {status:r.status,body:await r.json()}};
+-test('multi and dropdown answers are validated against every option',async()=>{
+- const multi=await ask({question:'q',options:['Alpha','Beta','Gamma'],multiple:true});assert.equal(multi.body.answer,'Alpha | Beta');
+- const selects=await ask({question:'q',selects:[['Alpha','Gamma'],['Beta','Gamma']]});assert.equal(selects.body.answer,'Alpha | Beta');
+- const invalid=await ask({question:'q',selects:[['Gamma'],['Beta']]});assert.equal(invalid.body.ok,false);assert.match(invalid.body.message,/not in/);
+-});
+-test('images travel as data only to the backend; a remote URL is rejected',async()=>{
+- const image='data:image/png;base64,aGVsbG8=';const r=await ask({question:'image?',options:['Alpha'],image:[{data:image,label:'question'}]});assert.equal(r.body.ok,true);
 - assert.equal(lastPayload.messages[1].content[2].image_url.url,image);
-+ const imgObj = lastPayload.messages[1].content.find(c => c.type === 'image_url');
-+ assert.equal(imgObj.image_url.url,image);
-  const invalid=await ask({question:'image?',image:[{data:'https://other.example.edu/secret'}]});assert.equal(invalid.status,400);
+- const invalid=await ask({question:'image?',image:[{data:'https://other.example.edu/secret'}]});assert.equal(invalid.status,400);
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const http = require('http');
++
++const data = fs.mkdtempSync(path.join(os.tmpdir(), 'mse-types-'));
++Object.assign(process.env, {
++  MSE_DATA_DIR: data,
++  MSE_ADMIN_TOKEN: 'adm_test',
++  MSE_UPSTREAM_PORT: '1',
++  MSE_MODEL: 'mock'
++});
++const router = require('../Server/mse-router');
++let upstream, base, lastPayload;
++const key = 'mse_' + '8'.repeat(48);
++
++test.before(async () => {
++  upstream = http.createServer((req, res) => {
++    if (req.url === '/v1/models') return res.end('{"data":[{"id":"mock"}]}');
++    let raw = '';
++    req.on('data', c => raw += c);
++    req.on('end', () => {
++      lastPayload = JSON.parse(raw);
++      const userMsg = lastPayload.messages[1].content;
++      const text = Array.isArray(userMsg)
++        ? ((userMsg.find(c => c.type === 'text') || {}).text || '')
++        : String(userMsg || '');
++      let answer = 'Alpha';
++      if (text.includes('numerical') || text.includes('number (e.g.')) {
++        answer = '42.5';
++      } else if (text.includes('drag-and-drop') || text.includes('dropdown') || text.includes('all that apply')) {
++        answer = 'Alpha | Beta';
++      } else if (text.includes('fill in the field')) {
++        answer = 'Paris';
++      }
++      res.writeHead(200, { 'content-type': 'application/json' });
++      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ answer }) } }] }));
++    });
++  });
++  await new Promise(r => upstream.listen(0, '127.0.0.1', r));
++  router.CFG.upstreamUrl = 'http://127.0.0.1:' + upstream.address().port;
++  await new Promise(r => router.server.listen(0, '127.0.0.1', r));
++  base = 'http://127.0.0.1:' + router.server.address().port;
++  const d = await (await post('/mse/v1/register', { key, moodleId: '9' })).json();
++  await post('/admin/approve', { deviceId: d.device.deviceId }, { 'x-admin-token': 'adm_test' });
++});
++
++test.after(() => {
++  router.server.close();
++  upstream.close();
++});
++
++const post = (url, b, h = {}) => fetch(base + url, {
++  method: 'POST',
++  headers: { 'content-type': 'application/json', ...h },
++  body: JSON.stringify(b)
++});
++const ask = async (body) => {
++  const r = await post('/mse/v1/agent', body, { authorization: 'Bearer ' + key });
++  return { status: r.status, body: await r.json() };
++};
++
++test('multi and dropdown answers are validated against every option', async () => {
++  const multi = await ask({ question: 'q', options: ['Alpha', 'Beta', 'Gamma'], multiple: true });
++  assert.equal(multi.body.answer, 'Alpha | Beta');
++  const selects = await ask({ question: 'q', selects: [['Alpha', 'Gamma'], ['Beta', 'Gamma']] });
++  assert.equal(selects.body.answer, 'Alpha | Beta');
++  const invalid = await ask({ question: 'q', selects: [['Gamma'], ['Beta']] });
++  assert.equal(invalid.body.ok, false);
++  assert.match(invalid.body.message, /not in/);
++});
++
++test('numerical and calculated questions do not forbid digits and accept number answer', async () => {
++  const res = await ask({
++    question: 'Calculate acceleration',
++    type: 'numerical'
++  });
++  assert.equal(res.body.ok, true);
++  assert.equal(res.body.answer, '42.5');
++
++  // Verify prompt does NOT forbid digits or numbers
++  const sysMsg = lastPayload.messages[0].content;
++  const userMsg = lastPayload.messages[1].content;
++  assert.doesNotMatch(sysMsg, /Numbering is strictly forbidden/);
++  assert.doesNotMatch(sysMsg, /Do NOT return numbers/);
++  assert.match(userMsg, /exact numerical answer as a number/);
++});
++
++test('shortanswer accepts free text answers', async () => {
++  const res = await ask({
++    question: 'Capital of France?',
++    type: 'shortanswer'
++  });
++  assert.equal(res.body.ok, true);
++  assert.equal(res.body.answer, 'Paris');
++});
++
++test('ddwtos drag-and-drop into text prompt and validator', async () => {
++  const res = await ask({
++    question: 'The [[1]] and [[2]]',
++    type: 'ddwtos',
++    options: ['Alpha', 'Beta', 'Gamma'],
++    placesCount: 2
++  });
++  assert.equal(res.body.ok, true);
++  assert.equal(res.body.answer, 'Alpha | Beta');
++
++  const userMsg = lastPayload.messages[1].content;
++  assert.match(userMsg, /drag-and-drop into text/);
++  assert.match(userMsg, /2 blank\(s\)/);
++
++  // When agent returns an option not in options
++  const invalid = await ask({
++    question: 'The [[1]] and [[2]]',
++    type: 'ddwtos',
++    options: ['Gamma', 'Delta'],
++    placesCount: 2
++  });
++  assert.equal(invalid.body.ok, false);
++  assert.match(invalid.body.message, /not in the task/);
++});
++
++test('images travel as data only to the backend; a remote URL is rejected', async () => {
++  const image = 'data:image/png;base64,aGVsbG8=';
++  const r = await ask({ question: 'image?', options: ['Alpha'], image: [{ data: image, label: 'question' }] });
++  assert.equal(r.body.ok, true);
++  const imgObj = lastPayload.messages[1].content.find(c => c.type === 'image_url');
++  assert.equal(imgObj.image_url.url, image);
++  const invalid = await ask({ question: 'image?', image: [{ data: 'https://other.example.edu/secret' }] });
++  assert.equal(invalid.status, 400);
  });
 diff --git a/tests/bot_280.py b/tests/bot_280.py
-index d16b8c2..d1e2115 100644
+index d16b8c2..7a6db33 100644
 --- a/tests/bot_280.py
 +++ b/tests/bot_280.py
 @@ -38,8 +38,8 @@ h_screen = screens.home(st_mock)
@@ -2801,11 +3655,156 @@ index d16b8c2..d1e2115 100644
  assert 'data="dump:list"' not in html, "Old dump:list button should not be on home screen"
 -assert 'version 2.8.0' in html, "Version 2.8.0 should be displayed in footer"
 -print("ok 2 - Bug 6: button labeled 'дампы/логи' with data='dump:all' and version 2.8.0")
-+assert ('version 2.10.0' in html or 'version 2.8.0' in html), "Version should be displayed in footer"
++assert ('version 2.12.0' in html or 'version 2.11.0' in html or 'version 2.10.0' in html or 'version 2.8.0' in html), "Version should be displayed in footer"
 +print("ok 2 - Bug 6: button labeled 'дампы/логи' with data='dump:all' and version 2.10.0")
  
  # 3. Test Bug 6: packaging dumps and logs into zip archive
  dumps_mock = [
+diff --git a/tests/cloze_multianswer.test.js b/tests/cloze_multianswer.test.js
+new file mode 100644
+index 0000000..a96846d
+--- /dev/null
++++ b/tests/cloze_multianswer.test.js
+@@ -0,0 +1,61 @@
++'use strict';
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const h = require('./lib/harness.js');
++
++test('WebKit: Cloze multianswer handles multi-control sequencing in document order', { timeout: 90000 }, async () => {
++  const t = await h.launch({ api: () => ({ status: 200, json: [] }) });
++  try {
++    const page = await t.newPage(h.fixtureUrl('attempt'));
++    await page.waitForFunction(() => !!window.__mse);
++    await page.evaluate(() => {
++      const q = document.querySelector('.que');
++      q.className = 'que multianswer deferredfeedback notyetanswered';
++      q.querySelector('.formulation').innerHTML = `
++        <div class="qtext">
++          Fill in:
++          Part 1 (text): <input type="text" name="q50:1_sub1_answer" id="c_txt1" value="">
++          Part 2 (select):
++          <select name="q50:1_sub2_answer" id="c_sel">
++            <option value="0">Choose...</option>
++            <option value="1">Alpha</option>
++            <option value="2">Beta</option>
++          </select>
++          Part 3 (text): <input type="text" name="q50:1_sub3_answer" id="c_txt2" value="">
++        </div>
++      `;
++      window.__mse.open();
++    });
++    await page.waitForFunction(() => !!window.__mse.state().question);
++
++    const q = await page.evaluate(() => {
++      const cur = window.__mse.current();
++      return {
++        controls: cur.controls.map(c => c.kind)
++      };
++    });
++    assert.deepEqual(q.controls, ['text', 'select', 'text'], 'controls preserve exact document order');
++
++    // Attempt valid 3-part answer
++    const applied = await page.evaluate(() => window.__mse.apply('Hello | Beta | World'));
++    assert.equal(applied.ok, true);
++    assert.equal(applied.how, 'multi');
++
++    const res = await page.evaluate(() => ({
++      t1: document.getElementById('c_txt1').value,
++      sVal: document.getElementById('c_sel').value,
++      t2: document.getElementById('c_txt2').value
++    }));
++    assert.equal(res.t1, 'Hello');
++    assert.equal(res.sVal, '2');
++    assert.equal(res.t2, 'World');
++
++    // Attempt invalid dropdown option in 3-part answer
++    const invalidApplied = await page.evaluate(() => window.__mse.apply('Hello | Gamma | World'));
++    assert.equal(invalidApplied.ok, false, 'invalid dropdown option rejected');
++
++    await page.close();
++  } finally {
++    await t.close();
++  }
++});
+diff --git a/tests/ddwtos_real.test.js b/tests/ddwtos_real.test.js
+new file mode 100644
+index 0000000..b56e16d
+--- /dev/null
++++ b/tests/ddwtos_real.test.js
+@@ -0,0 +1,72 @@
++'use strict';
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const h = require('./lib/harness.js');
++
++test('WebKit: ddwtos is supported, parses drag items, and fills hidden placeinputs on real fixture', { timeout: 90000 }, async () => {
++  const t = await h.launch({ api: () => ({ status: 200, json: [] }) });
++  try {
++    const page = await t.newPage(h.fixtureUrl('attempt'));
++    await page.waitForFunction(() => !!window.__mse);
++
++    // Scroll question 2 into view and wait for viewport repositioning
++    await page.evaluate(() => {
++      document.getElementById('question-127-2').scrollIntoView();
++    });
++    await page.waitForTimeout(300);
++    await page.evaluate(() => {
++      window.__mse.open();
++    });
++    await page.waitForFunction(() => {
++      const cur = window.__mse.state().question;
++      return cur && cur.type === 'ddwtos';
++    });
++
++    const q = await page.evaluate(() => {
++      const cur = window.__mse.state().question;
++      return {
++        type: cur.type,
++        supported: cur.supported,
++        kind: cur.kind,
++        answers: cur.answers,
++        placesCount: cur.controls.filter(c => c.kind === 'place').length
++      };
++    });
++
++    assert.equal(q.type, 'ddwtos');
++    assert.equal(q.supported, true, 'ddwtos is supported');
++    assert.equal(q.kind, 'ddwtos');
++    assert.equal(q.placesCount, 3, '3 drop places detected');
++    assert.deepEqual(q.answers, ['Twitter', 'Instagram', 'Facetime', 'LinkedIn', 'Pinterest', 'Youtube']);
++
++    // Apply 3-slot answer
++    const applied = await page.evaluate(() => window.__mse.apply('Twitter | Instagram | Facetime'));
++    assert.equal(applied.ok, true, 'answer applied');
++    assert.equal(applied.how, 'ddwtos');
++
++    const result = await page.evaluate(() => {
++      const p1 = document.getElementById('q127_2_p1').value;
++      const p2 = document.getElementById('q127_2_p2').value;
++      const p3 = document.getElementById('q127_2_p3').value;
++      const t1 = document.querySelector('.place1.drop').textContent;
++      const t2 = document.querySelector('.place2.drop').textContent;
++      const t3 = document.querySelector('.place3.drop').textContent;
++      return { p1, p2, p3, t1, t2, t3 };
++    });
++
++    assert.equal(result.p1, '1', 'place 1 input set to choice 1 (Twitter)');
++    assert.equal(result.p2, '2', 'place 2 input set to choice 2 (Instagram)');
++    assert.equal(result.p3, '3', 'place 3 input set to choice 3 (Facetime)');
++    assert.match(result.t1, /Twitter/, 'drop 1 contains Twitter text');
++    assert.match(result.t2, /Instagram/, 'drop 2 contains Instagram text');
++    assert.match(result.t3, /Facetime/, 'drop 3 contains Facetime text');
++
++    // Invalid choice rejected
++    const invalid = await page.evaluate(() => window.__mse.apply('Twitter | NonExistentApp | Facetime'));
++    assert.equal(invalid.ok, false, 'non-existent choice rejected');
++
++    await page.close();
++  } finally {
++    await t.close();
++  }
++});
 diff --git a/tests/dumps_parser.test.js b/tests/dumps_parser.test.js
 index 6434777..78787a3 100644
 --- a/tests/dumps_parser.test.js
@@ -2820,10 +3819,24 @@ index 6434777..78787a3 100644
      const qInfo = await page.evaluate(() => {
        const q = window.__mse.current();
 diff --git a/tests/mse.test.js b/tests/mse.test.js
-index c8d31bf..c884e7f 100644
+index c8d31bf..66355e8 100644
 --- a/tests/mse.test.js
 +++ b/tests/mse.test.js
-@@ -228,7 +228,7 @@ test('M5 every type of the answer service is understood, and an unknown one is n
+@@ -218,17 +218,18 @@ test('M5 every type of the answer service is understood, and an unknown one is n
+     assert.equal(map.shortanswer.kind, 'text', 'a short answer goes into the text box');
+     assert.equal(map.truefalse.kind, 'choice');
+     assert.equal(map.match.kind, 'select', 'a matching question is filled through its selects');
+-    assert.equal(map.ddwtos.supported, false, 'drag-and-drop in text is not something we can set: it is said plainly');
++    assert.equal(map.ddwtos.supported, true, 'drag-and-drop in text is supported in 2.12.0');
++    assert.equal(map.ddwtos.kind, 'ddwtos', 'and it is filled via ddwtos handler');
+     const lists = await page.evaluate(() => window.__mse.types());
+     assert.ok(lists.supported.indexOf('multichoice') >= 0 && lists.supported.indexOf('match') >= 0, 'the supported list');
+-    assert.ok(lists.unsupported.indexOf('ddwtos') >= 0, 'drag-and-drop is on the unsupported list');
+-    assert.equal(map.ddwtos.kind, null, 'and it has no way to be filled');
++    assert.ok(lists.supported.indexOf('ddwtos') >= 0, 'ddwtos is on the supported list');
++    assert.ok(lists.unsupported.indexOf('ddmarker') >= 0, 'ddmarker is on the unsupported list');
+     report.m5 = { map };
+     assert.deepEqual(t.errors, []);
    } finally { await t.close(); }
  });
  
@@ -2832,7 +3845,7 @@ index c8d31bf..c884e7f 100644
    const { t, page } = await open({
      before: async (ctx) => {
        await ctx.addInitScript(() => {
-@@ -245,16 +245,13 @@ test('M6 the account sheet: one ⓘ, the id, the login, the name — each copies
+@@ -245,16 +246,13 @@ test('M6 the account sheet: one ⓘ, the id, the login, the name — each copies
    try {
      await openPanel(page);
      const st = await page.evaluate(() => window.__mse.state());
@@ -2853,7 +3866,7 @@ index c8d31bf..c884e7f 100644
      assert.match(acct.pop.text, /Test User/, 'the name is there');
      assert.match(acct.pop.text, /key/, 'the device key is there');
      assert.doesNotMatch(acct.pop.text, /stored on this device|sha256/, 'no explanatory prose in a production build');
-@@ -450,14 +447,13 @@ test('M11 the gateway and the agent: check, models, allow by ID, and the agent f
+@@ -450,14 +448,13 @@ test('M11 the gateway and the agent: check, models, allow by ID, and the agent f
      await page.mouse.click(checkBtn.x, checkBtn.y);
      await page.waitForTimeout(2500);
      const checked = await page.evaluate(() => window.__mse.state());
@@ -2870,7 +3883,7 @@ index c8d31bf..c884e7f 100644
  
      /* 3. the registration is pending, and the agent refuses until the owner allows the id */
 diff --git a/tests/onefile.test.js b/tests/onefile.test.js
-index 3d567b7..b0f5790 100644
+index 3d567b7..34d06f3 100644
 --- a/tests/onefile.test.js
 +++ b/tests/onefile.test.js
 @@ -17,9 +17,9 @@ const src = fs.readFileSync(path.join(ART, 'mse.user.js'), 'utf8');
@@ -2880,9 +3893,9 @@ index 3d567b7..b0f5790 100644
 -  assert.match(src, /^\/\/ @version\s+2\.8\.0$/m);
 -  assert.equal(report.version, '2.8.0');
 -  assert.equal(require('../package.json').version, '2.8.0');
-+  assert.match(src, /^\/\/ @version\s+2\.11\.0$/m);
-+  assert.equal(report.version, '2.11.0');
-+  assert.equal(require('../package.json').version, '2.11.0');
++  assert.match(src, /^\/\/ @version\s+2\.12\.0$/m);
++  assert.equal(report.version, '2.12.0');
++  assert.equal(require('../package.json').version, '2.12.0');
    assert.equal((src.match(/==UserScript==/g) || []).length, 1, 'exactly one userscript header');
    assert.equal((src.match(/==\/UserScript==/g) || []).length, 1, 'exactly one userscript footer');
    assert.equal((src.match(/^\s*\/\/\s*@require\b/gm) || []).length, 0, 'no @require');
@@ -2908,8 +3921,208 @@ index ea800b0..c0e5dad 100644
      assert.equal(health.proxy, null);
  
      const key = 'mse_' + 'd'.repeat(48);
+diff --git a/tests/question_types_real.test.js b/tests/question_types_real.test.js
+new file mode 100644
+index 0000000..de9c0ff
+--- /dev/null
++++ b/tests/question_types_real.test.js
+@@ -0,0 +1,194 @@
++'use strict';
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const h = require('./lib/harness.js');
++
++test('WebKit: universal handling of Layer 1 question types in real Moodle format', { timeout: 90000 }, async () => {
++  const t = await h.launch({ api: () => ({ status: 200, json: [] }) });
++  try {
++    // 1. Real Moodle checkboxes: name="qX:N_choice*"
++    {
++      const page = await t.newPage(h.fixtureUrl('attempt'));
++      await page.waitForFunction(() => !!window.__mse);
++      await page.evaluate(() => {
++        const q = document.querySelector('.que');
++        q.className = 'que multichoice deferredfeedback notyetanswered';
++        q.querySelector('.answer').innerHTML = `
++          <div class="r0"><input type="checkbox" name="q42:1_choice0" id="c0" value="1"><label for="c0">Apple</label></div>
++          <div class="r1"><input type="checkbox" name="q42:1_choice1" id="c1" value="1"><label for="c1">Banana</label></div>
++          <div class="r0"><input type="checkbox" name="q42:1_choice2" id="c2" value="1"><label for="c2">Cherry</label></div>
++        `;
++        window.__mse.open();
++      });
++      await page.waitForFunction(() => !!window.__mse.state().question);
++      const q = await page.evaluate(() => {
++        const cur = window.__mse.current();
++        return {
++          detectedAnswers: cur.answers.length,
++          labels: cur.answers.map(a => a.text),
++          supported: cur.supported
++        };
++      });
++      assert.equal(q.detectedAnswers, 3, 'all 3 checkboxes detected');
++      assert.deepEqual(q.labels, ['Apple', 'Banana', 'Cherry']);
++
++      const applied = await page.evaluate(() => window.__mse.apply('Apple | Cherry'));
++      assert.equal(applied.ok, true, 'applied checkbox answer successfully');
++      assert.equal(applied.how, 'choice');
++
++      const checked = await page.evaluate(() => [
++        document.getElementById('c0').checked,
++        document.getElementById('c1').checked,
++        document.getElementById('c2').checked
++      ]);
++      assert.deepEqual(checked, [true, false, true], 'correct checkboxes ticked');
++      await page.close();
++    }
++
++    // 2. Cloze multianswer with mixed controls (select dropdown + text field)
++    {
++      const page = await t.newPage(h.fixtureUrl('attempt'));
++      await page.waitForFunction(() => !!window.__mse);
++      await page.evaluate(() => {
++        const q = document.querySelector('.que');
++        q.className = 'que multianswer deferredfeedback notyetanswered';
++        q.querySelector('.formulation').innerHTML = `
++          <div class="qtext">
++            The capital of France is
++            <select name="q42:2_sub1_answer" id="cloze_sel">
++              <option value="0">Choose...</option>
++              <option value="1">Lyon</option>
++              <option value="2">Paris</option>
++            </select>
++            and its population is
++            <input type="text" name="q42:2_sub2_answer" id="cloze_txt" value="">
++          </div>
++        `;
++        window.__mse.open();
++      });
++      await page.waitForFunction(() => !!window.__mse.state().question);
++      const applied = await page.evaluate(() => window.__mse.apply('Paris | 2.1 million'));
++      assert.equal(applied.ok, true, 'Cloze mixed answer applied');
++      assert.equal(applied.how, 'multi');
++
++      const values = await page.evaluate(() => ({
++        selectVal: document.getElementById('cloze_sel').value,
++        selectText: document.getElementById('cloze_sel').options[document.getElementById('cloze_sel').selectedIndex].textContent,
++        textVal: document.getElementById('cloze_txt').value
++      }));
++      assert.equal(values.selectVal, '2');
++      assert.equal(values.selectText, 'Paris');
++      assert.equal(values.textVal, '2.1 million');
++      await page.close();
++    }
++
++    // 3. DDWTOS (drag and drop into text)
++    {
++      const page = await t.newPage(h.fixtureUrl('attempt'));
++      await page.waitForFunction(() => !!window.__mse);
++      await page.evaluate(() => {
++        const q = document.querySelector('.que');
++        q.className = 'que ddwtos deferredfeedback notyetanswered';
++        q.querySelector('.formulation').innerHTML = `
++          <div class="qtext">
++            The <span class="place1 drop active">[[1]]</span> jumped over the <span class="place2 drop active">[[2]]</span>
++          </div>
++          <div class="answercontainer">
++            <div class="draggrouphomes">
++              <span class="draghome choice1 group1">fox</span>
++              <span class="draghome choice2 group1">dog</span>
++              <span class="draghome choice3 group1">cat</span>
++            </div>
++          </div>
++          <input type="hidden" class="placeinput place1 group1" id="dd_p1" name="q42:3_p1" value="0">
++          <input type="hidden" class="placeinput place2 group1" id="dd_p2" name="q42:3_p2" value="0">
++        `;
++        window.__mse.open();
++      });
++      await page.waitForFunction(() => !!window.__mse.state().question);
++      const q = await page.evaluate(() => {
++        const cur = window.__mse.current();
++        return {
++          supported: cur.supported,
++          kind: cur.kind,
++          answers: cur.answers.map(a => a.text),
++          controls: cur.controls.map(c => c.kind)
++        };
++      });
++      assert.equal(q.supported, true, 'ddwtos is marked supported');
++      assert.equal(q.kind, 'ddwtos');
++      assert.deepEqual(q.answers, ['fox', 'dog', 'cat']);
++      assert.deepEqual(q.controls, ['place', 'place']);
++
++      const applied = await page.evaluate(() => window.__mse.apply('fox | dog'));
++      assert.equal(applied.ok, true, 'ddwtos answer applied');
++      assert.equal(applied.how, 'ddwtos');
++
++      const values = await page.evaluate(() => ({
++        p1: document.getElementById('dd_p1').value,
++        p2: document.getElementById('dd_p2').value,
++        drop1Text: document.querySelector('.place1.drop').textContent.trim(),
++        drop2Text: document.querySelector('.place2.drop').textContent.trim()
++      }));
++      assert.equal(values.p1, '1', 'place 1 input gets choice 1');
++      assert.equal(values.p2, '2', 'place 2 input gets choice 2');
++      assert.match(values.drop1Text, /fox/, 'visual drop 1 shows fox');
++      assert.match(values.drop2Text, /dog/, 'visual drop 2 shows dog');
++      await page.close();
++    }
++
++    // 4. Calculatedmulti: kind: 'choice'
++    {
++      const page = await t.newPage(h.fixtureUrl('attempt'));
++      await page.waitForFunction(() => !!window.__mse);
++      await page.evaluate(() => {
++        const q = document.querySelector('.que');
++        q.className = 'que calculatedmulti deferredfeedback notyetanswered';
++        q.querySelector('.answer').innerHTML = `
++          <div class="r0"><input type="radio" name="q42:4_answer" id="cm0" value="0"><label for="cm0">4.5 m/s</label></div>
++          <div class="r1"><input type="radio" name="q42:4_answer" id="cm1" value="1"><label for="cm1">9.8 m/s</label></div>
++        `;
++        window.__mse.open();
++      });
++      await page.waitForFunction(() => !!window.__mse.state().question);
++      const q = await page.evaluate(() => {
++        const cur = window.__mse.current();
++        return {
++          supported: cur.supported,
++          kind: cur.kind
++        };
++      });
++      assert.equal(q.supported, true);
++      assert.equal(q.kind, 'choice', 'calculatedmulti is kind: choice');
++
++      const applied = await page.evaluate(() => window.__mse.apply('9.8 m/s'));
++      assert.equal(applied.ok, true);
++      const selected = await page.evaluate(() => document.getElementById('cm1').checked);
++      assert.equal(selected, true, 'calculatedmulti radio selected');
++      await page.close();
++    }
++
++    // 5. Numerical / calculated: number entry
++    {
++      const page = await t.newPage(h.fixtureUrl('attempt'));
++      await page.waitForFunction(() => !!window.__mse);
++      await page.evaluate(() => {
++        const q = document.querySelector('.que');
++        q.className = 'que numerical deferredfeedback notyetanswered';
++        q.querySelector('.formulation').innerHTML = `
++          <div class="qtext">What is gravity acceleration?</div>
++          <input type="text" name="q42:5_answer" id="num_ans" value="">
++        `;
++        window.__mse.open();
++      });
++      await page.waitForFunction(() => !!window.__mse.state().question);
++      const applied = await page.evaluate(() => window.__mse.apply('9.81'));
++      assert.equal(applied.ok, true);
++      const val = await page.evaluate(() => document.getElementById('num_ans').value);
++      assert.equal(val, '9.81', 'numerical value inserted');
++      await page.close();
++    }
++  } finally {
++    await t.close();
++  }
++});
 diff --git a/tests/router.test.js b/tests/router.test.js
-index 2e87aee..c08decc 100644
+index 2e87aee..2a4da13 100644
 --- a/tests/router.test.js
 +++ b/tests/router.test.js
 @@ -45,7 +45,7 @@ const key = (n) => 'mse_' + String(n).repeat(48);
@@ -2926,7 +4139,7 @@ index 2e87aee..c08decc 100644
    const st = await (await get('/admin/state', admin)).json();
    assert.equal(st.quota, 50);
 -  assert.equal(st.version, '2.8.0');
-+  assert.equal(st.version, '2.11.0');
++  assert.equal(st.version, '2.12.0');
    assert.ok(Array.isArray(st.log) && st.log.length > 0, 'the log tells what happened');
    assert.equal(st.backend, 'tailscale');
  });

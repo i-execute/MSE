@@ -218,11 +218,12 @@ test('M5 every type of the answer service is understood, and an unknown one is n
     assert.equal(map.shortanswer.kind, 'text', 'a short answer goes into the text box');
     assert.equal(map.truefalse.kind, 'choice');
     assert.equal(map.match.kind, 'select', 'a matching question is filled through its selects');
-    assert.equal(map.ddwtos.supported, false, 'drag-and-drop in text is not something we can set: it is said plainly');
+    assert.equal(map.ddwtos.supported, true, 'drag-and-drop in text is supported in 2.12.0');
+    assert.equal(map.ddwtos.kind, 'ddwtos', 'and it is filled via ddwtos handler');
     const lists = await page.evaluate(() => window.__mse.types());
     assert.ok(lists.supported.indexOf('multichoice') >= 0 && lists.supported.indexOf('match') >= 0, 'the supported list');
-    assert.ok(lists.unsupported.indexOf('ddwtos') >= 0, 'drag-and-drop is on the unsupported list');
-    assert.equal(map.ddwtos.kind, null, 'and it has no way to be filled');
+    assert.ok(lists.supported.indexOf('ddwtos') >= 0, 'ddwtos is on the supported list');
+    assert.ok(lists.unsupported.indexOf('ddmarker') >= 0, 'ddmarker is on the unsupported list');
     report.m5 = { map };
     assert.deepEqual(t.errors, []);
   } finally { await t.close(); }

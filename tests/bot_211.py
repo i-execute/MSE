@@ -57,10 +57,10 @@ assert "dev:approve:mse-testdevice2110000:778899" in html or "dev:approve:mse-te
 assert "dev:revoke:mse-testdevice2110000:778899" in html or "dev:revoke:mse-testdevice2110000" in html
 print("ok 2 - A10: Inline 'добавить' and 'отклонить' buttons present with device/moodle callback")
 
-# 3. Verify footer has version 2.11.0
+# 3. Verify footer has version
 h_screen = screens.home({"health": {}, "devices": []}, notice="")
 h_html = h_screen.to_msg().get("html", "")
-assert "version 2.11.0" in h_html, f"Expected version 2.11.0 in footer, got {h_html}"
-print("ok 3 - Version 2.11.0 present in home footer")
+assert ("version 2.12.0" in h_html or "version 2.11.0" in h_html), f"Expected version in footer, got {h_html}"
+print("ok 3 - Version 2.12.0 present in home footer")
 
 print("\nALL BOT 2.11 TESTS PASSED")

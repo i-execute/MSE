@@ -1,0 +1,34 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs'); const os = require('os'); const path = require('path');
+const data = fs.mkdtempSync(path.join(os.tmpdir(), 'mse-multi-'));
+Object.assign(process.env, { MSE_DATA_DIR:data, MSE_ADMIN_TOKEN:'adm_test', MSE_UPSTREAM_PORT:'1', MSE_DAILY_QUOTA:'2' });
+const {server} = require('../Server/mse-router'); let base;
+test.before(async () => { await new Promise(r=>server.listen(0,'127.0.0.1',r)); base='http://127.0.0.1:'+server.address().port; });
+test.after(() => server.close());
+const post = (url, body, headers={}) => fetch(base+url,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});
+const key = n=>'mse_'+String(n).repeat(48); const admin={'x-admin-token':'adm_test'};
+const me = key => fetch(base+'/mse/v1/me',{headers:{authorization:'Bearer '+key}});
+test('each new device requires an explicit decision; keys cannot change owners', async () => {
+ const a=await (await post('/mse/v1/register',{key:key(1),moodleId:'111',site:'school',deviceName:'phone'})).json();
+ assert.equal(a.device.status,'pending');
+ assert.equal((await post('/admin/approve',{deviceId:a.device.deviceId},admin)).status,200);
+ const b=await (await post('/mse/v1/register',{key:key(2),moodleId:'111',site:'school',deviceName:'tablet'})).json();
+ assert.equal(b.device.status,'pending');
+ assert.equal((await me(key(1))).status,200); assert.equal((await me(key(2))).status,403);
+ assert.equal((await post('/mse/v1/register',{key:key(1),moodleId:'222',site:'school'})).status,400);
+ assert.equal((await (await me(key(1))).json()).device.moodleId,'111');
+ assert.equal((await post('/admin/approve',{deviceId:b.device.deviceId},admin)).status,200);
+ assert.equal((await me(key(2))).status,200);
+ assert.equal((await post('/admin/revoke',{deviceId:a.device.deviceId},admin)).status,200);
+ assert.equal((await me(key(1))).status,403); assert.equal((await me(key(2))).status,200);
+ await new Promise(r=>setTimeout(r,250));
+ const raw=fs.readFileSync(path.join(data,'state.json'),'utf8');
+ assert.ok(!raw.includes(key(1)) && !raw.includes(key(2))); assert.match(raw,/"keyHash"\s*:\s*"[0-9a-f]{64}"/);
+});
+test('ambiguous id is never bulk approved', async () => {
+ for(const k of [3,4]) await post('/mse/v1/register',{key:key(k),moodleId:'333',site:'school'});
+ assert.equal((await post('/admin/allow',{moodleId:'333'},admin)).status,409);
+ assert.equal((await me(key(3))).status,403); assert.equal((await me(key(4))).status,403);
+});
