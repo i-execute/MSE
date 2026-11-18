@@ -31,10 +31,10 @@ test('Bug 1: Syncshare hanging query times out at 10s with "база не отв
     const initialLoading = await page.evaluate(() => window.__mse.state().loading);
     assert.equal(initialLoading, true, 'Initially in loading state while waiting for DB');
 
-    // Wait for the 10s timeout to trigger "база не ответила"
+    // Wait for the 10s timeout to trigger "database timed out"
     await page.waitForFunction(() => {
       const st = window.__mse.state();
-      return !st.loading && (st.error === 'база не ответила' || (st.rows && st.rows.some(r => r.agent)));
+      return !st.loading && (st.error === 'database timed out' || st.error === 'база не ответила' || (st.rows && st.rows.some(r => r.agent)));
     }, { timeout: 15000 });
 
     const state = await page.evaluate(() => window.__mse.state());

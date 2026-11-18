@@ -339,46 +339,61 @@ class Bot:
 
     async def approve(self, chat_id: int, msg_id: int, needle: str) -> None:
         needle = str(needle or "").strip()
+        parts = needle.split(":", 1)
+        device_id = parts[0]
+        moodle_id = parts[1] if len(parts) > 1 else ""
         try:
             device = None
-            if needle.isdigit():
-                device = await asyncio.to_thread(self.gw.device_of, needle)
+            if not moodle_id and device_id.isdigit():
+                device = await asyncio.to_thread(self.gw.device_of, device_id)
             else:
                 snap = await self.snap()
                 for d in snap.get("devices") or []:
-                    if str(d.get("deviceId") or "") == needle:
+                    if str(d.get("deviceId") or "") == device_id:
                         device = d
                         break
-            if device is None:
-                await self.allow(chat_id, msg_id, needle)
+            if device is None and not moodle_id:
+                await self.allow(chat_id, msg_id, device_id)
                 return
-            await asyncio.to_thread(self.gw.approve, str(device.get("deviceId")))
-            moodle_id = str(device.get("moodleId") or "")
-            if moodle_id and moodle_id.isdigit():
-                try:
-                    await asyncio.to_thread(self.gw.allow, moodle_id)
-                except Exception:
-                    pass
+            target_dev = str(device.get("deviceId") if device else device_id)
+            if moodle_id:
+                await asyncio.to_thread(self.gw.approve, target_dev, moodle_id)
+            else:
+                await asyncio.to_thread(self.gw.approve, target_dev)
+            if not moodle_id:
+                m_id = str(device.get("moodleId") or "") if device else ""
+                if m_id and m_id.isdigit():
+                    try:
+                        await asyncio.to_thread(self.gw.allow, m_id)
+                    except Exception:
+                        pass
         except GatewayError as exc:
             await self.people(chat_id, msg_id, notice="")
             await self.deliver_raw(chat_id, "failed: " + exc.message)
             return
-        await self.people(chat_id, msg_id, notice="allowed (device + Moodle id)")
+        await self.people(chat_id, msg_id, notice="allowed (" + (moodle_id or "device") + ")")
 
     async def revoke(self, chat_id: int, msg_id: int, needle: str) -> None:
         needle = str(needle or "").strip()
+        parts = needle.split(":", 1)
+        device_id = parts[0]
+        moodle_id = parts[1] if len(parts) > 1 else ""
         try:
             device = None
-            if needle.isdigit():
-                device = await asyncio.to_thread(self.gw.device_of, needle)
-            if device is None:
-                await asyncio.to_thread(self.gw.disallow, needle)
+            if not moodle_id and device_id.isdigit():
+                device = await asyncio.to_thread(self.gw.device_of, device_id)
+            if device is None and not moodle_id:
+                await asyncio.to_thread(self.gw.disallow, device_id)
             else:
-                await asyncio.to_thread(self.gw.revoke, str(device.get("deviceId")))
+                target_dev = str(device.get("deviceId") if device else device_id)
+                if moodle_id:
+                    await asyncio.to_thread(self.gw.revoke, target_dev, moodle_id)
+                else:
+                    await asyncio.to_thread(self.gw.revoke, target_dev)
         except GatewayError as exc:
             await self.deliver_raw(chat_id, "failed: " + exc.message)
             return
-        await self.people(chat_id, msg_id, notice="revoked " + needle)
+        await self.people(chat_id, msg_id, notice="revoked " + (moodle_id or device_id))
 
     # ------------------------------------------------------------------ model & quota
     async def set_quota(self, chat_id: int, msg_id: int, value: str) -> None:

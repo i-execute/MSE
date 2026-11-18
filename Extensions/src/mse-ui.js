@@ -122,19 +122,17 @@
       return s;
     }
     function learnedKey() { return 'mse.id.' + String(win.location.host); }
-    function learnId(id, name, login) {
+    function learnId(id, name) {
       if (id) ls.set(learnedKey(), String(id));
       if (name) ls.set(learnedKey() + '.name', String(name));
-      if (login) ls.set(learnedKey() + '.login', String(login));
     }
 
     function identity() {
-      var out = { id: null, idSource: null, name: null, nameSource: null, login: null, site: null };
+      var out = { id: null, idSource: null, name: null, nameSource: null, site: null };
       var cfg = null;
       try { cfg = win.M && win.M.cfg; } catch (e) { cfg = null; }
       if (cfg) {
         if (cfg.siteId) out.site = String(cfg.siteId);
-        if (cfg.username) out.login = String(cfg.username);
       }
       /* 1. the global config of Moodle — the most reliable place, and the first thing to try */
       var candidates = [];
@@ -194,11 +192,7 @@
         var kept = ls.get(learnedKey() + '.name', null);
         if (kept) { out.name = kept; out.nameSource = 'remembered'; }
       }
-      if (!out.login) {
-        var keptLogin = ls.get(learnedKey() + '.login', null);
-        if (keptLogin) out.login = keptLogin;
-      }
-      if (out.id) learnId(out.id, out.name, out.login);
+      if (out.id) learnId(out.id, out.name);
       return out;
     }
 
@@ -426,7 +420,7 @@
     function attemptMeta() {
       var meta = { host: String(win.location.host), courseId: null, quizId: null, attemptId: null, moodleId: null, missing: [] };
       var id = identity();
-      meta.identity = { id: id.id, name: id.name, login: id.login, source: id.idSource };
+      meta.identity = { id: id.id, name: id.name, source: id.idSource };
       if (id.id) meta.moodleId = id.id;
       var bodyCls = (doc.body && doc.body.className) || '';
       var bodyId = (doc.body && doc.body.id) || '';
@@ -509,7 +503,7 @@
       var timeoutPromise = new Promise(function (_, reject) {
         timer = win.setTimeout(function () {
           if (controller) try { controller.abort(); } catch (_) {}
-          reject(new Error('база не ответила'));
+          reject(new Error('database timed out'));
         }, 10000);
       });
 
@@ -541,18 +535,18 @@
         });
       }, function (e) {
         if (timer) { win.clearTimeout(timer); timer = null; }
-        var isTimeout = e && (e.name === 'AbortError' || e.message === 'база не ответила');
-        var errText = isTimeout ? 'база не ответила' : 'no connection to the answer database';
+        var isTimeout = e && (e.name === 'AbortError' || e.message === 'database timed out');
+        var errText = isTimeout ? 'database timed out' : 'no connection to the answer database';
         record.response = { error: isTimeout ? 'timeout' : ((e && e.name) || 'network') };
         debugTraffic(record);
-        logAdd('answers', false, isTimeout ? 'база не ответила' : ('database offline: ' + ((e && e.message) || 'network')), { ms: Date.now() - started });
+        logAdd('answers', false, isTimeout ? 'database timed out' : ('database offline: ' + ((e && e.message) || 'network')), { ms: Date.now() - started });
         throw new Error(errText);
       });
 
       return Promise.race([fetchPromise, timeoutPromise]).catch(function (e) {
         if (timer) { win.clearTimeout(timer); timer = null; }
-        var isTimeout = e && (e.name === 'AbortError' || e.message === 'база не ответила');
-        if (isTimeout) throw new Error('база не ответила');
+        var isTimeout = e && (e.name === 'AbortError' || e.message === 'database timed out');
+        if (isTimeout) throw new Error('database timed out');
         throw e;
       });
     }
@@ -860,11 +854,16 @@
 
     function head(titleText, sub, leading) {
       var h = el('div', 'ph');
-      var lead = leading === 'back'
-        ? press(el('button', 'ib back', '←'), function () { state.route = state.route === 'status' ? 'answers' : 'account'; render(); })
-        : press(el('button', 'ib', 'i'), function () { state.route = state.route === 'account' ? 'answers' : 'account'; render(); });
-      lead.setAttribute('aria-label', leading === 'back' ? 'back' : 'your id');
-      lead.style.fontFamily = leading === 'back' ? '' : 'Georgia,serif';
+      var lead;
+      if (leading === 'back') {
+        lead = press(el('button', 'ib back', '←'), function () { state.route = state.route === 'status' ? 'answers' : 'account'; render(); });
+        lead.setAttribute('aria-label', 'back');
+      } else {
+        lead = press(el('button', 'ib settings-btn'), function () { state.route = state.route === 'account' ? 'answers' : 'account'; render(); });
+        lead.setAttribute('aria-label', 'settings');
+        lead.setAttribute('data-mse', 'settings-gear');
+        lead.innerHTML = '<svg class="gear-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
+      }
       h.appendChild(lead);
       var t = el('div', 't', titleText);
       if (sub) t.appendChild(el('em', '', sub));
@@ -1082,10 +1081,11 @@
     function appendAi(q) {
       var ai = state.agent || { state: 'idle' };
       if (ai.state === 'running' || ai.state === 'retry') {
-        var run = el('div', 'ans ai busy');
-        run.appendChild(el('span', 'mark agent'));
-        run.appendChild(el('span', 'lbl', ai.state === 'retry' ? 'agent busy · retry in ' + ai.retryIn + ' s' : (ai.stage ? ai.stage + '…' : 'reasoning…')));
-        run.appendChild(el('span', 'tag agent', 'AI'));
+        var run = el('div', 'agent-status-strip');
+        run.setAttribute('data-mse', 'agent-status');
+        run.appendChild(el('span', 'dot ok'));
+        var stageText = ai.state === 'retry' ? 'agent busy · retry in ' + ai.retryIn + ' s' : (ai.stage ? ai.stage + '…' : 'reasoning…');
+        run.appendChild(el('span', 'txt', stageText));
         body.appendChild(N(run, 1));
         return;
       }
@@ -1190,15 +1190,18 @@
       });
     }
 
-    function runAgent(automatic) {
+    function runAgent(automatic, retryCount) {
       var q = state.question;
       if (!q) return;
+      if (state.agent && state.agent.state === 'running' && !retryCount) return;
       if (!win.MSEBridge || !win.MSEBridge.url()) {
         state.agent = { state: 'error', text: 'AI gateway is not set' };
         render();
         return;
       }
-      state.agent = { state: 'running', stage: q.node.querySelector('.qtext img, .answer img') ? 'looking at image' : 'reasoning' };
+      var attempt = retryCount || 0;
+      var stageText = attempt > 0 ? 'network retry…' : (q.node.querySelector('.qtext img, .answer img') ? 'looking at image' : 'reasoning');
+      state.agent = { state: 'running', stage: stageText };
       render();
       var t0 = Date.now();
       Promise.resolve().then(function () { return questionImages(q); }).then(function (images) { return win.MSEBridge.agent({
@@ -1235,16 +1238,37 @@
           startRetry(automatic);
           return;
         }
+        if ((res.code === 'network' || res.code === 'timeout') && attempt < 2) {
+          logAdd('agent', false, 'network glitch, retrying (' + (attempt + 1) + '/2)', { ms: ms });
+          state.agent = { state: 'running', stage: 'network retry…' };
+          render();
+          win.setTimeout(function () {
+            runAgent(automatic, attempt + 1);
+          }, 800);
+          return;
+        }
         var text = res.code === 'network' || res.code === 'timeout' ? 'request did not go out · check the network'
           : res.code === 'no_gateway' ? 'AI gateway is not set'
           : res.code === 'unauthorized' || res.code === 'invalid_key' ? 'key not accepted'
           : res.code === 'device_pending' ? 'waiting for approval by id'
-          : 'agent failed: ' + (res.message || 'error');
+          : res.message ? 'agent error: ' + res.message
+          : 'agent failed: ' + (res.code || 'error');
         logAdd('agent', false, text, { ms: ms });
         state.agent = { state: 'error', text: text };
         render();
       }, function (error) {
-        state.agent = {state:'error', text: 'image unsupported: ' + String(error && error.message || 'unavailable')};
+        var isNet = error && (error.name === 'AbortError' || /network|failed to fetch|offline/i.test(error.message));
+        if (isNet && attempt < 2) {
+          logAdd('agent', false, 'network glitch, retrying (' + (attempt + 1) + '/2)', { ms: Date.now() - t0 });
+          state.agent = { state: 'running', stage: 'network retry…' };
+          render();
+          win.setTimeout(function () {
+            runAgent(automatic, attempt + 1);
+          }, 800);
+          return;
+        }
+        var errText = isNet ? 'request did not go out · check the network' : ('image unsupported: ' + String(error && error.message || 'unavailable'));
+        state.agent = { state: 'error', text: errText };
         render();
       });
     }
@@ -1345,18 +1369,18 @@
       var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
       body.appendChild(N(el('div', 'sec', 'account')));
       body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
-      body.appendChild(N(valueRow('login', id.login, !!id.login), 1));
       body.appendChild(N(valueRow('name', id.name, !!id.name, true), 1));
       body.appendChild(N(el('div', 'sec', 'this device'), 1));
       /* the key itself is never drawn: it lives on this device and is used, not shown */
       var key = win.MSEBridge ? win.MSEBridge.key() : null;
-      body.appendChild(N(valueRow('device', meta && meta.device, false), 1));
+      var devId = (meta && meta.device) || (win.MSEBridge && win.MSEBridge.deviceId ? win.MSEBridge.deviceId() : '');
+      body.appendChild(N(valueRow('device', devId, !!devId, false, devId), 1));
       body.appendChild(N(valueRow('key', win.MSEBridge ? win.MSEBridge.maskedKey() : null, !!key, false, key), 1));
-      var st = state.gw.check;
+      var st = state.gw.check || (win.MSEBridge && win.MSEBridge.cachedCheck ? win.MSEBridge.cachedCheck() : null);
       var line = el('div', 'row');
       var good = st && st.state === 'active';
       line.appendChild(el('span', 'dot ' + (good ? 'ok' : st ? 'warn' : '')));
-      line.appendChild(el('span', 'txt', good ? 'key accepted' : st ? (st.message || 'key not checked') : 'key not checked'));
+      line.appendChild(el('span', 'txt', good ? 'key accepted' : (st && st.message ? st.message : 'settings')));
       line.appendChild(el('span', 'more', 'open'));
       body.appendChild(N(press(line, function () { state.route = 'gateway'; render(); }), 1));
       var net = el('div', 'row');
@@ -1399,12 +1423,10 @@
           else if (cleared.length) logAdd('gateway', true, 'the old address was cleared from ' + cleared.length + ' place(s)');
         }, function () {});
         /* the address answers: now ask it what it accepts and whether this key is welcome */
-        return Promise.all([br.models(), br.check()]).then(function (out) {
-          gw.models = out[0];
-          gw.check = out[1];
+        return br.check().then(function (res) {
+          gw.check = res;
           gw.busy = null;
-          /* the count is enough for the journal: which models there are is the router's and the bot's business */
-          logAdd('gateway', true, 'AI gateway is up · ' + (out[0].models.length || 0) + ' models', { ms: r.ms });
+          logAdd('gateway', res.state === 'active', 'AI gateway is up' + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
           render();
           return r;
         });
@@ -1446,73 +1468,59 @@
       frow.appendChild(check);
       if (gw.busy === 'check') check.textContent = 'checking…';
 
-      if (gw.probe) {
-        body.appendChild(N(el('div', 'sec', 'answer'), 0));
-        var p = el('div', 'row');
-        p.appendChild(el('span', 'dot ' + (gw.probe.ok ? 'ok' : 'bad')));
-        p.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered · ' + gw.probe.ms + ' ms' : gw.probe.message));
-        body.appendChild(N(p, 1));
-      }
-      if (gw.check) {
-        var c = el('div', 'row');
-        c.appendChild(el('span', 'dot ' + (gw.check.state === 'active' ? 'ok' : 'warn')));
-        c.appendChild(el('span', 'txt', gw.check.state === 'active' ? 'key accepted' : gw.check.message || 'key not accepted'));
-        body.appendChild(N(c, 1));
-        if (gw.check.state === 'unregistered') {
-          body.appendChild(N(press(el('button', 'btn', 'bind to my id'), function () {
-            gw.busy = 'reg';
-            render();
-            br.register(identity()).then(function () { return br.check(); }).then(function (res) {
-              gw.check = res;
-              gw.busy = null;
-              logAdd('gateway', res.state === 'active', 'binding: ' + res.state);
-              render();
-            }, function (e) {
-              gw.busy = null;
-              logAdd('gateway', false, 'binding: ' + e.message);
-              render();
-            });
-          }), 1));
-        }
-      }
-      var toggle = el('div', 'dbg-toggle press');
-      toggle.setAttribute('role', 'button');
-      toggle.setAttribute('tabindex', '0');
-      toggle.setAttribute('data-mse', 'debug-mode');
       var isDbg = br.debugEnabled();
-      var light = el('span', 'dbg-light' + (isDbg ? ' on' : ''));
-      toggle.addEventListener('click', function () {
+      var dbgBtn = press(el('button', 'btn dbg-toggle' + (isDbg ? ' on' : ''), 'DEBG'), function () {
         var next = !br.debugEnabled();
         br.setDebugEnabled(next);
         if (next) {
-          light.classList.add('on');
+          dbgBtn.classList.add('on');
           debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now() });
         } else {
-          light.classList.remove('on');
+          dbgBtn.classList.remove('on');
         }
       });
-      toggle.appendChild(light);
-      var dbgText = el('div', 'dbg-text');
-      dbgText.appendChild(el('span', 'dbg-title', 'Debug mode'));
-      dbgText.appendChild(el('span', 'dbg-sub', 'sends diagnostics to owner (may include personal data)'));
-      toggle.appendChild(dbgText);
-      body.appendChild(N(toggle, 1));
+      dbgBtn.setAttribute('data-mse', 'debug-mode');
+      dbgBtn.setAttribute('title', 'Debug mode: sends diagnostics to owner');
+      var light = el('span', 'dbg-light' + (isDbg ? ' on' : ''));
+      dbgBtn.insertBefore(light, dbgBtn.firstChild);
+      frow.appendChild(dbgBtn);
 
-      var actions = el('div', 'frow');
-      actions.style.margin = '8px 0 0';
-      var snif = press(el('button', 'btn', 'Snif'), function () {
-        snifText = JSON.stringify(snifDump(), null, 2);
-        state.route = 'snif';
+      var statusRow = null;
+      if (gw.check) {
+        statusRow = el('div', 'row');
+        var isActive = gw.check.state === 'active';
+        statusRow.appendChild(el('span', 'dot ' + (isActive ? 'ok' : 'warn')));
+        var msPart = gw.probe && gw.probe.ms != null ? ' · ' + gw.probe.ms + ' ms' : '';
+        var statusText = isActive ? 'key accepted' + msPart : (gw.check.message || 'key not accepted') + msPart;
+        statusRow.appendChild(el('span', 'txt', statusText));
+      } else if (gw.probe) {
+        statusRow = el('div', 'row');
+        statusRow.appendChild(el('span', 'dot ' + (gw.probe.ok ? 'ok' : 'bad')));
+        statusRow.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered · ' + gw.probe.ms + ' ms' : gw.probe.message));
+      }
+      if (statusRow) {
+        body.appendChild(N(el('div', 'sec', 'status'), 0));
+        body.appendChild(N(statusRow, 1));
+      }
+
+      var integBtn = press(el('button', 'btn', 'Integrate request'), function () {
+        gw.busy = 'reg';
         render();
+        br.register(identity()).then(function () {
+          return br.check();
+        }).then(function (res) {
+          gw.check = res;
+          gw.busy = null;
+          logAdd('gateway', res.state === 'active', 'integration: ' + res.state);
+          render();
+        }, function (e) {
+          gw.busy = null;
+          logAdd('gateway', false, 'integration: ' + (e && e.message || 'error'));
+          render();
+        });
       });
-      snif.setAttribute('data-mse', 'snif');
-      actions.appendChild(snif);
-      var report = press(el('button', 'btn', 'Report'), function () {
-        reportCurrent(report);
-      });
-      report.setAttribute('data-mse', 'report');
-      actions.appendChild(report);
-      body.appendChild(N(actions, 1));
+      integBtn.setAttribute('data-mse', 'integrate-request');
+      body.appendChild(N(integBtn, 1));
     }
 
     /* ---------------- the network log ---------------- */
@@ -1529,7 +1537,7 @@
       });
       body.appendChild(N(box, 1));
       var frow = el('div', 'frow');
-      var copy = press(el('button', 'btn solid', 'Скопировать'), function () {
+      var copy = press(el('button', 'btn solid', 'Copy'), function () {
         var lines = log.map(function (l) {
           return new Date(l.t).toISOString() + ' [' + l.kind + '] ' + (l.ok ? 'OK' : 'FAIL') + ': ' + l.text + (l.ms != null ? ' (' + l.ms + ' ms)' : '');
         });
@@ -1615,8 +1623,12 @@
         buttons: Array.prototype.map.call(doc.querySelectorAll('input[type=submit], button[type=submit]'), function (b) { return (b.name || '') + '=' + (b.value || b.textContent || ''); }),
         url: String(win.location.href)
       } : null;
+      var isKnown = !!(allQues.length > 0 || (win.M && win.M.cfg) || doc.querySelector('.que, form#responseform'));
       return {
-        schema: 'mse-snif-1', capturedAt: new Date().toISOString(),
+        schema: 'mse-snif-1',
+        schema_layer: 1,
+        is_known_layer: isKnown,
+        capturedAt: new Date().toISOString(),
         warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
         page: { location: String(win.location.href), title: doc.title, headings: Array.prototype.map.call(doc.querySelectorAll('h1,h2,h3'), function (n) { return n.textContent.trim(); }),
           httpHeaders: 'unavailable to page JavaScript', cookieNamesVisibleToJavaScript: cookies, inlineMoodleScripts: scripts },
@@ -1644,6 +1656,7 @@
     }
     var snifText = '';
     function viewSnif() {
+      if (!snifText) snifText = JSON.stringify(snifDump(), null, 2);
       body.appendChild(N(el('div', 'sec', 'Snif · local only')));
       body.appendChild(N(el('div', 'empty', 'May contain session keys and personal data. Review before sharing.')));
       var copy = el('button', 'btn solid', 'Copy');
@@ -1670,7 +1683,7 @@
       var leading = 'info';
       if (state.route === 'answers' && state.question) {
         var idx = Array.prototype.indexOf.call(doc.querySelectorAll('.que'), state.question.node) + 1;
-        sub = 'куэшон ' + (idx || 1);
+        sub = 'question ' + (idx || 1);
       } else if (state.route === 'account') { sub = 'account'; }
       else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
       else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
@@ -1733,6 +1746,7 @@
         if (!q) return false;
         return applyAnswer(q, { label: label });
       },
+      snifDump: function () { return snifDump(); },
       agent: function () { return state.agent; },
       runAgent: function () { runAgent(false); return true; },
       log: function () { return log.slice(-40); },

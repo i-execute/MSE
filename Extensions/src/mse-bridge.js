@@ -200,6 +200,54 @@
     return 'mse_' + s;
   }
 
+  function sha256Hex(ascii) {
+    function rightRotate(value, amount) { return (value >>> amount) | (value << (32 - amount)); }
+    var mathPow = Math.pow; var maxWord = mathPow(2, 32); var lengthProperty = 'length';
+    var i, j; var result = ''; var words = []; var asciiBitLength = ascii[lengthProperty] * 8;
+    var hash = sha256Hex.h = sha256Hex.h || []; var k = sha256Hex.k = sha256Hex.k || [];
+    var primeCounter = k[lengthProperty]; var isComposite = {};
+    for (var candidate = 2; primeCounter < 64; candidate++) {
+      if (!isComposite[candidate]) {
+        for (i = candidate * candidate; i < 313; i += candidate) isComposite[i] = candidate;
+        hash[primeCounter] = (mathPow(candidate, .5) * maxWord) | 0;
+        k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+      }
+    }
+    hash = hash.slice(0);
+    ascii += '\x80';
+    while (ascii[lengthProperty] % 64 - 56) ascii += '\x00';
+    for (i = 0; i < ascii[lengthProperty]; i++) {
+      j = ascii.charCodeAt(i);
+      if (j >> 8) return '';
+      words[i >> 2] |= j << ((3 - i) % 4) * 8;
+    }
+    words[words[lengthProperty]] = ((asciiBitLength / maxWord) | 0);
+    words[words[lengthProperty]] = (asciiBitLength | 0);
+    for (j = 0; j < words[lengthProperty];) {
+      var w = words.slice(j, j += 16);
+      var oldHash = hash;
+      hash = hash.slice(0, 8);
+      for (i = 0; i < 64; i++) {
+        var w15 = w[i - 15], w2 = w[i - 2];
+        var s0 = rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3);
+        var s1 = rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10);
+        var ch = (hash[4] & hash[5]) ^ (~hash[4] & hash[6]);
+        var maj = (hash[0] & hash[1]) ^ (hash[0] & hash[2]) ^ (hash[1] & hash[2]);
+        var temp1 = (hash[7] + (rightRotate(hash[4], 6) ^ rightRotate(hash[4], 11) ^ rightRotate(hash[4], 25)) + ch + k[i] + (w[i] = (i < 16) ? w[i] : (w[i - 16] + s0 + w[i - 7] + s1) | 0)) | 0;
+        var temp2 = ((rightRotate(hash[0], 2) ^ rightRotate(hash[0], 13) ^ rightRotate(hash[0], 22)) + maj) | 0;
+        hash = [(temp1 + temp2) | 0, hash[0], hash[1], hash[2], (hash[3] + temp1) | 0, hash[4], hash[5], hash[6]];
+      }
+      for (i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+    for (i = 0; i < 8; i++) {
+      for (var b = 3; b >= 0; b--) {
+        var byte = (hash[i] >> (8 * b)) & 255;
+        result += (byte < 16 ? '0' : '') + byte.toString(16);
+      }
+    }
+    return result;
+  }
+
   function tracedFetch(url, options) {
     var opts = options || {};
     var request = {method: opts.method || 'GET', url: String(url), body: opts.body || null};
@@ -357,6 +405,12 @@
       return k;
     },
     ensureKey: function () { return this.key(); },
+    deviceId: function () {
+      var m = this.meta();
+      if (m && m.device) return m.device;
+      var k = this.key();
+      return k ? ('mse-' + sha256Hex(k).slice(0, 16)) : '';
+    },
     maskedKey: function () {
       var k = this.key();
       return k ? k.slice(0, 8) + '…' + k.slice(-4) : null;
@@ -412,42 +466,46 @@
     },
 
     /* ---------------- is this key live? ---------------- */
-    check: function () {
+    check: function (moodleId) {
       var self = this;
       var url = self.url();
       if (!url) return Promise.resolve({ state: 'no-url', message: 'gateway address is not set' });
       var key = self.key();
-      return tracedFetch(url + '/mse/v1/me', { method: 'GET', headers: { authorization: 'Bearer ' + key, accept: 'application/json' } })
+      var path = '/mse/v1/me' + (moodleId ? ('?moodleId=' + encodeURIComponent(moodleId)) : '');
+      var headers = { authorization: 'Bearer ' + key, accept: 'application/json' };
+      if (moodleId) headers['x-moodle-id'] = String(moodleId);
+      return tracedFetch(url + path, { method: 'GET', headers: headers })
         .then(function (r) {
           return r.json().then(function (j) {
             var d = (j && j.device) || {};
             var st = (j && j.ok === false) ? (d.status || 'error') : (d.status || (r.ok ? 'active' : 'error'));
             var meta = self.saveMeta({ device: d, ok: r.ok }, { key: key, moodleId: d.moodleId, name: d.name });
-            if (r.status === 401 || st === 'unknown') return { state: 'unregistered', message: 'key is not bound', device: d, meta: meta };
-            if (!r.ok || st !== 'active') {
-              return { state: st === 'revoked' ? 'revoked' : 'pending', message: st === 'revoked' ? 'key revoked' : 'waiting for approval', device: d, meta: meta };
+            var resObj;
+            if (r.status === 401 || st === 'unknown') {
+              resObj = { state: 'unregistered', message: 'key is not bound', device: d, meta: meta };
+            } else if (!r.ok || st !== 'active') {
+              resObj = { state: st === 'revoked' ? 'revoked' : 'pending', message: st === 'revoked' ? 'key revoked' : 'waiting for approval', device: d, meta: meta };
+            } else {
+              resObj = { state: 'active', message: 'key accepted', device: d, meta: meta };
             }
-            return { state: 'active', message: 'key accepted', device: d, meta: meta };
+            try {
+              lsSet('mse.cache.gw_check', JSON.stringify({ key: key, check: resObj, t: Date.now() }));
+            } catch (_) {}
+            return resObj;
           });
         }, function (e) {
           return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };
         });
     },
 
-    /* ---------------- what models the gateway offers (the server decides, we only show) ---------------- */
-    models: function () {
-      var self = this;
-      var url = self.url();
-      if (!url) return Promise.resolve({ ok: false, models: [], message: 'address is not set' });
-      var started = Date.now();
-      return tracedFetch(url + '/v1/models', { method: 'GET', headers: { authorization: 'Bearer ' + self.key(), accept: 'application/json' } })
-        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j, ms: Date.now() - started }; }); })
-        .then(function (res) {
-          var list = (res.json && Array.isArray(res.json.data) ? res.json.data : []).map(function (m) { return String(m.id || m); }).filter(Boolean);
-          return { ok: res.ok && list.length > 0, models: list, ms: res.ms, status: res.status, message: res.ok ? 'models available: ' + list.length : 'the gateway answered ' + res.status };
-        }, function (e) {
-          return { ok: false, models: [], ms: Date.now() - started, message: 'gateway offline: ' + ((e && e.message) || 'network') };
-        });
+    cachedCheck: function () {
+      try {
+        var raw = lsGet('mse.cache.gw_check');
+        if (!raw) return null;
+        var parsed = JSON.parse(raw);
+        if (parsed && parsed.key === this.key() && parsed.check) return parsed.check;
+      } catch (_) {}
+      return null;
     },
 
     /* ---------------- the agent: the question goes out, the chosen answer comes back ---------------- */
@@ -465,15 +523,19 @@
         selects: Array.isArray(payload.selects) ? payload.selects : [],
         textCount: Number(payload.textCount) || 0,
         image: payload.image || null,
-        prior: payload.prior || null
+        prior: payload.prior || null,
+        moodleId: payload.moodleId || null
       };
+      var timeoutMs = Number(payload.timeoutMs || CONFIG.agentTimeoutMs || 120000);
       var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 45000);
+      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, timeoutMs);
       var record = { request: { method: 'POST', url: url + '/mse/v1/agent', json: body }, response: null };
       lastAgentRequest = record;
+      var reqHeaders = { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() };
+      if (payload.moodleId) reqHeaders['x-moodle-id'] = String(payload.moodleId);
       return tracedFetch(url + '/mse/v1/agent', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() },
+        headers: reqHeaders,
         body: JSON.stringify(body),
         signal: ctrl ? ctrl.signal : undefined
       }).then(function (r) {
@@ -482,6 +544,7 @@
           function handle(block) {
             var name = '', data = [];
             block.split(/\r?\n/).forEach(function (line) {
+              if (line.indexOf(':') === 0) return;
               if (line.indexOf('event:') === 0) name = line.slice(6).trim();
               if (line.indexOf('data:') === 0) data.push(line.slice(5).trim());
             });
@@ -522,7 +585,7 @@
       }, function (e) {
         clearTimeout(timer);
         record.response = { error: (e && e.name) || 'network' };
-        return { ok: false, code: (e && e.name === 'AbortError') ? 'timeout' : 'network', ms: Date.now() - started, message: (e && e.name === 'AbortError') ? 'the agent did not answer in 45 s' : 'the request did not go out: ' + ((e && e.message) || 'network') };
+        return { ok: false, code: (e && e.name === 'AbortError') ? 'timeout' : 'network', ms: Date.now() - started, message: (e && e.name === 'AbortError') ? ('the agent did not answer in ' + Math.round(timeoutMs / 1000) + ' s') : 'the request did not go out: ' + ((e && e.message) || 'network') };
       });
     },
     debugEnabled: function () { return lsGet('mse.debug.enabled') === '1'; },

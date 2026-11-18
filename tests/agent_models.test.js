@@ -105,7 +105,7 @@ test('bug 1: register -> allow -> agent, and the answer is one of the options', 
   });
   const r = await startRouter(bg.port, { MSE_MODEL: 'model-one' });
   try {
-    const health = await (await fetch('http://127.0.0.1:' + r.port + '/health')).json();
+    const health = await (await fetch('http://127.0.0.1:' + r.port + '/health', { headers: { 'x-admin-token': TOKEN } })).json();
     assert.equal(health.model, 'model-one', 'the default from the env is kept: it is offered by the backend');
 
     const reg = await call(r.port, 'POST', '/mse/v1/register', { key: KEY, moodleId: '4242', name: 'Test' });
@@ -170,7 +170,7 @@ test('bug 3: the list of models is the backend\'s, and changes when the backend 
     const end = Date.now() + 8000;
     let health = {};
     while (Date.now() < end) {
-      health = await (await fetch('http://127.0.0.1:' + r.port + '/health')).json();
+      health = await (await fetch('http://127.0.0.1:' + r.port + '/health', { headers: { 'x-admin-token': TOKEN } })).json();
       if ((health.models || []).length) break;
       await new Promise((x) => setTimeout(x, 200));
     }
@@ -179,7 +179,7 @@ test('bug 3: the list of models is the backend\'s, and changes when the backend 
     assert.equal(health.modelsSource, 'backend', 'and it is named as the backend\'s');
     assert.equal(health.model, 'alpha-1', 'with no default in the env, the first one the backend offers becomes the model');
 
-    const listed = await (await fetch('http://127.0.0.1:' + r.port + '/v1/models')).json();
+    const listed = await (await fetch('http://127.0.0.1:' + r.port + '/v1/models', { headers: { 'x-admin-token': TOKEN } })).json();
     assert.deepEqual(listed.data.map((m) => m.id), ['alpha-1', 'alpha-2', 'alpha-3'], 'GET /v1/models of the router repeats it');
 
     /* another backend, another list: the same code, no edit */
@@ -192,7 +192,7 @@ test('bug 3: the list of models is the backend\'s, and changes when the backend 
       const end2 = Date.now() + 8000;
       let h2 = {};
       while (Date.now() < end2) {
-        h2 = await (await fetch('http://127.0.0.1:' + r2.port + '/health')).json();
+        h2 = await (await fetch('http://127.0.0.1:' + r2.port + '/health', { headers: { 'x-admin-token': TOKEN } })).json();
         if ((h2.models || []).length) break;
         await new Promise((x) => setTimeout(x, 200));
       }

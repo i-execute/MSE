@@ -32,6 +32,7 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 const { StringDecoder } = require('string_decoder');
+const { EventEmitter } = require('events');
 const dumps = require('./mse-dumps');
 
 const here = __dirname;
@@ -47,7 +48,7 @@ process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
 process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
 const PORT = Number(process.env.MSE_PORT);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.8.0';
+const VERSION = '2.10.0';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
 const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
@@ -299,14 +300,39 @@ function isAdmin(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 function publicDevice(rec) {
+  const accounts = (rec.accounts || []).map((a) => ({
+    moodleId: String(a.moodleId || ''),
+    name: String(a.name || ''),
+    site: String(a.site || ''),
+    status: a.status || 'pending',
+    at: a.at || rec.created
+  }));
   return {
     deviceId: rec.deviceId, moodleId: rec.moodleId, name: rec.name, site: rec.site, deviceName: rec.deviceName || "",
     status: rec.status, created: rec.created, seen: rec.seen, requests: rec.requests || 0,
-    quota: quotaOf(rec), quotaUsed: rec.quotaUsed || 0, banned: !!rec.banned
+    quota: quotaOf(rec), quotaUsed: rec.quotaUsed || 0, banned: !!rec.banned,
+    accounts: accounts
   };
 }
 
 /* ------------------------------------------------------------------ devices */
+function isDeviceAllowed(rec, moodleId) {
+  if (!rec || rec.banned || rec.status === 'revoked') return false;
+  if (moodleId) {
+    const mStr = String(moodleId).trim();
+    if (state.allow.some((a) => String(a.moodleId) === mStr)) return true;
+    if (Array.isArray(rec.accounts)) {
+      const acc = rec.accounts.find((a) => String(a.moodleId) === mStr);
+      if (acc && acc.status === 'active') return true;
+    }
+    return false;
+  }
+  if (rec.status === 'active') return true;
+  if (Array.isArray(rec.accounts) && rec.accounts.some((a) => a.status === 'active')) return true;
+  if (rec.moodleId && state.allow.some((a) => String(a.moodleId) === String(rec.moodleId))) return true;
+  return false;
+}
+
 function registerDevice(body) {
   const key = String(body.key || '');
   const moodleId = String(body.moodleId || '').trim();
@@ -319,21 +345,55 @@ function registerDevice(body) {
   const existing = state.devices[deviceId];
   if (existing && !deviceByKey(key)) return { error: 'invalid key' };
   if (existing && existing.banned) return { error: 'this key was revoked', device: existing };
-  // The identity and approval of an existing key are immutable through registration.
-  if (existing && (existing.moodleId !== moodleId || existing.site !== site)) return { error: 'key already bound to another identity' };
-  const rec = existing || { deviceId, keyHash: sha256(key), moodleId, name, site, deviceName, status: 'pending',
-    created: now(), seen: now(), requests: 0, quotaDay: day(), quotaUsed: 0 };
+
+  const rec = existing || {
+    deviceId, keyHash: sha256(key), moodleId, name, site, deviceName, status: 'pending',
+    created: now(), seen: now(), requests: 0, quotaDay: day(), quotaUsed: 0,
+    accounts: []
+  };
   rec.seen = now();
   if (deviceName) rec.deviceName = deviceName;
+  if (!Array.isArray(rec.accounts)) {
+    rec.accounts = [];
+    if (rec.moodleId) {
+      rec.accounts.push({ moodleId: String(rec.moodleId), name: rec.name || '', site: rec.site || '', status: rec.status || 'pending', at: rec.created || now() });
+    }
+  }
+
+  let acc = rec.accounts.find((a) => String(a.moodleId) === moodleId);
+  let isNewAccount = false;
+  if (!acc) {
+    acc = { moodleId, name, site, status: 'pending', at: now() };
+    rec.accounts.push(acc);
+    isNewAccount = true;
+  } else {
+    acc.seen = now();
+    if (name) acc.name = name;
+    if (site) acc.site = site;
+  }
+
+  rec.moodleId = moodleId;
+  if (name) rec.name = name;
+  if (site) rec.site = site;
+
+  if (rec.accounts.some((a) => a.status === 'active') && !rec.banned) {
+    rec.status = 'active';
+  } else if (rec.accounts.every((a) => a.status === 'revoked')) {
+    rec.status = 'revoked';
+  } else {
+    rec.status = 'pending';
+  }
+
   state.devices[deviceId] = rec;
   saveState();
-  if (!existing) {
+
+  if (isNewAccount || !existing) {
     note('register ' + deviceId + ' moodle ' + moodleId + ' → pending', rec);
     state.applications.push({ deviceId, moodleId, name, site, deviceName, at: now() });
     if (state.applications.length > 40) state.applications.splice(0, state.applications.length - 40);
     saveState();
   }
-  return { device: rec };
+  return { device: rec, account: acc };
 }
 
 function getCandidateModels(requestedModel) {
@@ -540,7 +600,7 @@ function buildAgentPrompt(body) {
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
 
-function upstreamJson(method, pathname, payload, onContent) {
+function upstreamJson(method, pathname, payload, onContent, abortEmitter) {
   return new Promise((resolve) => {
     const url = new URL(CFG.upstreamUrl + pathname);
     const lib = url.protocol === 'https:' ? https : http;
@@ -561,35 +621,57 @@ function upstreamJson(method, pathname, payload, onContent) {
     }
     const req = lib.request(reqOpts, (up) => {
       const streaming = onContent && /text\/event-stream/i.test(String(up.headers['content-type'] || ''));
-      const decoder = new StringDecoder('utf8'); let raw = '', pending = '', content = '', backendModel = null;
+      const decoder = new StringDecoder('utf8');
+      let raw = '', pending = '', content = '', reasoningContent = '', backendModel = null;
       function lines(chunk) {
         pending += chunk;
-        const split = pending.split(/\r?\n/); pending = split.pop();
+        const split = pending.split(/\r?\n/);
+        pending = split.pop();
         for (const line of split) {
           if (!line.startsWith('data:')) continue;
-          const item = parseJson(line.slice(5).trim());
+          const trimmed = line.slice(5).trim();
+          if (trimmed === '[DONE]') continue;
+          const item = parseJson(trimmed);
           if (item && typeof item.model === 'string' && item.model) backendModel = item.model;
           const delta = item && item.choices && item.choices[0] && item.choices[0].delta;
-          if (delta && typeof delta.reasoning_content === 'string' && delta.reasoning_content) onContent('reasoning');
-          if (delta && typeof delta.content === 'string' && delta.content) {
-            content += delta.content;
-            if (content.length > 1024 * 1024) { req.destroy(new Error('upstream answer too large')); return; }
-            onContent('writing answer');
+          if (delta) {
+            const reasonChunk = delta.reasoning_content || delta.thought || '';
+            if (reasonChunk) {
+              reasoningContent += reasonChunk;
+              onContent('reasoning', reasonChunk);
+            }
+            if (typeof delta.content === 'string' && delta.content) {
+              content += delta.content;
+              if (content.length > 1024 * 1024) { req.destroy(new Error('upstream answer too large')); return; }
+              onContent('writing answer', delta.content);
+            }
           }
         }
       }
       up.on('data', (c) => {
         const text = decoder.write(c);
-        if (streaming) lines(text); else { raw += text; if (raw.length > 2 * 1024 * 1024) req.destroy(new Error('upstream answer too large')); }
+        if (streaming) lines(text);
+        else { raw += text; if (raw.length > 2 * 1024 * 1024) req.destroy(new Error('upstream answer too large')); }
       });
       up.on('end', () => {
         const tail = decoder.end();
-        if (streaming) { lines(tail + '\n'); raw = JSON.stringify({model:backendModel,choices:[{message:{content}}]}); }
-        else { raw += tail; if (onContent && up.statusCode >= 200 && up.statusCode < 300) onContent('writing answer'); }
-        finish({ status: up.statusCode || 502, text: raw });
+        if (streaming) {
+          lines(tail + '\n');
+          raw = JSON.stringify({ model: backendModel, choices: [{ message: { content, reasoning_content: reasoningContent } }] });
+        } else {
+          raw += tail;
+          if (onContent && up.statusCode >= 200 && up.statusCode < 300) onContent('writing answer', '');
+        }
+        finish({ status: up.statusCode || 502, text: raw, model: backendModel });
       });
       up.on('error', (e) => finish({ status: 0, text: '', error: e.message }));
     });
+    if (abortEmitter) {
+      abortEmitter.on('abort', () => {
+        req.destroy(new Error('client aborted'));
+        finish({ status: 499, text: '', error: 'client aborted' });
+      });
+    }
     req.on('timeout', () => req.destroy(new Error('the model did not answer in time')));
     req.on('error', (e) => finish({ status: 0, text: '', error: e.message }));
     if (body) req.write(body);
@@ -612,27 +694,68 @@ async function handleAgent(req, res, rec) {
     serverLog('warn', 'agent_bad_request', 'question is required', { deviceId: rec.deviceId });
     return oaiError(req, res, 400, 'question is required', 'bad_request');
   }
-  if (body.image && (!Array.isArray(body.image) || body.image.length > 5 || body.image.some((x) => !x || !/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(String(x.data || ''))) || body.image.reduce((n,x) => n + String(x.data).length, 0) > 1500000)) {
-    serverLog('warn', 'agent_bad_image', 'image format or size unsupported', { deviceId: rec.deviceId });
-    return oaiError(req, res, 400, 'image format or size unsupported', 'bad_image');
+  if (body.image) {
+    const totalBytes = Array.isArray(body.image) ? body.image.reduce((n, x) => n + String(x && x.data ? x.data.length : 0), 0) : 0;
+    if (!Array.isArray(body.image)) {
+      serverLog('warn', 'agent_bad_image', 'image payload is not an array', { deviceId: rec.deviceId, size: totalBytes, reason: 'not_an_array' });
+      return oaiError(req, res, 400, 'image format or size unsupported', 'bad_image');
+    }
+    if (body.image.length > 5) {
+      serverLog('warn', 'agent_bad_image', 'too many images: ' + body.image.length, { deviceId: rec.deviceId, size: totalBytes, reason: 'too_many_images', count: body.image.length });
+      return oaiError(req, res, 400, 'image format or size unsupported', 'bad_image');
+    }
+    if (totalBytes > 1500000) {
+      serverLog('warn', 'agent_bad_image', 'images total size exceeds 1.5MB: ' + totalBytes + ' bytes', { deviceId: rec.deviceId, size: totalBytes, reason: 'size_exceeded' });
+      return oaiError(req, res, 400, 'image format or size unsupported', 'bad_image');
+    }
+    const invalidItem = body.image.find((x) => !x || !/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(String(x.data || '')));
+    if (invalidItem) {
+      serverLog('warn', 'agent_bad_image', 'invalid base64 image data format', { deviceId: rec.deviceId, size: totalBytes, reason: 'invalid_format' });
+      return oaiError(req, res, 400, 'image format or size unsupported', 'bad_image');
+    }
   }
   const candidateModels = getCandidateModels(CFG.model);
   if (!candidateModels.length) return send(req, res, 503, { ok: false, code: 'no_model', retry_after: 5, message: 'the backend offered no model yet' });
 
   const streaming = /text\/event-stream/i.test(String(req.headers.accept || ''));
   const payload = { model: candidateModels[0], temperature: 0, messages: buildAgentPrompt(body) };
+  const abortEmitter = new EventEmitter();
+  let pingTimer = null;
   if (streaming) {
     payload.stream = true;
-    res.writeHead(200, { 'content-type':'text/event-stream; charset=utf-8', 'cache-control':'no-cache', 'x-accel-buffering':'no' });
+    res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', 'connection': 'keep-alive', 'x-accel-buffering': 'no' });
+    pingTimer = setInterval(() => {
+      if (!res.destroyed) res.write(': ping\n\n');
+    }, 10000);
+    req.on('close', () => {
+      if (pingTimer) clearInterval(pingTimer);
+      abortEmitter.emit('abort');
+    });
   }
-  function event(type, value) { if (!res.destroyed) res.write('event: ' + type + '\ndata: ' + JSON.stringify(value) + '\n\n'); }
+
+  function event(type, value) {
+    if (!res.destroyed) res.write('event: ' + type + '\ndata: ' + JSON.stringify(value) + '\n\n');
+  }
+
   function reply(status, result) {
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
     if (!streaming) return send(req, res, status, result);
-    event('result', result); return res.end();
+    if (result && result.reasoning) {
+      result.reasoning = String(result.reasoning).slice(0, 400);
+    }
+    event('result', result);
+    return res.end();
   }
-  if (streaming) event('stage', {stage: body.image ? 'looking at image' : 'reasoning'});
-  let currentStage = body.image ? 'looking at image' : 'reasoning';
-  const onContent = streaming ? (stage) => { if (stage !== currentStage && !(currentStage === 'writing answer' && stage === 'reasoning')) { currentStage = stage; event('stage', {stage}); } } : null;
+
+  if (streaming) event('stage', { stage: body.image && body.image.length ? 'looking at image' : 'reasoning' });
+  let currentStage = body.image && body.image.length ? 'looking at image' : 'reasoning';
+  const onContent = streaming ? (stage) => {
+    if (stage !== currentStage && !(currentStage === 'writing answer' && stage === 'reasoning')) {
+      currentStage = stage;
+      event('stage', { stage });
+    }
+  } : null;
+
   const started = now();
   rec.requests = (rec.requests || 0) + 1;
   rec.quotaUsed = (rec.quotaUsed || 0) + 1;
@@ -648,7 +771,11 @@ async function handleAgent(req, res, rec) {
   for (let ci = 0; ci < candidateModels.length; ci++) {
     chosenModel = candidateModels[ci];
     payload.model = chosenModel;
-    up = await upstreamJson('POST', '/v1/chat/completions', payload, onContent);
+    up = await upstreamJson('POST', '/v1/chat/completions', payload, onContent, abortEmitter);
+    if (up && up.status === 499) {
+      if (pingTimer) clearInterval(pingTimer);
+      return;
+    }
     if (up && up.status === 503 && ci + 1 < candidateModels.length) {
       serverLog('warn', 'model_503', 'model ' + chosenModel + ' 503 -> fallback to ' + candidateModels[ci + 1], { deviceId: rec.deviceId });
       note('agent model ' + chosenModel + ' 503 → fallback to ' + candidateModels[ci + 1], rec);
@@ -724,9 +851,9 @@ async function handleAgent(req, res, rec) {
   if (Array.isArray(body.selects) && body.selects.length) {
     if (parts.length !== body.selects.length) {
       serverLog('warn', 'agent_error', 'wrong number of dropdown answers', { deviceId: rec.deviceId });
-      return reply(200, {ok:false, code:'agent_error', ms, message:'wrong number of dropdown answers'});
+      return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of dropdown answers' });
     }
-    const matches = body.selects.map((group,i) => {
+    const matches = body.selects.map((group, i) => {
       if (!Array.isArray(group)) return [];
       const part = parts[i];
       let m = group.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
@@ -739,13 +866,13 @@ async function handleAgent(req, res, rec) {
     });
     if (matches.some((xs) => xs.length !== 1)) {
       serverLog('warn', 'agent_error', 'dropdown answer not in the task', { deviceId: rec.deviceId });
-      return reply(200, {ok:false, code:'agent_error', ms, message:'dropdown answer not in the task'});
+      return reply(200, { ok: false, code: 'agent_error', ms, message: 'dropdown answer not in the task' });
     }
     picked = matches.map((xs) => xs[0]).join(' | ');
   } else if (options.length) {
     if (!body.multiple && parts.length !== 1) {
       serverLog('warn', 'agent_error', 'agent picked multiple options', { deviceId: rec.deviceId });
-      return reply(200, {ok:false, code:'agent_error', ms, message:'agent picked multiple options'});
+      return reply(200, { ok: false, code: 'agent_error', ms, message: 'agent picked multiple options' });
     }
     const matches = parts.map((part) => {
       let m = options.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
@@ -758,18 +885,21 @@ async function handleAgent(req, res, rec) {
     });
     if (matches.some((xs) => xs.length !== 1)) {
       serverLog('warn', 'agent_error', 'option not in task: ' + answer, { deviceId: rec.deviceId });
-      return reply(200, {ok:false, code:'agent_error', ms, message:'the agent named an option that is not in the task', answer});
+      return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
     }
     picked = matches.map((xs) => xs[0]).join(' | ');
   } else if (Number(body.textCount) > 1 && parts.length !== Number(body.textCount)) {
     serverLog('warn', 'agent_error', 'wrong number of text answers', { deviceId: rec.deviceId });
-    return reply(200, {ok:false, code:'agent_error', ms, message:'wrong number of text answers'});
+    return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of text answers' });
   }
   serverLog('info', 'agent_ok', 'agent answered', { deviceId: rec.deviceId, model: chosenModel, ms });
+  const upstreamModel = (up && up.model) || (parsed && typeof parsed.model === 'string' && parsed.model) || chosenModel;
+  const reasoningText = (parsed && parsed.choices && parsed.choices[0] && parsed.choices[0].message && (parsed.choices[0].message.reasoning_content || parsed.choices[0].message.thought)) || answerObj.reason || '';
   return reply(200, {
     ok: true, code: 'ok', ms, answer: picked || answer,
     confidence: typeof answerObj.confidence === 'number' ? answerObj.confidence : null,
-    reasoning: answerObj.reason || null, model: typeof parsed.model === 'string' && parsed.model ? parsed.model : chosenModel
+    reasoning: reasoningText ? String(reasoningText).slice(0, 400) : null,
+    model: upstreamModel
   });
 }
 
@@ -831,7 +961,15 @@ async function handleAdmin(req, res, url) {
     if (!state.allow.some((a) => String(a.moodleId) === moodleId)) {
       state.allow.push({ moodleId, name: String(body.name || '').trim().slice(0, 120), added: now() });
     }
-    if (pending.length === 1) pending[0].status = 'active';
+    Object.values(state.devices).forEach((d) => {
+      if (String(d.moodleId) === moodleId || (Array.isArray(d.accounts) && d.accounts.some((a) => String(a.moodleId) === moodleId))) {
+        d.status = 'active';
+        delete d.banned;
+        if (Array.isArray(d.accounts)) {
+          d.accounts.forEach((a) => { if (String(a.moodleId) === moodleId) a.status = 'active'; });
+        }
+      }
+    });
     saveState();
     note('allow ' + moodleId);
     return send(req, res, 200, { ok: true, allow: state.allow });
@@ -841,22 +979,78 @@ async function handleAdmin(req, res, url) {
     const rec = state.devices[deviceId];
     if (!rec) return oaiError(req, res, 404, 'no such device', 'no_device');
     const revoke = url.pathname === '/admin/revoke';
-    rec.status = revoke ? 'revoked' : 'active';
-    if (revoke) rec.banned = true; else delete rec.banned;
-    if (!revoke && rec.moodleId) {
-      const mId = String(rec.moodleId).trim();
-      if (mId && !state.allow.some((a) => String(a.moodleId) === mId)) {
-        state.allow.push({ moodleId: mId, name: String(rec.name || '').trim().slice(0, 120), added: now() });
+    const mid = body.moodleId ? String(body.moodleId).trim() : '';
+
+    if (mid) {
+      if (Array.isArray(rec.accounts)) {
+        const acc = rec.accounts.find((a) => String(a.moodleId) === mid);
+        if (acc) {
+          acc.status = revoke ? 'revoked' : 'active';
+        }
+      }
+      if (!revoke) {
+        if (!state.allow.some((a) => String(a.moodleId) === mid)) {
+          state.allow.push({ moodleId: mid, name: String(rec.name || '').trim().slice(0, 120), added: now() });
+        }
+        rec.status = 'active';
+        delete rec.banned;
+      } else {
+        if (Array.isArray(rec.accounts) && rec.accounts.every((a) => a.status === 'revoked')) {
+          rec.status = 'revoked';
+          rec.banned = true;
+        }
+      }
+    } else {
+      rec.status = revoke ? 'revoked' : 'active';
+      if (revoke) {
+        rec.banned = true;
+        if (Array.isArray(rec.accounts)) rec.accounts.forEach((a) => { a.status = 'revoked'; });
+      } else {
+        delete rec.banned;
+        if (Array.isArray(rec.accounts)) rec.accounts.forEach((a) => { a.status = 'active'; });
+        if (rec.moodleId) {
+          const mId = String(rec.moodleId).trim();
+          if (mId && !state.allow.some((a) => String(a.moodleId) === mId)) {
+            state.allow.push({ moodleId: mId, name: String(rec.name || '').trim().slice(0, 120), added: now() });
+          }
+        }
       }
     }
     saveState();
-    note((revoke ? 'revoke ' : 'approve ') + deviceId, rec);
+    note((revoke ? 'revoke ' : 'approve ') + deviceId + (mid ? ' moodle ' + mid : ''), rec);
     return send(req, res, 200, { ok: true, device: publicDevice(rec), allow: state.allow });
+  }
+  if (url.pathname === '/admin/disassociate') {
+    const deviceId = String(body.deviceId || '').trim();
+    const mid = String(body.moodleId || '').trim();
+    const rec = state.devices[deviceId];
+    if (!rec) return oaiError(req, res, 404, 'no such device', 'no_device');
+    if (!mid) return oaiError(req, res, 400, 'moodleId required', 'bad_request');
+    if (Array.isArray(rec.accounts)) {
+      rec.accounts = rec.accounts.filter((a) => String(a.moodleId) !== mid);
+    }
+    if (String(rec.moodleId) === mid) {
+      rec.moodleId = rec.accounts.length ? rec.accounts[0].moodleId : '';
+    }
+    if (!rec.accounts.some((a) => a.status === 'active')) {
+      rec.status = rec.accounts.length ? 'pending' : 'pending';
+    }
+    saveState();
+    note('disassociate ' + deviceId + ' moodle ' + mid, rec);
+    return send(req, res, 200, { ok: true, device: publicDevice(rec) });
   }
   if (url.pathname === '/admin/disallow') {
     const moodleId = String(body.moodleId || '').trim();
     state.allow = state.allow.filter((a) => String(a.moodleId) !== moodleId);
-    Object.values(state.devices).forEach((d) => { if (String(d.moodleId) === moodleId) d.status = 'revoked'; });
+    Object.values(state.devices).forEach((d) => {
+      if (Array.isArray(d.accounts)) {
+        const acc = d.accounts.find((a) => String(a.moodleId) === moodleId);
+        if (acc) acc.status = 'revoked';
+      }
+      if (String(d.moodleId) === moodleId && (!Array.isArray(d.accounts) || d.accounts.every((a) => a.status === 'revoked'))) {
+        d.status = 'revoked';
+      }
+    });
     saveState();
     note('disallow ' + moodleId);
     return send(req, res, 200, { ok: true, allow: state.allow });
@@ -898,15 +1092,22 @@ const handler = async (req, res) => {
   try {
     if (url.pathname === '/health' || url.pathname === '/') {
       res.setHeader('cache-control', 'no-store');
+      if (isAdmin(req)) {
+        return send(req, res, 200, {
+          ok: true, name: 'MSE gateway', version: VERSION, role: 'router',
+          backend: 'tailscale', publicUrl: CFG.publicUrl || null,
+          upstream: { host: UPSTREAM_HOST, port: UPSTREAM_PORT, tls: UPSTREAM_TLS },
+          proxy: CFG.aiProxy || null,
+          model: CFG.model,
+          models: CFG.models, modelsCount: CFG.models.length, modelsSource: CFG.modelsSource,
+          quota: CFG.dailyQuota, devices: Object.keys(state.devices).length, allow: state.allow.length,
+          time: new Date().toISOString()
+        });
+      }
       return send(req, res, 200, {
-        ok: true, name: 'MSE gateway', version: VERSION, role: 'router',
-        backend: 'tailscale', publicUrl: CFG.publicUrl || null,
-        upstream: { host: UPSTREAM_HOST, port: UPSTREAM_PORT, tls: UPSTREAM_TLS },
-        proxy: CFG.aiProxy || null,
-        model: CFG.model,
-        models: CFG.models, modelsCount: CFG.models.length, modelsSource: CFG.modelsSource,
-        quota: CFG.dailyQuota, devices: Object.keys(state.devices).length, allow: state.allow.length,
-        time: new Date().toISOString()
+        name: 'MSE',
+        version: VERSION,
+        layer: 1
       });
     }
     if (url.pathname.startsWith('/admin/')) return await handleAdmin(req, res, url);
@@ -927,17 +1128,18 @@ const handler = async (req, res) => {
       const rec = deviceByKey(keyOf(req));
       if (!rec) return oaiError(req, res, 401, 'unknown key: register the device first', 'invalid_key');
       rec.seen = now(); saveState();
-      res.setHeader('x-mse-status', rec.status);
-      if (rec.status !== 'active') {
+      const moodleHeader = req.headers['x-moodle-id'];
+      const allowed = isDeviceAllowed(rec, moodleHeader);
+      res.setHeader('x-mse-status', allowed ? 'active' : rec.status);
+      if (!allowed) {
         return send(req, res, 403, { ok: false, device: publicDevice(rec), hint: rec.status === 'revoked' ? 'the key was revoked' : 'waiting for approval' });
       }
       return send(req, res, 200, { ok: true, device: publicDevice(rec), model: CFG.model, quota: quotaOf(rec) });
     }
     if (url.pathname === '/v1/models' && req.method === 'GET') {
-      /* a device that was not let in is told nothing, not even the list of models */
-      const rec = deviceByKey(keyOf(req));
-      if (keyOf(req) && rec && rec.status !== 'active') return oaiError(req, res, 403, 'device is ' + rec.status, 'device_' + rec.status);
-      /* the list is the backend's: cached at start and on every refresh, never a constant in this file */
+      if (!isAdmin(req)) {
+        return oaiError(req, res, 403, 'models endpoint is restricted to admin', 'admin_restricted');
+      }
       const ids = CFG.models.length ? CFG.models : (CFG.model ? [CFG.model] : []);
       return send(req, res, 200, { object: 'list', data: ids.map((id) => ({ id, object: 'model', created: 1700000000, owned_by: 'backend' })) });
     }

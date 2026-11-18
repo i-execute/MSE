@@ -118,11 +118,20 @@ class Gateway:
     def allow(self, moodle_id: str, name: str = "") -> dict[str, Any]:
         return self._call("POST", "/admin/allow", {"moodleId": str(moodle_id), "name": name})
 
-    def approve(self, device_id: str) -> dict[str, Any]:
-        return self._call("POST", "/admin/approve", {"deviceId": device_id})
+    def approve(self, device_id: str, moodle_id: str = "") -> dict[str, Any]:
+        body: dict[str, Any] = {"deviceId": device_id}
+        if moodle_id:
+            body["moodleId"] = moodle_id
+        return self._call("POST", "/admin/approve", body)
 
-    def revoke(self, device_id: str) -> dict[str, Any]:
-        return self._call("POST", "/admin/revoke", {"deviceId": device_id})
+    def revoke(self, device_id: str, moodle_id: str = "") -> dict[str, Any]:
+        body: dict[str, Any] = {"deviceId": device_id}
+        if moodle_id:
+            body["moodleId"] = moodle_id
+        return self._call("POST", "/admin/revoke", body)
+
+    def disassociate(self, device_id: str, moodle_id: str) -> dict[str, Any]:
+        return self._call("POST", "/admin/disassociate", {"deviceId": device_id, "moodleId": moodle_id})
 
     def disallow(self, moodle_id: str) -> dict[str, Any]:
         return self._call("POST", "/admin/disallow", {"moodleId": str(moodle_id)})

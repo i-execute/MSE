@@ -136,7 +136,7 @@ test('B3: AI_PROXY routes upstream requests through SOCKS5 proxy', { timeout: 60
     assert.ok(socks.getConnections() > initSocksConns, 'SOCKS proxy saw the agent request');
 
     // Health reflects proxy setting
-    const health = await (await fetch('http://127.0.0.1:' + r.port + '/health')).json();
+    const health = await (await fetch('http://127.0.0.1:' + r.port + '/health', { headers: { 'x-admin-token': TOKEN } })).json();
     assert.equal(health.proxy, 'socks5://127.0.0.1:' + socks.port);
   } finally {
     r.child.kill();
@@ -150,7 +150,7 @@ test('B3: empty AI_PROXY connects directly without SOCKS proxy', { timeout: 6000
   const r = await startRouter(backend.port, { AI_PROXY: '', MSE_MODEL: 'test-model' });
 
   try {
-    const health = await (await fetch('http://127.0.0.1:' + r.port + '/health')).json();
+    const health = await (await fetch('http://127.0.0.1:' + r.port + '/health', { headers: { 'x-admin-token': TOKEN } })).json();
     assert.equal(health.proxy, null);
 
     const key = 'mse_' + 'd'.repeat(48);

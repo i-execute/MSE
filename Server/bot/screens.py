@@ -81,7 +81,7 @@ def home(snap: dict[str, Any], notice: str = "") -> Rich:
     subtitle = muted("Moodle answer panel " + SEP + " router, AI backend, tailscale, telegram")
     if not router_ok:
         subtitle = status_chip(False, "router is not answering") + " " + muted(SEP + " everything below may be stale")
-    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.8.0"), icon="bot")
+    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.10.0"), icon="bot")
 
 
 def _pending_list(devices: list[dict[str, Any]]) -> str:
@@ -131,22 +131,39 @@ def people(snap: dict[str, Any], notice: str = "", only: str = "") -> Rich:
             state = device_state(device)
             icon = {"active": "ok", "pending": "bell", "revoked": "fail"}.get(state, "info")
             name = device.get("name") or "a device"
+            dev_id = str(device.get("deviceId") or "?")
             lines = [
                 f"{ico(icon, '')}{bold(name)} {muted('Moodle id')} {code(device.get('moodleId') or '?')}",
-                f"{muted('device')} {code(device.get('deviceId') or '?')} {muted(str(device.get('deviceName') or ''))}",
+                f"{muted('device')} {code(dev_id)} {muted(str(device.get('deviceName') or ''))}",
                 muted(f"{state} {SEP} last seen {device.get('seen') or '—'} {SEP} quota {device.get('quota') or 0}"),
             ]
+            accounts = list(device.get("accounts") or [])
+            acc_btns = []
+            if len(accounts) > 1:
+                acc_lines = []
+                for acc in accounts:
+                    acc_st = acc.get("status") or "pending"
+                    m_id = str(acc.get("moodleId") or "")
+                    acc_lines.append(f"• ID {code(m_id or '?')} {muted(acc.get('name') or '')} [{acc_st}]")
+                    if m_id:
+                        if acc_st == "active":
+                            acc_btns.append(button(f"revoke {m_id}", f"dev:revoke:{dev_id}:{m_id}", icon="stop"))
+                        else:
+                            acc_btns.append(button(f"allow {m_id}", f"dev:approve:{dev_id}:{m_id}", icon="ok"))
+                lines.append("<br>".join(acc_lines))
             blocks.append(quote("<br>".join(lines)))
-            if state == "pending":
+            if acc_btns:
+                blocks.append(row(*acc_btns[:4], align="left"))
+            elif state == "pending":
                 blocks.append(
                     row(
-                        button("allow", "dev:approve:" + str(device.get("deviceId") or device.get("moodleId")), icon="ok"),
-                        button("decline", "dev:revoke:" + str(device.get("deviceId") or device.get("moodleId")), icon="fail"),
+                        button("allow", "dev:approve:" + dev_id, icon="ok"),
+                        button("decline", "dev:revoke:" + dev_id, icon="fail"),
                         align="left",
                     )
                 )
             elif state == "active":
-                blocks.append(row(button("revoke", "dev:revoke:" + str(device.get("deviceId") or ""), icon="stop")))
+                blocks.append(row(button("revoke", "dev:revoke:" + dev_id, icon="stop")))
 
     if allow:
         ids = ", ".join(code(a.get("moodleId") if isinstance(a, dict) else a) for a in allow[:20]

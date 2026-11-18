@@ -45,7 +45,7 @@ const key = (n) => 'mse_' + String(n).repeat(48);
 const admin = { 'x-admin-token': 'adm_router_token' };
 
 test('R1 /health says it is a router behind tailscale, and where the backend is', async () => {
-  const response = await get('/health');
+  const response = await get('/health', admin);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   const h = await response.json();
   assert.equal(h.ok, true);
@@ -139,17 +139,19 @@ test('R8 /admin/state is the same report as before, and /admin/quota changes the
   assert.equal((await q.json()).quota, 50);
   const st = await (await get('/admin/state', admin)).json();
   assert.equal(st.quota, 50);
-  assert.equal(st.version, '2.8.0');
+  assert.equal(st.version, '2.10.0');
   assert.ok(Array.isArray(st.log) && st.log.length > 0, 'the log tells what happened');
   assert.equal(st.backend, 'tailscale');
 });
 
-test('R9 /v1/models is named to an allowed device and denied to a stranger', async () => {
+test('R9 /v1/models is restricted to admin on server and denied to client keys', async () => {
   await router.modelsReady;
   const open = await get('/v1/models');
-  assert.equal(open.status, 200, 'the list itself is public, as OpenAI clients expect');
-  const list = await open.json();
-  assert.deepEqual(list.data.map((m) => m.id), ['mock-model', 'gemini-3-flash'], 'the backend\'s list, verbatim');
+  assert.equal(open.status, 403, 'public access is denied');
   const strandev = await get('/v1/models', { authorization: 'Bearer ' + key(9) });
-  assert.equal(strandev.status, 200, 'an unknown key that asks for models still gets the list');
+  assert.equal(strandev.status, 403, 'client keys are denied');
+  const adm = await get('/v1/models', admin);
+  assert.equal(adm.status, 200, 'admin gets the list');
+  const list = await adm.json();
+  assert.deepEqual(list.data.map((m) => m.id), ['mock-model', 'gemini-3-flash'], 'the backend\'s list, verbatim');
 });
