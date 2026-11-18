@@ -188,6 +188,62 @@ test('WebKit: universal handling of Layer 1 question types in real Moodle format
       assert.equal(val, '9.81', 'numerical value inserted');
       await page.close();
     }
+
+    // 6. Fuzzy letter and index matching for choices (A, (B), 2, a.)
+    {
+      const page = await t.newPage(h.fixtureUrl('attempt'));
+      await page.waitForFunction(() => !!window.__mse);
+      await page.evaluate(() => {
+        const q = document.querySelector('.que');
+        q.className = 'que multichoice deferredfeedback notyetanswered';
+        q.querySelector('.answer').innerHTML = `
+          <div class="r0"><input type="radio" name="q42:6_answer" id="r0" value="0"><label for="r0">Rome</label></div>
+          <div class="r1"><input type="radio" name="q42:6_answer" id="r1" value="1"><label for="r1">Madrid</label></div>
+        `;
+        window.__mse.open();
+      });
+      await page.waitForFunction(() => !!window.__mse.state().question);
+
+      // Model returns "B" (letter index)
+      const appliedLetter = await page.evaluate(() => window.__mse.apply('B'));
+      assert.equal(appliedLetter.ok, true);
+      assert.equal(await page.evaluate(() => document.getElementById('r1').checked), true, 'letter B clicked Madrid');
+
+      // Model returns "1. Rome" (prefixed)
+      const appliedPrefixed = await page.evaluate(() => window.__mse.apply('1. Rome'));
+      assert.equal(appliedPrefixed.ok, true);
+      assert.equal(await page.evaluate(() => document.getElementById('r0').checked), true, 'prefixed 1. Rome clicked Rome');
+
+      await page.close();
+    }
+
+    // 7. Coderunner / Rich text editor updating
+    {
+      const page = await t.newPage(h.fixtureUrl('attempt'));
+      await page.waitForFunction(() => !!window.__mse);
+      await page.evaluate(() => {
+        const q = document.querySelector('.que');
+        q.className = 'que coderunner deferredfeedback notyetanswered';
+        q.querySelector('.formulation').innerHTML = `
+          <div class="qtext">Write function foo</div>
+          <div class="answer">
+            <textarea name="q42:7_answer" id="code_box"></textarea>
+            <div contenteditable="true" class="editor_atto_content" id="atto_ed"></div>
+          </div>
+        `;
+        window.__mse.open();
+      });
+      await page.waitForFunction(() => !!window.__mse.state().question);
+      const applied = await page.evaluate(() => window.__mse.apply('def foo(): return 42'));
+      assert.equal(applied.ok, true);
+      const res = await page.evaluate(() => ({
+        boxVal: document.getElementById('code_box').value,
+        edHtml: document.getElementById('atto_ed').innerHTML
+      }));
+      assert.equal(res.boxVal, 'def foo(): return 42');
+      assert.match(res.edHtml, /def foo\(\): return 42/);
+      await page.close();
+    }
   } finally {
     await t.close();
   }

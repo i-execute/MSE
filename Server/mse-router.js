@@ -585,11 +585,53 @@ function extractJson(text) {
   if (!m) return null;
   try { return JSON.parse(m[0]); } catch (e) { return null; }
 }
+const RU_LETTERS = 'абвгдежзийклмнопрстуфхцчшщэюя';
+function normOpt(s) {
+  return String(s || '').trim().toLowerCase()
+    .replace(/^(\([a-zа-я0-9]{1,2}\)|[a-zа-я0-9]{1,2}[\.\)\:\-])\s*/i, '')
+    .replace(/[.,;:!?'\"«»()]+$/g, '')
+    .trim();
+}
+function matchOption(part, options) {
+  if (!Array.isArray(options) || !options.length) return null;
+  const pRaw = String(part || '').trim();
+  let m = options.filter((o) => o.trim().toLowerCase() === pRaw.toLowerCase());
+  if (m.length === 1) return m[0];
+  const np = normOpt(pRaw);
+  if (np) {
+    m = options.filter((o) => normOpt(o) === np);
+    if (m.length === 1) return m[0];
+  }
+  if (/^\d+$/.test(pRaw)) {
+    const idx = parseInt(pRaw, 10);
+    if (idx >= 1 && idx <= options.length) return options[idx - 1];
+  }
+  const latMatch = /^[a-z]$/i.exec(pRaw.replace(/[\.\)\:]$/, ''));
+  if (latMatch) {
+    const code = latMatch[0].toUpperCase().charCodeAt(0) - 65;
+    if (code >= 0 && code < options.length) return options[code];
+  }
+  const ruMatch = /^[а-я]$/i.exec(pRaw.replace(/[\.\)\:]$/, ''));
+  if (ruMatch) {
+    const ruCode = RU_LETTERS.indexOf(ruMatch[0].toLowerCase());
+    if (ruCode >= 0 && ruCode < options.length) return options[ruCode];
+  }
+  if (np && np.length >= 3) {
+    m = options.filter((o) => {
+      const no = normOpt(o);
+      return (no && (no.startsWith(np) || np.startsWith(no)));
+    });
+    if (m.length === 1) return m[0];
+  }
+  return null;
+}
+
 function buildAgentPrompt(body) {
   const options = Array.isArray(body.options) ? body.options.map((o, i) => (i + 1) + '. ' + o).join('\n') : '';
   const type = String(body.type || '').toLowerCase();
   const isNumeric = /^(numerical|calculated|calculatedsimple)$/.test(type);
   const isDdwtos = type === 'ddwtos' || Number(body.placesCount) > 0;
+  const isCoderunner = type === 'coderunner';
 
   let system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
     '{"answer": "<verbatim option text or exact answer value>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
@@ -599,7 +641,20 @@ function buildAgentPrompt(body) {
   }
 
   let user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
-  if (isDdwtos) {
+  if (Array.isArray(body.fields) && body.fields.length > 1) {
+    user += 'This question has ' + body.fields.length + ' inputs in order from left to right, joined by |:\n';
+    body.fields.forEach((f, i) => {
+      if (f.kind === 'select') {
+        user += (i + 1) + '. [Dropdown] Options: ' + (Array.isArray(f.options) ? f.options.join(' / ') : '') + '\n';
+      } else if (f.kind === 'place') {
+        user += (i + 1) + '. [Blank] Choose matching option from the options list below\n';
+      } else {
+        user += (i + 1) + '. [Text field] Enter value\n';
+      }
+    });
+    if (options) user += 'Available options:\n' + options + '\n';
+    user += 'Provide the answer for all ' + body.fields.length + ' inputs in exact order, joined by |.\n';
+  } else if (isDdwtos) {
     const places = Number(body.placesCount) || 1;
     user += 'This is a drag-and-drop into text question with ' + places + ' blank(s) marked [[1]]' + (places > 1 ? ', [[2]], etc.' : '') + '.\n';
     if (options) user += 'Available options:\n' + options + '\n';
@@ -608,16 +663,18 @@ function buildAgentPrompt(body) {
     user += (body.multiple ? 'Options (pick all that apply):\n' : 'Options (pick exactly one):\n') + options + '\n';
     user += 'Return the exact verbatim text of the chosen option as listed. Do not include option numbers or letters.\n';
   }
-  if (body.multiple && !isDdwtos) user += 'Return selected option captions joined by |, exactly as listed.\n';
-  if (Array.isArray(body.selects) && body.selects.length) {
+  if (body.multiple && !isDdwtos && (!body.fields || body.fields.length <= 1)) user += 'Return selected option captions joined by |, exactly as listed.\n';
+  if (!body.fields && Array.isArray(body.selects) && body.selects.length) {
     user += 'For each numbered dropdown choose one option, in order, joined by | (exact verbatim option text):\n';
     body.selects.forEach((values, i) => { user += (i + 1) + ': ' + (Array.isArray(values) ? values.join(' / ') : '') + '\n'; });
   }
-  if (Number(body.textCount) > 1) {
+  if (!body.fields && Number(body.textCount) > 1) {
     user += 'Give one value for each of the ' + Math.min(20, Number(body.textCount)) + ' text fields, in order, joined by |.\n';
   } else if (isNumeric) {
     user += 'Give the exact numerical answer as a number (e.g. 42 or 3.14). Do not include units unless explicitly asked.\n';
-  } else if (!options && !Array.isArray(body.selects)) {
+  } else if (isCoderunner) {
+    user += 'Provide only the exact working code to solve the task. Do not wrap in markdown fences or explanations.\n';
+  } else if (!options && !Array.isArray(body.selects) && (!body.fields || body.fields.length <= 1)) {
     user += 'Give the exact answer to fill in the field.\n';
   }
 
@@ -883,68 +940,64 @@ async function handleAgent(req, res, rec) {
     serverLog('warn', 'agent_no_image_refusal', 'model claimed no image was provided', { deviceId: rec.deviceId, model: chosenModel });
     return reply(200, { ok: false, code: 'agent_error', ms, message: 'the model reported no image was provided' });
   }
-  const parts = answer.split('|').map((x) => x.trim()).filter(Boolean);
-  let picked = answer;
-  if (Array.isArray(body.selects) && body.selects.length) {
+  let cleanAnswer = answer.replace(/^```[a-z]*\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+  const parts = cleanAnswer.split('|').map((x) => x.trim()).filter(Boolean);
+  let picked = cleanAnswer;
+
+  if (Array.isArray(body.fields) && body.fields.length > 1) {
+    if (parts.length !== body.fields.length) {
+      serverLog('warn', 'agent_error', 'wrong number of field answers', { deviceId: rec.deviceId });
+      return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of answers: expected ' + body.fields.length + ', got ' + parts.length });
+    }
+    const matched = parts.map((part, i) => {
+      const f = body.fields[i];
+      if (f && f.kind === 'select' && Array.isArray(f.options)) {
+        return matchOption(part, f.options);
+      }
+      if (f && f.kind === 'place' && options.length) {
+        return matchOption(part, options);
+      }
+      return part;
+    });
+    if (matched.some((x) => x === null)) {
+      serverLog('warn', 'agent_error', 'field option not in task: ' + answer, { deviceId: rec.deviceId });
+      return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
+    }
+    picked = matched.join(' | ');
+  } else if (Array.isArray(body.selects) && body.selects.length) {
     if (parts.length !== body.selects.length) {
       serverLog('warn', 'agent_error', 'wrong number of dropdown answers', { deviceId: rec.deviceId });
       return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of dropdown answers' });
     }
-    const matches = body.selects.map((group, i) => {
-      if (!Array.isArray(group)) return [];
-      const part = parts[i];
-      let m = group.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
-      if (m.length === 1) return m;
-      if (/^\d+$/.test(part)) {
-        const idx = parseInt(part, 10);
-        if (idx >= 1 && idx <= group.length) return [group[idx - 1]];
-      }
-      return [];
-    });
-    if (matches.some((xs) => xs.length !== 1)) {
+    const matches = body.selects.map((group, i) => matchOption(parts[i], group));
+    if (matches.some((xs) => xs === null)) {
       serverLog('warn', 'agent_error', 'dropdown answer not in the task', { deviceId: rec.deviceId });
       return reply(200, { ok: false, code: 'agent_error', ms, message: 'dropdown answer not in the task' });
     }
-    picked = matches.map((xs) => xs[0]).join(' | ');
+    picked = matches.join(' | ');
   } else if (String(body.type || '').toLowerCase() === 'ddwtos' || (Number(body.placesCount) > 0 && options.length)) {
     const expected = Number(body.placesCount) || 1;
     if (parts.length !== expected) {
       serverLog('warn', 'agent_error', 'wrong number of ddwtos answers', { deviceId: rec.deviceId });
       return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of drag answers' });
     }
-    const matches = parts.map((part) => {
-      let m = options.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
-      if (m.length === 1) return m;
-      if (/^\d+$/.test(part)) {
-        const idx = parseInt(part, 10);
-        if (idx >= 1 && idx <= options.length) return [options[idx - 1]];
-      }
-      return [];
-    });
-    if (matches.some((xs) => xs.length !== 1)) {
+    const matches = parts.map((part) => matchOption(part, options));
+    if (matches.some((xs) => xs === null)) {
       serverLog('warn', 'agent_error', 'ddwtos option not in task: ' + answer, { deviceId: rec.deviceId });
       return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
     }
-    picked = matches.map((xs) => xs[0]).join(' | ');
+    picked = matches.join(' | ');
   } else if (options.length) {
     if (!body.multiple && parts.length !== 1) {
       serverLog('warn', 'agent_error', 'agent picked multiple options', { deviceId: rec.deviceId });
       return reply(200, { ok: false, code: 'agent_error', ms, message: 'agent picked multiple options' });
     }
-    const matches = parts.map((part) => {
-      let m = options.filter((o) => String(o).trim().toLowerCase() === part.toLowerCase());
-      if (m.length === 1) return m;
-      if (/^\d+$/.test(part)) {
-        const idx = parseInt(part, 10);
-        if (idx >= 1 && idx <= options.length) return [options[idx - 1]];
-      }
-      return [];
-    });
-    if (matches.some((xs) => xs.length !== 1)) {
+    const matches = parts.map((part) => matchOption(part, options));
+    if (matches.some((xs) => xs === null)) {
       serverLog('warn', 'agent_error', 'option not in task: ' + answer, { deviceId: rec.deviceId });
       return reply(200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
     }
-    picked = matches.map((xs) => xs[0]).join(' | ');
+    picked = matches.join(' | ');
   } else if (Number(body.textCount) > 1 && parts.length !== Number(body.textCount)) {
     serverLog('warn', 'agent_error', 'wrong number of text answers', { deviceId: rec.deviceId });
     return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of text answers' });

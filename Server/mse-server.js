@@ -350,6 +350,47 @@ function extractJson(text) {
   if (!m) return null;
   try { return JSON.parse(m[0]); } catch (e) { return null; }
 }
+const RU_LETTERS = 'абвгдежзийклмнопрстуфхцчшщэюя';
+function normOpt(s) {
+  return String(s || '').trim().toLowerCase()
+    .replace(/^(\([a-zа-я0-9]{1,2}\)|[a-zа-я0-9]{1,2}[\.\)\:\-])\s*/i, '')
+    .replace(/[.,;:!?'\"«»()]+$/g, '')
+    .trim();
+}
+function matchOption(part, options) {
+  if (!Array.isArray(options) || !options.length) return null;
+  const pRaw = String(part || '').trim();
+  let m = options.filter((o) => o.trim().toLowerCase() === pRaw.toLowerCase());
+  if (m.length === 1) return m[0];
+  const np = normOpt(pRaw);
+  if (np) {
+    m = options.filter((o) => normOpt(o) === np);
+    if (m.length === 1) return m[0];
+  }
+  if (/^\d+$/.test(pRaw)) {
+    const idx = parseInt(pRaw, 10);
+    if (idx >= 1 && idx <= options.length) return options[idx - 1];
+  }
+  const latMatch = /^[a-z]$/i.exec(pRaw.replace(/[\.\)\:]$/, ''));
+  if (latMatch) {
+    const code = latMatch[0].toUpperCase().charCodeAt(0) - 65;
+    if (code >= 0 && code < options.length) return options[code];
+  }
+  const ruMatch = /^[а-я]$/i.exec(pRaw.replace(/[\.\)\:]$/, ''));
+  if (ruMatch) {
+    const ruCode = RU_LETTERS.indexOf(ruMatch[0].toLowerCase());
+    if (ruCode >= 0 && ruCode < options.length) return options[ruCode];
+  }
+  if (np && np.length >= 3) {
+    m = options.filter((o) => {
+      const no = normOpt(o);
+      return (no && (no.startsWith(np) || np.startsWith(no)));
+    });
+    if (m.length === 1) return m[0];
+  }
+  return null;
+}
+
 function buildAgentPrompt(body) {
   var options = Array.isArray(body.options) ? body.options.map(function (o, i) { return (i + 1) + '. ' + o; }).join('\n') : '';
   var type = String(body.type || '').toLowerCase();
@@ -435,11 +476,7 @@ async function handleAgent(req, res) {
     return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent did not pick an option' });
   }
   /* the answer must be one of the options, character for character (after trimming): otherwise it is an error */
-  let picked = options.filter((o) => String(o).trim().toLowerCase() === answer.toLowerCase())[0];
-  if (!picked && /^\d+$/.test(answer)) {
-    const idx = parseInt(answer, 10);
-    if (idx >= 1 && idx <= options.length) picked = options[idx - 1];
-  }
+  let picked = matchOption(answer, options);
   if (options.length && !picked) {
     return send(req, res, 200, { ok: false, code: 'agent_error', ms, message: 'the agent named an option that is not in the task', answer });
   }

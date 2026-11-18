@@ -103,7 +103,9 @@
     }
     function norm(s) {
       return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase()
-        .replace(/^[a-zа-я]\.\s*/i, '').replace(/[.,;:!?"'«»()]/g, '');
+        .replace(/^(\([a-zа-я0-9]{1,2}\)|[a-zа-я0-9]{1,2}[\.\)\:\-])\s*/i, '')
+        .replace(/[.,;:!?'"«»()]/g, '')
+        .trim();
     }
 
     /* ---------------------------------------------------------------- the network log */
@@ -706,6 +708,12 @@
       if (checks.length && (!q.controls.length || q.type === 'multichoiceset')) {
         var chosen = parts.map(function (part) {
           var hits = checks.filter(function (a) { return norm(a.text) === norm(part); });
+          if (!hits.length) {
+            var pTrim = String(part || '').trim();
+            hits = checks.filter(function (a, idx) {
+              return (a.letter && a.letter.toLowerCase() === pTrim.toLowerCase()) || String(idx + 1) === pTrim;
+            });
+          }
           return hits.length === 1 ? hits[0] : null;
         });
         if (chosen.some(function (x) { return !x; })) return {ok:false};
@@ -722,6 +730,12 @@
       if (radios.length && (!q.controls.length || q.type === 'multichoice' || q.type === 'truefalse' || q.type === 'calculatedmulti')) {
         if (parts.length === 1) {
           var hits = radios.filter(function (a) { return norm(a.text) === norm(parts[0]); });
+          if (!hits.length) {
+            var pTrim = String(parts[0] || '').trim();
+            hits = radios.filter(function (a, idx) {
+              return (a.letter && a.letter.toLowerCase() === pTrim.toLowerCase()) || String(idx + 1) === pTrim;
+            });
+          }
           if (hits.length === 1) { if (!hits[0].input.checked) hits[0].input.click(); return {ok:true, how:'choice'}; }
         }
       }
@@ -733,6 +747,10 @@
         var matches = Array.prototype.filter.call(target.node.options, function (o) {
           return norm(o.textContent) === norm(parts[0]) || String(o.value) === parts[0];
         });
+        if (!matches.length && /^\d+$/.test(parts[0])) {
+          var numIdx = parseInt(parts[0], 10);
+          if (numIdx >= 0 && numIdx < target.node.options.length) matches = [target.node.options[numIdx]];
+        }
         if (matches.length === 1) {
           target.node.value = matches[0].value;
           target.node.dispatchEvent(new win.Event('change', {bubbles:true}));
@@ -752,6 +770,10 @@
             var opts = Array.prototype.filter.call(ctrl.node.options, function (o) {
               return norm(o.textContent) === norm(val) || String(o.value) === val;
             });
+            if (!opts.length && /^\d+$/.test(val)) {
+              var nIdx = parseInt(val, 10);
+              if (nIdx >= 0 && nIdx < ctrl.node.options.length) opts = [ctrl.node.options[nIdx]];
+            }
             if (opts.length !== 1) return {ok:false};
             planned.push({ kind: 'select', node: ctrl.node, value: opts[0].value });
           } else if (ctrl.kind === 'text') {
@@ -766,14 +788,70 @@
             act.node.value = act.value;
             act.node.dispatchEvent(new win.Event('input', {bubbles:true}));
             act.node.dispatchEvent(new win.Event('change', {bubbles:true}));
+            try {
+              var parentBox = act.node.closest('.answer, .formulation, label') || act.node.parentNode;
+              var richEd = parentBox && parentBox.querySelector('[contenteditable="true"], .editor_atto_content');
+              if (richEd) {
+                richEd.innerHTML = '<p>' + act.value + '</p>';
+                richEd.dispatchEvent(new win.Event('input', {bubbles:true}));
+              }
+              if (act.node.tagName.toLowerCase() === 'textarea' && win.ace && typeof win.ace.edit === 'function') {
+                var aceId = act.node.id || (act.node.parentNode && act.node.parentNode.id);
+                var ed = aceId ? win.ace.edit(aceId) : null;
+                if (ed && ed.setValue) ed.setValue(act.value, 1);
+              }
+            } catch (_) {}
           }
         });
         return {ok:true, how: interactive.every(function (c) { return c.kind === 'select'; }) ? 'select' : (interactive.every(function (c) { return c.kind === 'text'; }) ? 'text' : 'multi')};
       }
 
+      /* single interactive control fallback */
+      if (parts.length === 1 && interactive.length === 1) {
+        var solo = interactive[0];
+        if (solo.kind === 'select') {
+          var sOpts = Array.prototype.filter.call(solo.node.options, function (o) {
+            return norm(o.textContent) === norm(parts[0]) || String(o.value) === parts[0];
+          });
+          if (!sOpts.length && /^\d+$/.test(parts[0])) {
+            var sNum = parseInt(parts[0], 10);
+            if (sNum >= 0 && sNum < solo.node.options.length) sOpts = [solo.node.options[sNum]];
+          }
+          if (sOpts.length === 1) {
+            solo.node.value = sOpts[0].value;
+            solo.node.dispatchEvent(new win.Event('change', {bubbles:true}));
+            return {ok:true, how:'select'};
+          }
+        } else if (solo.kind === 'text') {
+          solo.node.value = parts[0];
+          solo.node.dispatchEvent(new win.Event('input', {bubbles:true}));
+          solo.node.dispatchEvent(new win.Event('change', {bubbles:true}));
+          try {
+            var pBox = solo.node.closest('.answer, .formulation, label') || solo.node.parentNode;
+            var rEd = pBox && pBox.querySelector('[contenteditable="true"], .editor_atto_content');
+            if (rEd) {
+              rEd.innerHTML = '<p>' + parts[0] + '</p>';
+              rEd.dispatchEvent(new win.Event('input', {bubbles:true}));
+            }
+            if (solo.node.tagName.toLowerCase() === 'textarea' && win.ace && typeof win.ace.edit === 'function') {
+              var aId = solo.node.id || (solo.node.parentNode && solo.node.parentNode.id);
+              var aEd = aId ? win.ace.edit(aId) : null;
+              if (aEd && aEd.setValue) aEd.setValue(parts[0], 1);
+            }
+          } catch (_) {}
+          return {ok:true, how:'text'};
+        }
+      }
+
       /* fallback for single radio / single checkbox when parts.length === 1 */
       if (parts.length === 1) {
         var anyHits = q.answers.filter(function (a) { return a.kind === 'choice' && a.input && norm(a.text) === norm(parts[0]); });
+        if (!anyHits.length) {
+          var aTrim = String(parts[0] || '').trim();
+          anyHits = q.answers.filter(function (a, idx) {
+            return (a.letter && a.letter.toLowerCase() === aTrim.toLowerCase()) || String(idx + 1) === aTrim;
+          });
+        }
         if (anyHits.length === 1) {
           if (!anyHits[0].input.checked) anyHits[0].input.click();
           return {ok:true, how:'choice'};
@@ -1353,12 +1431,23 @@
       state.agent = { state: 'running', stage: stageText };
       render();
       var t0 = Date.now();
+      var fields = q.controls.map(function (c) {
+        if (c.kind === 'select') {
+          return {
+            kind: 'select',
+            options: Array.prototype.filter.call(c.node.options, function (o) { return !!o.value && !o.disabled; }).map(function (o) { return o.textContent.trim(); })
+          };
+        }
+        if (c.kind === 'place') return { kind: 'place' };
+        return { kind: 'text' };
+      });
       Promise.resolve().then(function () { return questionImages(q); }).then(function (images) { return win.MSEBridge.agent({
         host: state.meta.host,
         question: q.text,
         type: q.type,
         options: q.answers.map(function (a) { return a.text; }),
         multiple: q.type === 'multichoiceset' || q.answers.some(function (a) { return a.input && a.input.type === 'checkbox'; }),
+        fields: fields.length ? fields : null,
         selects: q.controls.filter(function (c) { return c.kind === 'select'; }).map(function (c) { return Array.prototype.filter.call(c.node.options, function (o) { return !!o.value && !o.disabled; }).map(function (o) { return o.textContent.trim(); }); }),
         placesCount: q.controls.filter(function (c) { return c.kind === 'place'; }).length,
         textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
