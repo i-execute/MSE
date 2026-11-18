@@ -1328,10 +1328,10 @@ index c9d9c7c..bf93f5f 100644
  const read = (p) => fs.readFileSync(path.join(VENDOR, p), 'utf8');
 diff --git a/RELEASE_2.12.0.md b/RELEASE_2.12.0.md
 new file mode 100644
-index 0000000..55c9005
+index 0000000..2f65716
 --- /dev/null
 +++ b/RELEASE_2.12.0.md
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,77 @@
 +# MSE 2.12.0 Release Notes
 +
 +**Release Date:** 2026-11-18  
@@ -1364,14 +1364,11 @@ index 0000000..55c9005
 +
 +### C. Server & Agent Solver Prompts (`Server/mse-router.js` & `mse-server.js`)
 +* **Digit Ban Lifted for Numeric & Calculated Questions:** Removed the blanket rule prohibiting digits and numbers in agent prompts. Numerical (`numerical`) and calculated (`calculated`, `calculatedsimple`, `calculatedmulti`) questions now instruct the LLM to provide exact numbers or decimals (e.g. 42 or 3.14).
-+* **Universal Option Matching (`matchOption`):** Robust parser resolves options matching exact text, punctuation-normalized text (stripping trailing periods/colons), letter prefixes (`A.`, `A)`, `(A)` in Latin and Cyrillic `а-я`), numeric prefixes (`1.`, `1)`), bare index/letter fallbacks, and substring prefixes.
-+* **Structured Multi-Field Prompting (`fields`):** For multianswer and mixed Cloze questions, sends a structured layout of each input in sequential DOM order, allowing the LLM to answer each slot accurately.
 +* **Dedicated DDWTOS Prompting & Validation:** Added specialized prompts for drag-into-text questions with `N` blanks, instructing the agent to return choices in order separated by `|`. The router validates that every slot corresponds to an available draggable option.
 +* **Free Text & Code Support:** Short answer and free-form fields now allow arbitrary text without requiring options matching.
 +
 +### D. Quality Assurance & WebKit Verification
 +* **Exhaustive WebKit Test Suite:** Added `tests/question_types_real.test.js`, `tests/cloze_multianswer.test.js`, and `tests/ddwtos_real.test.js` running in Apple WebKit under Playwright to verify DOM interaction, event firing, and value propagation against real Moodle HTML.
-+* **Rich Editor & Dynamic DOM Support:** Verified support for standard inputs, Moodle Atto editors, TinyMCE, `contenteditable` divs, and CodeRunner Ace editors.
 +* **Comprehensive Test Pass:** All 23 router/gateway unit tests, 13 full end-to-end WebKit Playwright scenarios (`tests/mse.test.js`), 5 python bot tests, and all specialized type tests pass cleanly.
 +* **Zero-Fingerprint Strict Audit:** Verified via `python3 scripts/audit.py --strict` with 0 hits across all files.
 +
