@@ -2187,7 +2187,7 @@ var __ssW=window,__msePageWindow=window;
         .then(function (res) {
           clearTimeout(timer);
           var j = res.json || {};
-          var mine = !!(j && (j.name === 'MSE gateway' || j.gateway === 'mse' || j.ok === true));
+          var mine = !!(j && (j.name === 'MSE' || j.name === 'MSE gateway' || j.gateway === 'mse' || j.ok === true));
           return {
             ok: !!res.ok && mine,
             reachable: true,
