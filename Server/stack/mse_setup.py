@@ -1624,6 +1624,8 @@ class Setup:
             missing.append("bot token (BotFather)")
         if not str(self.credentials.get("OWNER_ID") or self.env.get("MSE_OWNER_ID", "")).strip():
             missing.append("owner id (@userinfobot)")
+        if not str(self.credentials.get("TAILSCALE_KEY") or self.env.get("MSE_TAILSCALE_KEY", "")).strip():
+            missing.append("tailscale key (login.tailscale.com/admin/settings/keys)")
         return missing
 
     def installer_argv(self) -> list[str]:

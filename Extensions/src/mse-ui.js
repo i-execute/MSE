@@ -1711,8 +1711,15 @@
           }, 800);
           return;
         }
-        logAdd('agent', false, 'agent request failed: ' + String(error && error.message || 'error'), { ms: Date.now() - t0 });
-        startAutoreconnect(5, 'something went wrong');
+        if (isNet) {
+          logAdd('agent', false, 'agent request failed: ' + String(error && error.message || 'error'), { ms: Date.now() - t0 });
+          startAutoreconnect(5, 'something went wrong');
+        } else {
+          var errText = 'image unsupported: ' + String(error && error.message || 'unavailable');
+          logAdd('agent', false, errText, { ms: Date.now() - t0 });
+          state.agent = { state: 'error', text: errText };
+          render();
+        }
       });
     }
     function startAutoreconnect(seconds, msg) {

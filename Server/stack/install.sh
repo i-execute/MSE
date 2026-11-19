@@ -136,19 +136,21 @@ first_run_dialogue() {
   MSE_OWNER_ID="${MSE_OWNER_ID:-$(env_get MSE_OWNER_ID)}"
   MSE_TAILSCALE_KEY="${MSE_TAILSCALE_KEY:-$(env_get MSE_TAILSCALE_KEY)}"
 
+  [ "$WITH_TUNNEL" = "1" ] || MSE_TAILSCALE_KEY="${MSE_TAILSCALE_KEY:-skip}"
   [ "$WITH_BOT" = "1" ] || MSE_BOT_TOKEN="${MSE_BOT_TOKEN:-skip}"
 
-  if valid_token "$MSE_BOT_TOKEN" && valid_owner "$MSE_OWNER_ID"; then
-    say "  keys:      bot token and owner id are already in place"
+  if valid_token "$MSE_BOT_TOKEN" && valid_owner "$MSE_OWNER_ID" && { [ "$WITH_TUNNEL" != "1" ] || valid_tskey "$MSE_TAILSCALE_KEY"; }; then
+    say "  keys:      bot token, owner id and tailscale key are already in place"
     return 0
   fi
 
   say ""
-  say "  ── first run: two credentials to configure ──────────────────────────"
+  say "  ── first run: three values, and the stack comes up complete ──────────────"
   say "  1. bot token        @BotFather -> /newbot (or /token), the line 1234567890:AAH..."
   say "  2. owner id         your numeric telegram id; the bot answers only this account"
+  say "  3. tailscale key    the keys page of your tailnet, tskey-auth-... (the tunnel comes up at once)"
   say ""
-  say "  Gateway domain/tunnel (Cloudflared or Tailscale) can be configured via:"
+  say "  Gateway domain/tunnel (Cloudflared or Tailscale) can also be configured via:"
   say "    sudo mse  ->  Gateway Domain"
   say ""
 
@@ -156,12 +158,16 @@ first_run_dialogue() {
     # nobody to ask: say exactly what to run, and install everything that does not need these values
     if ! valid_token "$MSE_BOT_TOKEN"; then
       note "the bot token is required, and this shell cannot ask for it."
-      note "  run:  MSE_BOT_TOKEN=1234567890:AAH... MSE_OWNER_ID=<your id> bash install.sh --update --yes"
-      note "  or:   sudo mse   ->  Settings & Credentials   (bot token, owner id)"
+      note "  run:  MSE_BOT_TOKEN=1234567890:AAH... MSE_OWNER_ID=<your id> MSE_TAILSCALE_KEY=tskey-auth-... bash install.sh --update --yes"
+      note "  or:   sudo mse   ->  Settings & Credentials   (bot token, owner id, tailscale key)"
     fi
     if ! valid_owner "$MSE_OWNER_ID"; then
       note "the owner id is required (the numeric telegram id the bot answers)."
       note "  find it: message @userinfobot once, it answers with your id"
+    fi
+    if [ "$WITH_TUNNEL" = "1" ] && ! valid_tskey "$MSE_TAILSCALE_KEY"; then
+      note "the tailscale auth key is required for the tunnel (https://login.tailscale.com/admin/settings/keys)."
+      note "  without it the router installs and answers on 127.0.0.1 only"
     fi
     FIRST_RUN_UNANSWERED=1
     return 0
@@ -173,9 +179,14 @@ first_run_dialogue() {
   if ! valid_owner "$MSE_OWNER_ID"; then
     MSE_OWNER_ID="$(ask_one owner_id "owner telegram id" "a telegram id (a number, e.g. 100000001)" valid_owner "$MSE_OWNER_ID")" || true
   fi
+  if [ "$WITH_TUNNEL" = "1" ] && ! valid_tskey "$MSE_TAILSCALE_KEY"; then
+    note "  the tailscale auth key: press Enter to skip the tunnel for now (it can be added later in the panel)"
+    MSE_TAILSCALE_KEY="$(ask_one tailscale_key "tailscale auth key" "a tailscale auth key (tskey-auth-...)" valid_tskey "$MSE_TAILSCALE_KEY")" || true
+  fi
   say ""
   say "  keys:      bot token $([ -n "$MSE_BOT_TOKEN" ] && echo ok || echo missing)" \
-      "· owner id $([ -n "$MSE_OWNER_ID" ] && echo ok || echo missing)"
+      "· owner id $([ -n "$MSE_OWNER_ID" ] && echo ok || echo missing)" \
+      "· tailscale key $([ -n "$MSE_TAILSCALE_KEY" ] && echo ok || echo missing)"
   return 0
 }
 # ------------------------------------------------------------------ packages

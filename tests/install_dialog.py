@@ -311,8 +311,8 @@ def main() -> int:
 
     print("\n== 4. the panel asks for the same three keys before it installs (bug 7)")
     # a terminal, a clean box, nothing in the env: the panel must ask, not walk past the keys and fail later
-    # the panel is asked for the fresh install (item 2), which must lead through the key screen
-    tui = tui_run([b"\x1b[B", b"\r", b"\r", b"\x1b"], wait_for="Control Center")
+    # the panel is asked for the fresh install (item 3), which must lead through the key screen
+    tui = tui_run([b"\x1b[B", b"\x1b[B", b"\r", b"\r", b"\x1b"], wait_for="Control Center")
     for prompt in ("bot token", "owner id", "tailscale key"):
         check(prompt in tui.lower(), "the panel asks for the " + prompt)
     check("space" in tui.lower() and "enter" in tui.lower(), "and the footer says how a field is filled")

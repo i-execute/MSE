@@ -215,8 +215,8 @@
   },
   "pageScripts": {
     "mse-ui": {
-      "bytes": 127473,
-      "sha256": "8ace7c1e3ffa5b62c1dd9788ce467deab13043fd0135443c98519ea34ceba4a9",
+      "bytes": 127769,
+      "sha256": "6dc164dac2b30ff2a6d55c058e915e8e1d5867559e4bafafef888a0f0b0a6765",
       "sanitizer": {
         "comments": 84,
         "strings": 10,
@@ -267,12 +267,12 @@
     "scripts": 1,
     "headers": 1,
     "requires": 0,
-    "bytes": 1687562
+    "bytes": 1687858
   },
   "userscript": {
     "file": "Storage/artifacts/mse.user.js",
-    "bytes": 1691650,
-    "sha256": "564b0d483e6f8cdb52ee6487ebcd96e98aac660515b8f54586b8223fad8cca2b"
+    "bytes": 1691946,
+    "sha256": "2f81f55513358d25c96aee4a3204b177381aae481d6b8fb64bcf567abd8638ff"
   },
   "sanitizer": {
     "comments": 68,
