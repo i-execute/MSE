@@ -50,9 +50,9 @@ assert "778899" in html
 assert "moodle.test.edu" in html
 print("ok 1 - A10: Immediate announce card created with applicant details")
 
-# 2. Verify inline buttons "добавить" and "отклонить" in the message
-assert "добавить" in html, f"Expected 'добавить' in message HTML, got {html}"
-assert "отклонить" in html, f"Expected 'отклонить' in message HTML, got {html}"
+# 2. Verify inline buttons "Принять"/"добавить" and "Отклонить"/"отклонить" in the message
+assert "добавить" in html or "Принять" in html, f"Expected 'Принять' or 'добавить' in message HTML, got {html}"
+assert "отклонить" in html or "Отклонить" in html, f"Expected 'Отклонить' or 'отклонить' in message HTML, got {html}"
 assert "dev:approve:mse-testdevice2110000:778899" in html or "dev:approve:mse-testdevice2110000" in html
 assert "dev:revoke:mse-testdevice2110000:778899" in html or "dev:revoke:mse-testdevice2110000" in html
 print("ok 2 - A10: Inline 'добавить' and 'отклонить' buttons present with device/moodle callback")
@@ -60,7 +60,7 @@ print("ok 2 - A10: Inline 'добавить' and 'отклонить' buttons pr
 # 3. Verify footer has version
 h_screen = screens.home({"health": {}, "devices": []}, notice="")
 h_html = h_screen.to_msg().get("html", "")
-assert ("version 2.12.0" in h_html or "version 2.11.0" in h_html), f"Expected version in footer, got {h_html}"
+assert ("version 2.13.0" in h_html or "version 2.12.0" in h_html or "version 2.11.0" in h_html), f"Expected version in footer, got {h_html}"
 print("ok 3 - Version 2.12.0 present in home footer")
 
 print("\nALL BOT 2.11 TESTS PASSED")

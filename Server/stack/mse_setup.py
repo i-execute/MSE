@@ -1495,7 +1495,7 @@ class Setup:
         self.python_choices = detect_pythons()
         self.credentials = {"BOT_TOKEN": "", "OWNER_ID": "", "API_ID": "", "API_HASH": "", "TAILSCALE_KEY": ""}
         self.settings = {"MODEL": self.env.get("MSE_MODEL", ""), "QUOTA": self.env.get("MSE_DAILY_QUOTA", "200"),
-                         "UPSTREAM_PORT": self.env.get("MSE_UPSTREAM_PORT", ""), "AI_PROXY": self.env.get("AI_PROXY", "")}
+                         "UPSTREAM_PORT": self.env.get("MSE_UPSTREAM_PORT", "")}
         self.notes: list[str] = []
         self.started = time.time()
         self.limit = width()
@@ -1568,15 +1568,12 @@ class Setup:
         menu = Menu(
             paint("1", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Control Center", theme.title),
             [
-                RadioOption("health", "Health & Status", "Router, AI backend, tailscale and bot: what is alive, what is not, where it lives", "read-only"),
-                RadioOption("install", "Install / Self-Heal", "Install or repair the stack: code, settings, venv, systemd, tailscale", "self-heal" if installed else "recommended"),
-                RadioOption("update", "Update & Repair", "Update the code and dependencies without touching devices, the allow list or the tokens", "fast"),
-                RadioOption("service", "Service Control", "Restart, start, stop and the last lines of the journal", ""),
-                RadioOption("tunnel", "Tunnel (tailscale)", "tailscale up, funnel, serve, turn off: the address and the mode", ""),
-                RadioOption("settings", "Model, Quota & Keys", "Model, quota, bot token, owner id, tailscale key, ports", "config"),
-                RadioOption("custom", "Custom / Advanced Setup", "Paths, python, dry run: the same, but asking at every step", ""),
-                RadioOption("uninstall", "Uninstall MSE", "Remove the services and /opt/mse; state and tokens optional", "safe"),
-                RadioOption("wipe", "Full Wipe (Delete Everything)", "Delete everything: code, settings, state, log, tunnel", "danger"),
+                RadioOption("health", "Health & Status", "Router, AI backend, tunnel and bot: what is alive, where it lives", "status"),
+                RadioOption("domain", "Gateway Domain", "Public address tunnel: Cloudflared (quick tunnel) or Tailscale Funnel", "tunnel"),
+                RadioOption("install", "Install / Self-Heal", "Install or repair the stack: code, venv, systemd services", "repair" if installed else "install"),
+                RadioOption("service", "Service Control", "Start, stop, restart services and view journal logs", "control"),
+                RadioOption("settings", "Settings & Credentials", "Model, daily quota, bot token, owner id, ports", "config"),
+                RadioOption("uninstall", "Uninstall MSE", "Remove services, binaries, and optional full data wipe", "danger"),
             ],
             subtitle="Arrows to move, Space to select, Enter to run.",
             step_note=paint("main menu", theme.muted),
@@ -1584,12 +1581,7 @@ class Setup:
         choice = menu.ask(0)
         if choice < 0:
             return False
-        picked = menu.items[choice].key
-        if picked == "custom":
-            self.action = "install"
-            self.quick = False
-            return True
-        self.action = picked
+        self.action = menu.items[choice].key
         self.quick = True
         return True
 
@@ -1601,8 +1593,8 @@ class Setup:
             rows.append(self.pill_for(kind) + " " + paint(pad(name, 9), theme.key) + paint(note, theme.text))
         rows.append("")
         rows.append(fact("model", self.env.get("MSE_MODEL", "—")) + "   " + fact("quota", self.env.get("MSE_DAILY_QUOTA", "—") + "/day"))
-        rows.append(fact("address", self.env.get("MSE_PUBLIC_URL") or "not yet (3 Tunnel)"))
-        rows.append(fact("exposed via", "tailscale only: funnel → 127.0.0.1:" + self.stack.port))
+        rows.append(fact("address", self.env.get("MSE_PUBLIC_URL") or "not yet (Gateway Domain)"))
+        rows.append(fact("exposed via", "tunnel (Cloudflared or Tailscale) → 127.0.0.1:" + self.stack.port))
         panel("stack health", rows, self.limit, theme.frame, pill("read-only", theme.badge_info))
 
     # ------------------------------------------------------------------ install / update
@@ -1618,7 +1610,6 @@ class Setup:
             "MSE_MODEL": self.settings.get("MODEL") or self.env.get("MSE_MODEL", ""),
             "MSE_DAILY_QUOTA": self.settings.get("QUOTA") or self.env.get("MSE_DAILY_QUOTA", ""),
             "MSE_UPSTREAM_PORT": self.settings.get("UPSTREAM_PORT") or self.env.get("MSE_UPSTREAM_PORT", ""),
-            "AI_PROXY": self.settings.get("AI_PROXY") or self.env.get("AI_PROXY", ""),
             "MSE_PREFIX": self.prefix,
         }
         for key, value in pairs.items():
@@ -1633,8 +1624,6 @@ class Setup:
             missing.append("bot token (BotFather)")
         if not str(self.credentials.get("OWNER_ID") or self.env.get("MSE_OWNER_ID", "")).strip():
             missing.append("owner id (@userinfobot)")
-        if not str(self.credentials.get("TAILSCALE_KEY") or self.env.get("MSE_TAILSCALE_KEY", "")).strip():
-            missing.append("tailscale key (login.tailscale.com/admin/settings/keys)")
         return missing
 
     def installer_argv(self) -> list[str]:
@@ -1749,53 +1738,87 @@ class Setup:
             rows.append(self.pill_for("up" if ok else "down") + " " + paint("%s %s" % (unit, verb), theme.text) + "  " + paint(state, theme.muted))
         panel("service", rows, self.limit, theme.frame)
 
-    # ------------------------------------------------------------------ tunnel
-    def tunnel_screen(self) -> None:
+    # ------------------------------------------------------------------ gateway domain (tunnel)
+    def domain_screen(self) -> None:
         self.limit = width()
         kind, note = self.stack.probe_tunnel()
         rows = [self.pill_for(kind) + " " + paint(note, theme.text), ""]
         rows.append(fact("address", self.env.get("MSE_PUBLIC_URL") or "—"))
         rows.append(fact("port", self.stack.port))
-        panel("tunnel", rows, self.limit, theme.frame, pill("tailscale", theme.badge_info))
+        panel("gateway domain", rows, self.limit, theme.frame, pill("tunnel", theme.badge_info))
 
-    def ask_tunnel(self) -> bool:
+    def ask_domain(self) -> bool:
         sub = Menu(
-            paint("3", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Tunnel (tailscale)", theme.title),
+            paint("2", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Gateway Domain", theme.title),
             [
-                RadioOption("up", "tailscale up", "Bring the node into the tailnet with the key from the settings"),
-                RadioOption("funnel", "tailscale funnel", "A public https address <host>.<tailnet>.ts.net → the local port"),
-                RadioOption("serve", "tailscale serve", "The same https, but inside the tailnet only"),
-                RadioOption("off", "Turn off", "Turn funnel/serve off, keep the node in the tailnet"),
-                RadioOption("status", "Status", "Show the mode, the address and the ip"),
+                RadioOption("cf", "Cloudflared (Quick Tunnel)", "Auto-download latest release with fallback, dynamic URL, Telegram alert on change", "quick"),
+                RadioOption("ts", "Tailscale (Funnel)", "Persistent HTTPS *.ts.net address (prompts for auth key on demand)", "stable"),
+                RadioOption("off", "Turn off Tunnel", "Stop the active tunnel process or funnel", "safe"),
+                RadioOption("status", "Status", "Show active tunnel backend, mode, and public address", "info"),
             ],
-            subtitle="What to do with the tunnel.",
-            step_note=paint("tunnel", theme.muted),
+            subtitle="Choose public tunnel provider for the MSE Gateway.",
+            step_note=paint("gateway domain", theme.muted),
         )
         idx = sub.ask(0)
         if idx < 0:
             return False
         cmd = sub.items[idx].key
         if cmd == "status":
-            self.tunnel_screen()
+            self.domain_screen()
             return False
         script = self.stack.tunnel
-        args = [script, "off"] if cmd == "off" else [script, cmd] + ([] if cmd == "up" else [self.stack.port])
         self.limit = width()
-        with Spinner("tailscale " + cmd) as spin:
-            try:
-                out = subprocess.run(args, capture_output=True, text=True, timeout=180)
-                ok = out.returncode == 0
-                text = (out.stdout or "").strip() or (out.stderr or "").strip()
-            except (OSError, subprocess.SubprocessError) as exc:
-                ok, text = False, str(exc)
-            spin.close(OK if ok else BAD, cmd)
+        ok = False
+        text = ""
+        if cmd == "cf":
+            with Spinner("installing & starting cloudflared") as spin:
+                try:
+                    subprocess.run([script, "cloudflared-install"], capture_output=True, text=True, timeout=120)
+                    out = subprocess.run([script, "cloudflared", self.stack.port], capture_output=True, text=True, timeout=60)
+                    ok = out.returncode == 0
+                    text = (out.stdout or "").strip() or (out.stderr or "").strip()
+                except (OSError, subprocess.SubprocessError) as exc:
+                    ok, text = False, str(exc)
+                spin.close(OK if ok else BAD, "cloudflared")
+        elif cmd == "ts":
+            current_key = self.env.get("MSE_TAILSCALE_KEY", "")
+            if not current_key:
+                field = Field("TS_KEY", "tailscale key", True, "", "tskey-auth-... from login.tailscale.com/admin/settings/keys")
+                editor = FieldEditor(
+                    paint("TS", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Tailscale Auth Key", theme.title),
+                    [field],
+                    subtitle="Enter your Tailscale auth key (or press Esc to cancel).",
+                )
+                if not editor.ask() or not field.value.strip():
+                    return False
+                current_key = field.value.strip()
+                env_write(self.stack.env_file, {"MSE_TAILSCALE_KEY": current_key})
+                self.env["MSE_TAILSCALE_KEY"] = current_key
+            with Spinner("tailscale up & funnel") as spin:
+                try:
+                    subprocess.run([script, "up"], capture_output=True, text=True, timeout=180)
+                    out = subprocess.run([script, "funnel", self.stack.port], capture_output=True, text=True, timeout=180)
+                    ok = out.returncode == 0
+                    text = (out.stdout or "").strip() or (out.stderr or "").strip()
+                except (OSError, subprocess.SubprocessError) as exc:
+                    ok, text = False, str(exc)
+                spin.close(OK if ok else BAD, "tailscale")
+        elif cmd == "off":
+            with Spinner("stopping tunnel") as spin:
+                try:
+                    subprocess.run([script, "cloudflared-off"], capture_output=True, text=True, timeout=30)
+                    subprocess.run([script, "off"], capture_output=True, text=True, timeout=30)
+                    ok, text = True, "tunnel turned off"
+                except (OSError, subprocess.SubprocessError) as exc:
+                    ok, text = False, str(exc)
+                spin.close(OK if ok else BAD, "off")
         rows = [paint(clip(line, self.limit - 6), theme.text if ok else theme.warn) for line in (text.splitlines() or ["—"])[-6:]]
         if ok and text.startswith("https://"):
             env_write(self.stack.env_file, {"MSE_PUBLIC_URL": text.strip().splitlines()[0]})
             rows.append("")
             rows.append(paint("address saved into " + str(self.stack.env_file), theme.muted))
             subprocess.run(["systemctl", "restart", "mse-router"], capture_output=True, text=True, timeout=60)
-        panel("tunnel · " + cmd, rows, self.limit, theme.good if ok else theme.bad)
+        panel("gateway domain · " + cmd, rows, self.limit, theme.good if ok else theme.bad)
         return False
 
     # ------------------------------------------------------------------ settings
@@ -1814,7 +1837,6 @@ class Setup:
             Field("MODEL", "model", False, current_model, model_hint, choices=models),
             Field("QUOTA", "quota", False, self.settings["QUOTA"], "Requests per day per device"),
             Field("UPSTREAM_PORT", "backend port", False, self.settings["UPSTREAM_PORT"], "127.0.0.1:<port> — where the AI backend lives"),
-            Field("AI_PROXY", "ai proxy", False, self.settings.get("AI_PROXY", ""), "SOCKS5 proxy (socks5://<host>:<port>, empty = direct)"),
             Field("BOT_TOKEN", "bot token", True, self.contrib_or("BOT_TOKEN"), "Required. @BotFather -> /newbot (or /token); without it the bot stays off"),
             Field("OWNER_ID", "owner id", False, self.contrib_or("OWNER_ID"), "Your numeric Telegram id (the person the bot answers)"),
             Field("API_ID", "api id", False, self.contrib_or("API_ID"), "my.telegram.org → App api_id (optional, for the MTProto transport)"),
@@ -1822,7 +1844,7 @@ class Setup:
             Field("TAILSCALE_KEY", "tailscale key", True, self.contrib_or("TAILSCALE_KEY"), "tskey-auth-… (or empty and log in by link)"),
         ]
         editor = FieldEditor(
-            paint("4", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Model, Quota & Keys", theme.title),
+            paint("4", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Settings & Credentials", theme.title),
             fields,
             subtitle="Up/down — row · Space — edit · Enter — save. Secrets are masked, never in the shell history.",
             step_note=paint("step 1", theme.muted),
@@ -1832,12 +1854,11 @@ class Setup:
         self.settings["MODEL"] = fields[0].value.strip()
         self.settings["QUOTA"] = fields[1].value.strip()
         self.settings["UPSTREAM_PORT"] = fields[2].value.strip()
-        self.settings["AI_PROXY"] = fields[3].value.strip()
-        self.credentials["BOT_TOKEN"] = fields[4].value.strip()
-        self.credentials["OWNER_ID"] = fields[5].value.strip()
-        self.credentials["API_ID"] = fields[6].value.strip()
-        self.credentials["API_HASH"] = fields[7].value.strip()
-        self.credentials["TAILSCALE_KEY"] = fields[8].value.strip()
+        self.credentials["BOT_TOKEN"] = fields[3].value.strip()
+        self.credentials["OWNER_ID"] = fields[4].value.strip()
+        self.credentials["API_ID"] = fields[5].value.strip()
+        self.credentials["API_HASH"] = fields[6].value.strip()
+        self.credentials["TAILSCALE_KEY"] = fields[7].value.strip()
         if self.dry_run:
             self.notes.append("dry run: the settings were not written")
             return True
@@ -1983,13 +2004,13 @@ class Setup:
         if action == "health":
             self.show_health()
             return 0
+        if action == "domain":
+            self.ask_domain()
+            return 0
         if action == "service":
             if not self.ask_service():
                 return 130
             self.do_service()
-            return 0
-        if action == "tunnel":
-            self.ask_tunnel()
             return 0
         if action == "settings":
             self.ask_settings()
@@ -1998,39 +2019,7 @@ class Setup:
             if not self.ask_uninstall():
                 return 130
             return self.do_uninstall(wipe=False)
-        if action == "wipe":
-            if not self.confirm_wipe():
-                return 130
-            return self.do_uninstall(wipe=True)
-        # install / update / custom
-        if not self.quick:
-            fields = [
-                Field("PREFIX", "app prefix", False, self.prefix, "Where the code goes (default /opt/mse)"),
-                Field("ENV_FILE", "config file", False, self.env_file, "The settings file, mode 0600"),
-                Field("STATE_DIR", "state dir", False, self.state_dir, "Devices, allow list, log"),
-                Field("PYTHON", "python bin", False, self.python, "The interpreter for the bot venv", choices=self.python_choices),
-            ]
-            editor = FieldEditor(
-                paint("2", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Target Paths & Runtime", theme.title),
-                fields,
-                subtitle="Enter — accept, Space — edit the row.",
-                step_note=paint("step 1", theme.muted),
-            )
-            if not editor.ask():
-                return 130
-            self.prefix, self.env_file, self.state_dir = fields[0].value, fields[1].value, fields[2].value
-            self.python = fields[3].value
-            opts = CheckMenu(
-                paint("3", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Setup Options", theme.title),
-                [CheckOption("dry_run", "Preview only (dry run)", "Show the plan without changing anything", self.dry_run, "safe")],
-                subtitle="Space — toggle, Enter — continue.",
-                step_note=paint("step 2", theme.muted),
-            )
-            picked = opts.ask()
-            if picked is None:
-                return 130
-            self.dry_run = bool(picked.get("dry_run"))
-        # bug 7: the three keys are asked BEFORE anything is installed, on the same screens, never silently skipped
+        # install
         if not self.dry_run and self.missing_keys():
             if not self.ask_settings():
                 return 130
@@ -2046,20 +2035,11 @@ class Setup:
                 paint(g.check + " MSE is installed", theme.good, theme.bold),
                 self.pill_for(kind) + " " + paint("router: " + note, theme.text),
                 "",
-                paint("address and mode: 3 Tunnel · model and keys: 6 Model, Quota & Keys", theme.muted),
+                paint("address and mode: Gateway Domain · model and keys: Settings & Credentials", theme.muted),
                 paint("live journal: journalctl -u mse-router -f", theme.muted),
             ]
             panel("done in %.1fs" % (time.time() - self.started), rows, self.limit, theme.good)
         return code
-
-
-def detect_pythons() -> list[str]:
-    found = []
-    for name in ("python3.13", "python3.12", "python3.11", "python3"):
-        path = shutil.which(name)
-        if path and path not in found:
-            found.append(path)
-    return found
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -27,6 +27,7 @@ ENV_FILE="${MSE_ENV_FILE:-/etc/mse/mse.env}"
 STATE_DIR="${MSE_STATE_DIR:-/var/lib/mse}"
 GATEWAY_PORT="${MSE_GATEWAY_PORT:-${MSE_PORT:-}}"
 TUNNEL_BACKEND_FILE="$STATE_DIR/tunnel.json"
+CF_BIN="${MSE_CLOUDFLARED_BIN:-cloudflared}"
 TS_BIN="${MSE_TAILSCALE_BIN:-tailscale}"
 TS_SOCK="${MSE_TAILSCALE_SOCKET:-}"
 LOG_TAG="mse-tunnel"
@@ -54,6 +55,117 @@ GATEWAY_PORT="${GATEWAY_PORT:-$(env_get MSE_PORT)}"
 
 ts() {
   if [ -n "$TS_SOCK" ]; then "$TS_BIN" --socket="$TS_SOCK" "$@"; else "$TS_BIN" "$@"; fi
+}
+
+cmd_notify_bot() {
+  local msg="$1"
+  local token owner
+  token="$(env_get MSE_BOT_TOKEN)"
+  owner="$(env_get MSE_OWNER_ID)"
+  if [ -n "$token" ] && [ -n "$owner" ] && have curl; then
+    curl -fsS -X POST "https://api.telegram.org/bot${token}/sendMessage" \
+      -d "chat_id=${owner}" \
+      --data-urlencode "text=${msg}" >/dev/null 2>&1 || true
+  fi
+}
+
+cmd_cf_install() {
+  local arch
+  case "$(uname -m)" in
+    x86_64) arch="amd64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    *) die "unsupported architecture: $(uname -m)" ;;
+  esac
+  say "cloudflared: checking latest release from GitHub..."
+  local download_url=""
+  if have curl; then
+    download_url="$(curl -fsSL https://api.github.com/repos/cloudflare/cloudflared/releases/latest 2>/dev/null | grep -o "https://github.com/cloudflare/cloudflared/releases/download/[^\"]*/cloudflared-linux-${arch}" | head -1 || true)"
+  fi
+  if [ -z "$download_url" ]; then
+    # Pinned fallback
+    download_url="https://github.com/cloudflare/cloudflared/releases/download/2024.10.1/cloudflared-linux-${arch}"
+    note "using pinned fallback: $download_url"
+  else
+    say "found latest release: $download_url"
+  fi
+  local target_bin="/usr/local/bin/cloudflared"
+  if [ ! -w "/usr/local/bin" ] 2>/dev/null; then
+    target_bin="/opt/mse/bin/cloudflared"
+  fi
+  mkdir -p "$(dirname "$target_bin")" 2>/dev/null || true
+  curl -fsSL "$download_url" -o "$target_bin" || die "failed to download cloudflared"
+  chmod +x "$target_bin"
+  say "cloudflared: installed to $target_bin"
+}
+
+cmd_cf_run() {
+  local port="${1:-$GATEWAY_PORT}"
+  [ -n "$port" ] || die "MSE_PORT is not configured"
+  local cf_path
+  cf_path="$(command -v "$CF_BIN" 2>/dev/null || true)"
+  if [ -z "$cf_path" ]; then
+    [ -x "/usr/local/bin/cloudflared" ] && cf_path="/usr/local/bin/cloudflared"
+    [ -x "/opt/mse/bin/cloudflared" ] && cf_path="/opt/mse/bin/cloudflared"
+  fi
+  [ -n "$cf_path" ] || die "cloudflared is not installed: mse-tunnel.sh cloudflared-install"
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+  local log_file="$STATE_DIR/cloudflared.log"
+  pkill -f "cloudflared tunnel --url" 2>/dev/null || true
+  nohup "$cf_path" tunnel --url "http://127.0.0.1:$port" >"$log_file" 2>&1 &
+  local url="" waited=0 max_wait=25
+  while [ "$waited" -lt "$max_wait" ]; do
+    if grep -E -o "https://[a-zA-Z0-9-]+\.trycloudflare\.com" "$log_file" 2>/dev/null | tail -1 > "$TMP_REASON"; then
+      url="$(cat "$TMP_REASON")"
+      [ -n "$url" ] && break
+    fi
+    sleep 1
+    waited=$((waited+1))
+  done
+  [ -n "$url" ] || die "cloudflared did not provide a URL within ${max_wait}s"
+  local prev_url
+  prev_url="$(env_get MSE_PUBLIC_URL)"
+  write_state_cf "cloudflared" "$port" "$url"
+  if [ "$prev_url" != "$url" ]; then
+    cmd_notify_bot "🌐 Gateway URL updated:
+$url"
+  fi
+  say "$url"
+}
+
+cmd_cf_off() {
+  pkill -f "cloudflared tunnel --url" 2>/dev/null || true
+  write_state_cf off "$GATEWAY_PORT" ""
+  say "cloudflared is off"
+}
+
+write_state_cf() {
+  local mode="$1" port="$2" url="$3"
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+  python3 - "$TUNNEL_BACKEND_FILE" "$mode" "$port" "$url" <<'PY' 2>/dev/null || true
+import json,sys,datetime
+path,mode,port,url=sys.argv[1:5]
+rec={"backend":"cloudflared","mode":mode,"port":int(port or 0),"url":url,
+     "at":datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00","Z")}
+try:
+    old=json.load(open(path))
+    if isinstance(old,dict): rec={**old,**rec}
+except Exception:
+    pass
+json.dump(rec,open(path,"w"),indent=1)
+PY
+  if [ -f "$ENV_FILE" ] && [ -n "$url" ]; then
+    python3 - "$ENV_FILE" "MSE_PUBLIC_URL" "$url" <<'PY' 2>/dev/null || true
+import sys
+path,key,value=sys.argv[1:4]
+try:
+    lines=open(path).read().splitlines()
+except Exception:
+    lines=[]
+out=[l for l in lines if not l.startswith(key+"=")]
+out.append(f'{key}={value}')
+open(path,"w").write("\n".join(out)+"\n")
+PY
+  fi
 }
 
 cmd_install() {
@@ -191,6 +303,10 @@ cmd_status() {
   local json=0
   for a in "$@"; do [ "$a" = "--json" ] && json=1; done
   local installed=0 running=0 backend="" url="" ip="" expiry=""
+  local cf_running=0
+  if pgrep -f "cloudflared tunnel" >/dev/null 2>&1; then
+    cf_running=1
+  fi
   have "$TS_BIN" && installed=1
   if [ "$installed" = "1" ]; then
     local raw; raw="$(ts status --json 2>/dev/null || true)"
@@ -208,14 +324,36 @@ print("expiry=%s" % shlex.quote(str(self_.get("KeyExpiry") or "")))
 ' 2>/dev/null || true)"
     fi
   fi
+  local saved_backend="" saved_mode="" saved_url=""
   if [ -f "$TUNNEL_BACKEND_FILE" ]; then
     eval "$(python3 -c '
 import json,sys,shlex
 try: d=json.load(open(sys.argv[1]))
 except Exception: d={}
-print("backend=%s" % shlex.quote(str(d.get("mode") or "")))
+print("saved_backend=%s" % shlex.quote(str(d.get("backend") or "")))
+print("saved_mode=%s" % shlex.quote(str(d.get("mode") or "")))
 print("saved_url=%s" % shlex.quote(str(d.get("url") or "")))
 ' "$TUNNEL_BACKEND_FILE" 2>/dev/null || true)"
+  fi
+  if [ "${saved_backend:-}" = "cloudflared" ]; then
+    backend="${saved_mode:-cloudflared}"
+    url="${saved_url:-}"
+    running=$cf_running
+    installed=1
+    if [ "$json" = "1" ]; then
+      python3 - "$installed" "$running" "$backend" "$url" "$GATEWAY_PORT" <<'PY'
+import json,sys
+installed,running,backend,url,port=sys.argv[1:6]
+print(json.dumps({"backend":"cloudflared","installed":installed=="1","running":running=="1",
+  "mode":backend or None,"url":url or None,"ip":None,"expiry":None,
+  "gateway_port":int(port) if port.isdigit() else None},indent=1))
+PY
+      return 0
+    fi
+    say "tunnel:    cloudflared · $([ "$running" = 1 ] && echo up || echo down)"
+    say "mode:      ${backend:-none}"
+    say "address:   ${url:-none}"
+    return 0
   fi
   [ -n "${saved_url:-}" ] && url="$saved_url"
   local stage days
@@ -310,6 +448,10 @@ main() {
   local cmd="${1:-status}"; shift || true
   case "$cmd" in
     install) cmd_install ;;
+    cloudflared-install|cf-install) cmd_cf_install ;;
+    cloudflared|cf) cmd_cf_run "${1:-$GATEWAY_PORT}" ;;
+    cloudflared-off|cf-off) cmd_cf_off ;;
+    notify) cmd_notify_bot "$*" ;;
     up) cmd_up "$@" ;;
     funnel) cmd_funnel "${1:-$GATEWAY_PORT}" ;;
     serve) cmd_serve "${1:-$GATEWAY_PORT}" ;;
@@ -318,7 +460,7 @@ main() {
     status|state) cmd_status "$@" ;;
     wait) cmd_wait "$@" ;;
     dns) dns_name ;;
-    *) die "unknown command: $cmd (install|up|funnel|serve|off|url|status|wait|dns)" ;;
+    *) die "unknown command: $cmd (install|cloudflared-install|cloudflared|cloudflared-off|notify|up|funnel|serve|off|url|status|wait|dns)" ;;
   esac
 }
 main "$@"

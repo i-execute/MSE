@@ -81,7 +81,7 @@ def home(snap: dict[str, Any], notice: str = "") -> Rich:
     subtitle = muted("Moodle answer panel " + SEP + " router, AI backend, tailscale, telegram")
     if not router_ok:
         subtitle = status_chip(False, "router is not answering") + " " + muted(SEP + " everything below may be stale")
-    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.12.0"), icon="bot")
+    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.13.0"), icon="bot")
 
 
 def _pending_list(devices: list[dict[str, Any]]) -> str:
@@ -334,6 +334,7 @@ def config_screen(cfg: dict[str, Any], notice: str = "") -> Rich:
                 ("quota", code(str(cfg.get("quota") or "—"))),
                 ("backend port", code(str(cfg.get("upstream_port") or "—"))),
                 ("public url", code(cfg.get("public_url") or "—")),
+                ("notify step", code(str(cfg.get("notify_step") or "20") + " reqs")),
             ],
             icon="settings",
         ),
@@ -358,6 +359,7 @@ def config_screen(cfg: dict[str, Any], notice: str = "") -> Rich:
     buttons = [
         input_row("bot token", "bot_token", icon="bot"),
         input_row("owner id", "owner_id", icon="user"),
+        input_row("notify interval", "notify_step", icon="bell"),
         input_row("api id", "api_id", icon="tag"),
         input_row("api hash", "api_hash", icon="lock"),
         input_row("tailscale key", "tailscale_key", icon="key"),

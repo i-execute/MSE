@@ -140,6 +140,7 @@ class Bot:
         self.gw = Gateway(GATEWAY_URL, ADMIN_TOKEN)
         self.app: Any = None
         self.pending_input: dict[int, str] = {}
+        self.reported_requests: dict[str, int] = {}
         # a test can put a callable here and get every rendered message instead of a network call
         self.sink: Any = None
         self.inline_enabled: bool | None = None
@@ -208,6 +209,7 @@ class Bot:
             "quota": env.get("MSE_DAILY_QUOTA"),
             "upstream_port": env.get("MSE_UPSTREAM_PORT"),
             "public_url": env.get("MSE_PUBLIC_URL"),
+            "notify_step": env.get("MSE_REQUEST_NOTIFY_EVERY", "20"),
             "bot_token": env.get("MSE_BOT_TOKEN") or BOT_TOKEN,
             "owner_id": env.get("MSE_OWNER_ID") or (str(OWNER_ID) if OWNER_ID else ""),
             "api_id": env.get("MSE_API_ID"),
@@ -563,7 +565,7 @@ class Bot:
             await self.deliver_raw(chat_id, "names are taken from Moodle on the first request")
         elif ident == "revoke_id":
             await self.revoke(chat_id, 0, value)
-        elif ident in ("bot_token", "owner_id", "api_id", "api_hash", "tailscale_key"):
+        elif ident in ("bot_token", "owner_id", "api_id", "api_hash", "tailscale_key", "notify_step"):
             await self.set_config(chat_id, 0, ident, value)
         else:
             await self.deliver_raw(chat_id, "unknown field: " + ident)
@@ -584,6 +586,7 @@ class Bot:
         field = {
             "bot_token": "MSE_BOT_TOKEN", "owner_id": "MSE_OWNER_ID", "api_id": "MSE_API_ID",
             "api_hash": "MSE_API_HASH", "tailscale_key": "MSE_TAILSCALE_KEY",
+            "notify_step": "MSE_REQUEST_NOTIFY_EVERY",
         }.get(key)
         if key == "tailscale_key" and field:
             # a new key means a new login: run it through the tunnel helper and report what it says
@@ -608,6 +611,9 @@ class Bot:
             return
         if field == "MSE_API_ID" and not value.isdigit():
             await self.deliver_raw(chat_id, "the api id is a number")
+            return
+        if field == "MSE_REQUEST_NOTIFY_EVERY" and (not value.isdigit() or int(value) <= 0):
+            await self.deliver_raw(chat_id, "the notify interval must be a positive number")
             return
         if field == "MSE_BOT_TOKEN" and ":" not in value:
             await self.deliver_raw(chat_id, "a bot token looks like 123456:ABC-DEF")
@@ -837,11 +843,34 @@ class Bot:
                 items = res.get("applications") or []
                 for item in items:
                     await self.announce(item)
+                await self.check_request_milestones()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001
                 log.debug("application watch: %s", exc)
                 await asyncio.sleep(max(2.0, PING_EVERY))
+
+    async def check_request_milestones(self) -> None:
+        """Periodic milestone alert for device requests."""
+        env = env_read()
+        try:
+            step = int(env.get("MSE_REQUEST_NOTIFY_EVERY", "20") or 20)
+        except ValueError:
+            step = 20
+        if step > 0:
+            snap = await self.snap()
+            devices = snap.get("devices") or []
+            for dev in devices:
+                dev_id = str(dev.get("deviceId") or "")
+                reqs = int(dev.get("requests") or 0)
+                last_reported = self.reported_requests.get(dev_id, 0)
+                if reqs >= step and (reqs // step) > (last_reported // step):
+                    self.reported_requests[dev_id] = reqs
+                    dev_name = str(dev.get("name") or "Пользователь")
+                    m_id = str(dev.get("moodleId") or "—")
+                    milestone = (reqs // step) * step
+                    msg = f"👤 {dev_name} (Moodle ID: {m_id}) выполнил {milestone} запросов к AI"
+                    await self.deliver_raw(OWNER_ID, msg)
 
     async def announce(self, item: dict[str, Any]) -> None:
         moodle_id = str(item.get("moodleId") or "?")
@@ -859,8 +888,8 @@ class Bot:
                 ui.quote(ui.muted("add this user to the answer database, or decline request"), "decision"),
             ],
             [
-                ui.row(ui.button("добавить", cb_approve, icon="ok"),
-                       ui.button("отклонить", cb_revoke, icon="fail")),
+                ui.row(ui.button("Принять", cb_approve, icon="ok"),
+                       ui.button("Отклонить", cb_revoke, icon="fail")),
                 ui.row(ui.button("all requests", "dev:pending", icon="bell")),
             ],
             icon="bell",

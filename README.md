@@ -18,16 +18,27 @@ MSE — две части, которые работают вместе:
 | **Расширение** | маленькая пилюля `MSE` на странице попытки Moodle: варианты ответов из общей базы, тап — и ответ в форме. Интерфейс расширения — строгий монохром (чёрно-белый, белое свечение) | `Extensions/` |
 | **Шлюз** | принимает запросы снаружи, решает кому можно (ключ устройства + allow-лист по Moodle ID), считает квоту и проксирует на локальный AI-бэкенд | `Server/` |
 
-Ключ модели живёт только в AI-бэкенде на вашей машине. В расширении и в шлюзе его нет.
-Для обхода гео-блокировок датацентровых IP («User location is not supported») поддерживается параметр `AI_PROXY=socks5://<host>:<port>`.
+Ключ модели живёт только в AI-бэкенде на вашей машине. В расширении и в шлюзе его нет: шлюз MSE слушает локальный порт и передает готовые ответы от OpenAI-совместимого бэкенда.
+
+## Документация / Documentation
+
+Полный комплект документации доступен в каталоге [`Storage/Documentation/`](Storage/Documentation/):
+
+| раздел | Русский | English |
+|---|---|---|
+| **Полный обзор** | [README_RU.md](Storage/Documentation/README_RU.md) | [README.md](README.md) |
+| **Архитектура слоёв** | [layer.md](Storage/Documentation/layer.md) | [layer.md](Storage/Documentation/layer.md) |
+| **iOS / iPadOS** | [ios_ru.md](Storage/Documentation/ios_ru.md) | [ios_en.md](Storage/Documentation/ios_en.md) |
+| **Android** | [android_ru.md](Storage/Documentation/android_ru.md) | [android_en.md](Storage/Documentation/android_en.md) |
+| **Desktop** | [desktop_ru.md](Storage/Documentation/desktop_ru.md) | [desktop_en.md](Storage/Documentation/desktop_en.md) |
 
 ## Клиенты
 
 | клиент | как ставится | инструкция |
 |---|---|---|
-| **iOS / iPadOS / macOS** | Stay for Safari → файл `mse.user.js` | [`Extensions/iOS`](Extensions/iOS/README.md) |
-| **Android** | Kiwi (расширения) или Firefox + Violentmonkey | [`Extensions/Android`](Extensions/Android/README.md) |
-| **Desktop** | Tampermonkey в Chrome / Edge / Brave | [`Extensions/Desktop`](Extensions/Desktop/README.md) |
+| **iOS / iPadOS / macOS** | Stay for Safari → файл `mse.user.js` | [Инструкция (RU)](Storage/Documentation/ios_ru.md) · [Guide (EN)](Storage/Documentation/ios_en.md) |
+| **Android** | Kiwi (расширения) или Firefox + Violentmonkey | [Инструкция (RU)](Storage/Documentation/android_ru.md) · [Guide (EN)](Storage/Documentation/android_en.md) |
+| **Desktop** | Tampermonkey в Chrome / Edge / Brave | [Инструкция (RU)](Storage/Documentation/desktop_ru.md) · [Guide (EN)](Storage/Documentation/desktop_en.md) |
 
 Один и тот же файл `Storage/artifacts/mse.user.js` — для всех трёх.
 

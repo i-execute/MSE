@@ -1,14 +1,22 @@
 /* MSE theme: black and white, nothing else.
    The panel is a sheet of dark glass over a page we do not own: one paper, one rule, one ink, one accent.
-   The accent is white — a border that lights up — so no hue is ever introduced by us. */
+   The accent is white — a border that lights up — inspired by the Hotaru design system. */
 .mse{
-  --paper:#0a0a0a;--paper-2:#111111;--paper-3:#161616;
-  --ink:#f2f2f2;--ink-2:#c8c8c8;--muted:#8a8a8a;
-  --rule:#2a2a2a;--rule-2:#3a3a3a;--rule-3:#4d4d4d;
+  --paper:#0a0a0b;--paper-2:#121214;--paper-3:#18181b;
+  --ink:#f4f4f5;--ink-2:#d4d4d8;--muted:#71717a;
+  --rule:#27272a;--rule-2:#3f3f46;--rule-3:#52525b;
   --accent:#ffffff;--accent-soft:rgba(255,255,255,.14);--accent-line:rgba(255,255,255,.6);
   --r:10px;--r-panel:14px;--pill:999px;
   --ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);
+  --dur-short:.22s;--dur-glow:.76s;
   --sp-1:4px;--sp-2:8px;--sp-3:12px;
+  --glow-xs:0 0 10px rgba(255,255,255,.09);
+  --glow-sm:0 0 16px rgba(255,255,255,.14);
+  --glow-md:0 0 26px rgba(255,255,255,.2),0 0 6px rgba(255,255,255,.12);
+  --glow-lg:0 0 44px rgba(255,255,255,.26),0 0 10px rgba(255,255,255,.16);
+  --glow-edge:inset 0 1px 0 rgba(255,255,255,.12);
+  --aura-control:0 0 0 1px rgba(255,255,255,.11),0 0 9px 0 rgba(255,255,255,.15);
+  --aura-control-lit:0 0 0 1px rgba(255,255,255,.22),0 0 14px 1px rgba(255,255,255,.24);
   font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   color:var(--ink);-webkit-font-smoothing:antialiased;
 }
@@ -35,16 +43,23 @@
 .press{position:relative;isolation:isolate}
 .press::before,.press::after{content:"";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;
   opacity:0;transition:opacity .2s var(--ease-out)}
-.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 0 1px rgba(255,255,255,.85),0 0 14px 2px rgba(255,255,255,.22)}
-.press::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px rgba(255,255,255,.28)}
-.press.hot{animation:press-light 1.5s linear forwards}
+.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 12px 1px rgba(255,255,255,.6),0 0 34px 6px rgba(255,255,255,.3),0 0 84px 20px rgba(255,255,255,.12)}
+.press::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.08);box-shadow:inset 0 0 12px 1px rgba(255,255,255,.28),inset 0 0 22px 2px rgba(255,255,255,.18)}
+.press.hot{animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}
 @keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}
   4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}
-  18%{--press:.5;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.28}74%{--press:.12}to{--press:0}}
+  18%{--press:.52;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.3}74%{--press:.15}to{--press:0}}
+@keyframes press-ink{
+  0%{text-shadow:0 0 12px rgba(255,255,255,0),0 0 26px rgba(255,255,255,0)}
+  4%{text-shadow:0 0 13px rgba(255,255,255,.75),0 0 30px rgba(255,255,255,.45)}
+  18%{text-shadow:0 0 11px rgba(255,255,255,.4),0 0 26px rgba(255,255,255,.22)}
+  46%{text-shadow:0 0 9px rgba(255,255,255,.22),0 0 22px rgba(255,255,255,.12)}
+  74%{text-shadow:0 0 8px rgba(255,255,255,.1),0 0 18px rgba(255,255,255,.06)}
+  to{text-shadow:0 0 6px rgba(255,255,255,0),0 0 14px rgba(255,255,255,0)}}
 .press.hot::before{opacity:var(--press)}
 .press.hot::after{opacity:calc(var(--press) * .9)}
 /* the chosen row: a hairline that stays, no glow, no colour */
-.press.lit{border-color:var(--accent-line)!important}
+.press.lit{border-color:var(--accent-line)!important;box-shadow:var(--glow-sm)}
 .press.lit::before{opacity:.5}
 .press.lit::after{opacity:.2}
 .press:active{transform:scale(.99)}
@@ -52,11 +67,16 @@
 /* ---------- the panel ---------- */
 .pop{position:fixed;z-index:2147483647;pointer-events:auto;width:290px;max-width:calc(100vw - 16px);
   background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r-panel);
-  box-shadow:0 18px 48px rgba(0,0,0,.7);overflow:hidden;
+  box-shadow:0 18px 48px rgba(0,0,0,.7),var(--glow-edge);overflow:hidden;
   transform-origin:var(--ox,100%) var(--oy,100%);
   opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);
   transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}
-.pop.in{opacity:1;transform:none;filter:none}
+.pop.in{opacity:1;transform:none;filter:none;animation:sheet-in .32s var(--ease) forwards}
+@keyframes sheet-in{
+  0%{opacity:0;transform:translateY(-10px) scale(.88)}
+  55%{opacity:1}
+  78%{transform:translateY(1px) scale(1.012)}
+  to{opacity:1;transform:translateY(0) scale(1)}}
 .pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}
 .pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}
 @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
@@ -96,20 +116,37 @@
 /* ---------- answers: one row a tap wide, a box on the left, a letter, the text, the share ---------- */
 .ans{display:flex;align-items:center;gap:9px;width:100%;min-height:36px;margin:0;padding:10px 11px;
   border-radius:var(--r);border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);
-  font:400 12.5px/1.3 inherit;text-align:left;cursor:pointer;
-  transition:border-color .18s var(--ease),background .18s var(--ease)}
-.ans:hover{border-color:var(--rule-3)}
+  font:400 12.5px/1.3 inherit;text-align:left;cursor:pointer;position:relative;isolation:isolate;
+  transition:border-color .18s var(--ease),background .18s var(--ease),box-shadow .18s var(--ease),transform .12s var(--ease)}
+.ans:hover{border-color:var(--rule-3);box-shadow:var(--glow-xs)}
+.ans:active{transform:scale(.985)}
+.ans::before,.ans::after{content:"";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .2s var(--ease-out)}
+.ans::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 12px 1px rgba(255,255,255,.6),0 0 34px 6px rgba(255,255,255,.3),0 0 84px 20px rgba(255,255,255,.12)}
+.ans::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.08);box-shadow:inset 0 0 12px 1px rgba(255,255,255,.28),inset 0 0 22px 2px rgba(255,255,255,.18)}
+.ans.lit,.ans.applied,.ans[data-lit]{border-color:#fff!important;box-shadow:var(--glow-md),var(--glow-edge),var(--aura-control-lit)!important;
+  animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}
+.ans.lit::before,.ans.applied::before{opacity:var(--press,.7)}
+.ans.lit::after,.ans.applied::after{opacity:calc(var(--press,.5) * .9)}
 .ans .mark{flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:1px solid var(--rule-3);
   display:flex;align-items:center;justify-content:center;font:700 9px/1 inherit;color:#000;
   transition:border-color .2s,box-shadow .2s}
 .ans.best .mark{border-color:var(--accent-line)}
-.ans.agent .mark,.mark.agent{background:var(--paper-3);border:1px solid rgba(255,255,255,.85)!important;
-  box-shadow:0 0 6px rgba(255,255,255,.7),0 0 12px rgba(255,255,255,.28)}
+.ans.agent .mark,.mark.agent{background:var(--paper-3);border:1px solid rgba(255,255,255,.45)!important;
+  box-shadow:0 0 3px rgba(255,255,255,.2);transition:border-color .2s,box-shadow .2s}
 .ans.agent .mark::after,.mark.agent::after{content:"";display:block;width:6px;height:6px;border-radius:50%;
-  background:var(--accent);box-shadow:0 0 5px rgba(255,255,255,.95),0 0 10px rgba(255,255,255,.6)}
+  background:rgba(255,255,255,.65);box-shadow:0 0 3px rgba(255,255,255,.3);transition:background .2s,box-shadow .2s,transform .2s}
+.ans.lit .mark,.ans.applied .mark,.ans.agent.lit .mark,.ans.agent.applied .mark{border-color:#fff!important;
+  box-shadow:0 0 8px rgba(255,255,255,.95),0 0 16px rgba(255,255,255,.6)!important}
+.ans.lit .mark::after,.ans.applied .mark::after,.ans.agent.lit .mark::after,.ans.agent.applied .mark::after{background:#fff!important;
+  box-shadow:0 0 6px #fff,0 0 14px rgba(255,255,255,1)!important;transform:scale(1.15)}
 .ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}
 .ans .pct{flex:0 0 auto;font:600 10px/1 -apple-system,sans-serif;color:var(--muted)}
-.ans.agent,.ans.ai{border-style:dashed}
+.ans.agent{border-style:dashed}
+.ans.ai{position:relative;isolation:isolate;overflow:hidden;border:1px solid rgba(255,255,255,.14);box-shadow:var(--aura-control),var(--glow-sm)}
+.ans.ai::before{content:"";position:absolute;top:0;left:-100%;width:200%;height:100%;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.14) 50%,transparent 100%);
+  animation:auraFlow 3.5s ease-in-out infinite;pointer-events:none;z-index:0}
+.ans.ai > *{position:relative;z-index:1}
 .ans.ai.busy .lbl{color:var(--muted)}
 .tag{font:600 9px/1 -apple-system,sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:5px}
 .ans .tag.agent,.tag.agent{color:var(--ink);font-weight:700;letter-spacing:.14em;
@@ -126,18 +163,25 @@
 .row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .more{flex:0 0 auto;font-size:10px;color:var(--muted)}
 
-/* ---------- controls and buttons (unified UI kit) ---------- */
+/* ---------- controls and buttons (unified UI kit with Hotaru glow) ---------- */
 .frow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:1 1 auto;min-width:0;height:28px;padding:0 10px;
   border-radius:8px;border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);
   font:600 11px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:.02em;
-  cursor:pointer;white-space:nowrap;user-select:none;-webkit-user-select:none;
+  cursor:pointer;white-space:nowrap;user-select:none;-webkit-user-select:none;position:relative;isolation:isolate;
   transition:border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease),transform .12s var(--ease)}
-.btn:hover{border-color:var(--accent-line);box-shadow:0 0 8px rgba(255,255,255,.18);color:#fff}
-.btn:active,.btn.press:active{transform:scale(.98)}
+.btn::before,.btn::after{content:"";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .2s var(--ease-out)}
+.btn::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 10px 1px rgba(255,255,255,.5),0 0 28px 4px rgba(255,255,255,.22)}
+.btn::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.07);box-shadow:inset 0 0 8px 1px rgba(255,255,255,.24)}
+.btn:hover{border-color:var(--accent-line);box-shadow:var(--glow-sm),var(--glow-edge),var(--aura-control-lit);color:#fff}
+.btn:active,.btn.press:active{transform:scale(.97)}
 .btn.solid,.btn.primary{background:transparent;color:#fff;border-color:var(--accent-line);box-shadow:0 0 6px rgba(255,255,255,.15)}
-.btn.solid:hover,.btn.primary:hover{border-color:#fff;box-shadow:0 0 10px rgba(255,255,255,.35)}
+.btn.solid:hover,.btn.primary:hover{border-color:#fff;box-shadow:var(--glow-md),var(--aura-control-lit)}
 .btn.sm{height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;flex:0 0 auto}
+.btn.lit,.btn[data-lit]{border-color:#fff!important;box-shadow:var(--glow-md),var(--aura-control-lit)!important;
+  animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}
+.btn.lit::before,.btn[data-lit]::before{opacity:var(--press,.7)}
+.btn.lit::after,.btn[data-lit]::after{opacity:calc(var(--press,.5) * .9)}
 .actions-row{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:4px 0 1px}
 .err-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;margin:4px 0 2px}
 .inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 10px;border-radius:var(--r);border:1px solid var(--rule-2);
@@ -164,13 +208,29 @@
 .row .gear-icon,.row .log-icon{width:14px;height:14px;color:var(--muted);transition:color .18s,filter .18s}
 .row:hover .gear-icon,.row:hover .log-icon{color:#fff;filter:drop-shadow(0 0 4px rgba(255,255,255,.5))}
 
-/* agent status strip: elegant progress badge separate from answers */
-.agent-status-strip{display:flex;align-items:center;gap:8px;width:100%;padding:6px 9px;margin:4px 0;
-  border-radius:var(--r);border:1px dashed var(--rule-3);background:var(--paper-2);color:var(--ink);
-  font:400 11px/1.3 inherit}
+/* agent status strip: flowing light aura, no harsh outline */
+.agent-status-strip{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;margin:4px 0;
+  border-radius:var(--r);border:1px solid rgba(255,255,255,.08);background:var(--paper-2);color:var(--ink);
+  font:400 11px/1.3 inherit;position:relative;isolation:isolate;overflow:hidden;box-shadow:0 0 10px rgba(255,255,255,.06)}
+.agent-status-strip::before{content:"";position:absolute;top:0;left:-100%;width:200%;height:100%;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.12) 50%,transparent 100%);
+  animation:auraFlow 3.5s ease-in-out infinite;pointer-events:none;z-index:0}
+.agent-status-strip > *{position:relative;z-index:1}
+@keyframes auraFlow{0%{transform:translateX(0)}50%{transform:translateX(50%)}100%{transform:translateX(0)}}
 .agent-status-strip .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--accent);
   box-shadow:0 0 5px rgba(255,255,255,.9)}
 .agent-status-strip .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* shimmering flowing text for thinking / reasoning actions */
+.agent-shimmer{background:linear-gradient(90deg,var(--muted) 0%,#ffffff 50%,var(--muted) 100%);
+  background-size:200% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  animation:textShimmer 2.2s linear infinite;font-weight:500;letter-spacing:.02em}
+@keyframes textShimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
+
+/* action icons: brain for reasoning, eye for looking at image, pencil for writing answer */
+.action-icon{flex:0 0 auto;width:14px;height:14px;display:inline-block;vertical-align:middle;stroke:currentColor;fill:none}
+.action-icon.brain-icon,.action-icon.eye-icon,.action-icon.pencil-icon{color:var(--ink);filter:drop-shadow(0 0 4px rgba(255,255,255,.5))}
+.reconnect-hint{font:400 10px/1.2 -apple-system,sans-serif;color:var(--muted);text-align:center;margin:3px 0 1px;letter-spacing:.02em}
 
 /* compact status screen */
 .status-grid{display:flex;flex-direction:column;gap:5px;margin:3px 0 6px}

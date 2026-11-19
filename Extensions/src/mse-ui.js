@@ -103,7 +103,7 @@
     }
     function norm(s) {
       return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase()
-        .replace(/^(\([a-zа-я0-9]{1,2}\)|[a-zа-я0-9]{1,2}[\.\)\:\-])\s*/i, '')
+        .replace(/^(\([a-z\u0430-\u044f0-9]{1,2}\)|[a-z\u0430-\u044f0-9]{1,2}[\.\)\:\-])\s*/i, '')
         .replace(/[.,;:!?'"«»()]/g, '')
         .trim();
     }
@@ -394,7 +394,7 @@
           var image = holder && holder.querySelector('img');
           if (image) caption = image.getAttribute('alt') || ('image ' + (q.answers.length + 1));
         }
-        if (/^(очистить мой выбор|clear my choice)$/i.test(String(caption || '').trim())) continue;
+        if (/^(\u043e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u043c\u043e\u0439 \u0432\u044b\u0431\u043e\u0440|clear my choice)$/i.test(String(caption || '').trim())) continue;
         q.answers.push({ input: inp, kind: 'choice', text: caption, letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
       }
 
@@ -761,7 +761,7 @@
         });
         if (chosen.some(function (x) { return !x; })) return {ok:false};
         if (chParts.length === 1) {
-          chosen[0].input.click();
+          if (!chosen[0].input.checked) chosen[0].input.click();
         } else {
           checks.forEach(function (a) { var selected = chosen.indexOf(a) >= 0; if (a.input.checked !== selected) a.input.click(); });
         }
@@ -781,8 +781,8 @@
             });
           }
           if (!hits.length) {
-            var TRUE_VALS = ['true', 'верно', 'правда', 'да', 't'];
-            var FALSE_VALS = ['false', 'неверно', 'ложь', 'нет', 'f'];
+            var TRUE_VALS = ['true', '\u0432\u0435\u0440\u043d\u043e', '\u043f\u0440\u0430\u0432\u0434\u0430', '\u0434\u0430', 't'];
+            var FALSE_VALS = ['false', '\u043d\u0435\u0432\u0435\u0440\u043d\u043e', '\u043b\u043e\u0436\u044c', '\u043d\u0435\u0442', 'f'];
             var pLower = norm(p0);
             var isTrue = TRUE_VALS.indexOf(pLower) >= 0;
             var isFalse = FALSE_VALS.indexOf(pLower) >= 0;
@@ -830,12 +830,12 @@
               var nIdx = parseInt(val, 10);
               if (nIdx >= 0 && nIdx < ctrl.node.options.length) opts = [ctrl.node.options[nIdx]];
             }
-            if (!opts.length && /^[a-zа-я]$/i.test(val.trim())) {
+            if (!opts.length && /^[a-z\u0430-\u044f]$/i.test(val.trim())) {
               var letCode = val.trim().toLowerCase().charCodeAt(0);
               var letIdx = -1;
               if (letCode >= 97 && letCode <= 122) letIdx = letCode - 97;
               else {
-                var cyr = 'абвгдежзийклмнопрстуфхцчшщэюя';
+                var cyr = '\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043a\u043b\u043c\u043d\u043e\u043f\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044d\u044e\u044f';
                 letIdx = cyr.indexOf(val.trim().toLowerCase());
               }
               var validOpts = Array.prototype.filter.call(ctrl.node.options, function (o) { return !!o.value && !o.disabled; });
@@ -1031,7 +1031,7 @@
       agent: null,             /* { state: 'idle'|'running'|'ok'|'error'|'retry', text, retryIn } */
       agentTimer: null,
       gw: { busy: null, probe: null, models: null, check: null, reg: null },
-      gatewayModel: ls.get('mse.gateway.lastModel', null), modelEpoch: 0,
+      gatewayModel: null, modelEpoch: 0,
       ai: null,                /* { state: 'idle'|'running'|'ok'|'error', text, model } — the AI row, owner tier only */
       tier: null,              /* 'base' | 'owner' — base sees only their answer service, owner also the AI row */
       t0: 0
@@ -1149,7 +1149,7 @@
         lead = press(el('button', 'ib settings-btn'), function () { state.route = state.route === 'account' ? 'answers' : 'account'; render(); });
         lead.setAttribute('aria-label', 'settings');
         lead.setAttribute('data-mse', 'settings-gear');
-        lead.innerHTML = '<span style="display:none">i</span><svg class="gear-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
+        lead.innerHTML = '<svg class="gear-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
       }
       h.appendChild(lead);
       var t = el('div', 't', titleText);
@@ -1158,8 +1158,8 @@
       var br = win.MSEBridge;
       var brMeta = br && br.meta && br.meta();
       var activeKey = state.tier === 'owner' || (brMeta && (brMeta.status === 'active' || (brMeta.device && brMeta.device.status === 'active'))) || (state.gw && state.gw.check && state.gw.check.state === 'active') || (br && br.cachedCheck && br.cachedCheck() && br.cachedCheck().state === 'active');
-      var displayModel = state.gatewayModel || ls.get('mse.gateway.lastModel');
-      var showChip = displayModel && br && br.url() && (activeKey || state.route === 'gateway');
+      var displayModel = state.gatewayModel;
+      var showChip = displayModel && br && br.url();
       if (showChip) {
         var chip = el('span', 'model-chip', displayModel);
         chip.setAttribute('data-mse', 'model-chip');
@@ -1355,38 +1355,126 @@
             var tag = el('span', 'tag agent', 'agent');
             a.appendChild(tag);
           }
-          if (r.correctness > 0) a.classList.add('lit');
+          if (r.correctness > 0 || (r.agent && state.tappedPicks && state.tappedPicks[r.label])) {
+            a.classList.add('lit', 'applied');
+            a.setAttribute('data-lit', 'true');
+          }
           a.addEventListener('click', function () {
             flash(a);
+            a.setAttribute('data-lit', 'true');
             win.setTimeout(function () {
               var res = applyAnswer(q, r);
-              if (res.ok) { setBadge(0); closePop(); }
-              else { state.error = 'not in the form'; render(); }
+              if (res.ok) {
+                a.classList.add('lit', 'applied');
+                a.setAttribute('data-lit', 'true');
+                if (r.agent) {
+                  state.tappedPicks = state.tappedPicks || {};
+                  state.tappedPicks[r.label] = true;
+                  var allDone = state.agentPicks && state.agentPicks.length && state.agentPicks.every(function (p) {
+                    return state.tappedPicks[p];
+                  });
+                  if (allDone) setBadge(0);
+                } else {
+                  setBadge(0);
+                }
+              } else {
+                state.error = 'not in the form';
+                render();
+              }
             }, 60);
           });
           list.appendChild(N(a, i));
         });
       }
       if (aiAllowed() && (!state.agent || state.agent.state !== 'ok')) appendAi(q);
+      var actions = el('div', 'frow');
+      actions.style.margin = '6px 0 0';
+      var snif = press(el('button', 'btn', 'Snif'), function () {
+        snifText = JSON.stringify(snifDump(), null, 2);
+        state.route = 'snif';
+        render();
+      });
+      snif.setAttribute('data-mse', 'snif');
+      snif.style.minHeight = '44px';
+      snif.style.minWidth = '100px';
+      actions.appendChild(snif);
+      if (!state.agent || state.agent.state !== 'error') {
+        var report = press(el('button', 'btn', 'Report'), function () {
+          reportCurrent(report);
+        });
+        report.setAttribute('data-mse', 'report');
+        report.style.minHeight = '44px';
+        actions.appendChild(report);
+      }
+      body.appendChild(N(actions, 1));
+    }
+
+    function actionIcon(stage) {
+      var s = String(stage || '').toLowerCase();
+      var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('width', '14');
+      svg.setAttribute('height', '14');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '1.8');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      svg.setAttribute('class', 'action-icon');
+
+      if (s.indexOf('image') >= 0) {
+        var p1 = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p1.setAttribute('d', 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z');
+        var c1 = doc.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c1.setAttribute('cx', '12'); c1.setAttribute('cy', '12'); c1.setAttribute('r', '3');
+        svg.appendChild(p1); svg.appendChild(c1);
+        svg.classList.add('eye-icon');
+      } else if (s.indexOf('writing') >= 0 || s.indexOf('write') >= 0 || s.indexOf('answer') >= 0) {
+        var p2 = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p2.setAttribute('d', 'M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z');
+        svg.appendChild(p2);
+        svg.classList.add('pencil-icon');
+      } else {
+        var p3 = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p3.setAttribute('d', 'M9.5 2A4.5 4.5 0 0 0 5 6.5c0 0.41 0.06 0.8 0.16 1.18A4 4 0 0 0 3 11a4 4 0 0 0 2 3.46 4.5 4.5 0 0 0 4.5 4.54H10V2h-.5zM14.5 2A4.5 4.5 0 0 1 19 6.5c0 0.41 0.06 0.8 0.16 1.18A4 4 0 0 1 21 11a4 4 0 0 1-2 3.46 4.5 4.5 0 0 1-4.5 4.54H14V2h.5zM10 7h4M10 12h4M10 16h4');
+        svg.appendChild(p3);
+        svg.classList.add('brain-icon');
+      }
+      return svg;
     }
 
     /* There is ONE way to ask the model: the agent route. This is its single button, drawn in the answer list;
        the strip under the list only reports the state, it is not a control. */
     function appendAi(q) {
       var ai = state.agent || { state: 'idle' };
-      if (ai.state === 'running' || ai.state === 'retry') {
+      if (ai.state === 'running' || ai.state === 'retry' || ai.state === 'reconnecting') {
         var run = el('div', 'agent-status-strip');
         run.setAttribute('data-mse', 'agent-status');
-        run.appendChild(el('span', 'dot ok'));
-        var stageText = ai.state === 'retry' ? 'agent busy · retry in ' + ai.retryIn + ' s' : (ai.stage ? ai.stage + '…' : 'reasoning…');
-        run.appendChild(el('span', 'txt', stageText));
+        var stg = ai.stage || 'reasoning';
+        run.appendChild(actionIcon(stg));
+        var stageText = ai.state === 'retry' ? 'agent busy · retry in ' + ai.retryIn + ' s'
+          : (ai.state === 'reconnecting' ? 'something went wrong'
+          : (stg === 'looking at image' ? 'looking at image…'
+          : (stg === 'writing answer' ? 'writing answer…' : 'reasoning…')));
+        var txtSpan = el('span', 'txt agent-shimmer', stageText);
+        run.appendChild(txtSpan);
         body.appendChild(N(run, 1));
+        if (ai.state === 'reconnecting' && ai.countdown != null) {
+          var hint = el('div', 'reconnect-hint', 'autoreconnect in ' + ai.countdown + ' sec');
+          body.appendChild(N(hint, 1));
+        }
         return;
       }
       if (ai.state === 'error') {
         var errRow = el('div', 'row err-row');
         errRow.appendChild(el('span', 'dot bad'));
         errRow.appendChild(el('span', 'txt', 'agent: ' + (ai.text || 'no response')));
+        var rep = press(el('button', 'btn sm', 'Report'), function (ev) {
+          if (ev) ev.stopPropagation();
+          reportCurrent(rep);
+        });
+        rep.setAttribute('data-mse', 'report');
+        errRow.appendChild(rep);
         body.appendChild(N(errRow, 1));
         return;
       }
@@ -1455,44 +1543,39 @@
       var allImgs = Array.prototype.slice.call(q.node.querySelectorAll('.qtext img, .answer img, .formulation img'));
       var images = allImgs.filter(function (img) {
         if (img.classList.contains('icon') || img.classList.contains('emoticon') || img.classList.contains('questionflagimage')) return false;
-        var src = img.currentSrc || img.src || '';
-        if (/\/theme\/image\.php\//i.test(src)) return false;
-        if (img.naturalWidth && img.naturalWidth <= 24 && img.naturalHeight && img.naturalHeight <= 24) return false;
+        var src = img.currentSrc || img.getAttribute('src') || img.src || '';
+        if (/\/theme\/image\.php\//i.test(src) || /pix\/[st]\//i.test(src)) return false;
         return true;
       });
-      if (images.length > 5) images = images.slice(0, 5);
+      if (images.length > 5) return Promise.reject(new Error('too many images'));
       return Promise.all(images.map(function (img, index) {
         var src = img.currentSrc || img.src || '';
         var source = src.indexOf('data:image/') === 0 ? Promise.resolve(src) : (function () {
-          var u; try { u = new URL(src, win.location.href); } catch (_) { return Promise.resolve(null); }
-          if (u.origin !== win.location.origin) return Promise.resolve(null);
+          var u; try { u = new URL(src, win.location.href); } catch (_) { throw new Error('invalid image url'); }
+          if (u.origin !== win.location.origin) throw new Error('external image unavailable');
           return debugAuxFetch(u.href, {credentials:'same-origin'}).then(function (response) {
-            if (!response.ok) return null;
+            if (!response.ok) throw new Error('image unavailable');
             return response.blob();
           }).then(function (blob) {
-            if (!blob || blob.size > 2500000) return null;
-            return new Promise(function (resolve) {
+            if (!blob || blob.size > 2500000) throw new Error('image too large (>2.5MB)');
+            return new Promise(function (resolve, reject) {
               var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); };
-              reader.onerror = function () { resolve(null); }; reader.readAsDataURL(blob);
+              reader.onerror = function () { reject(new Error('image unreadable')); }; reader.readAsDataURL(blob);
             });
-          }).catch(function () { return null; });
+          });
         })();
         return source.then(function (rawUrl) {
-          if (!rawUrl) return null;
           return downscaleDataUrl(rawUrl, 1024);
         }).then(function (data) {
-          if (!data || !/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(data)) return null;
-          if (data.length > 800000) return null;
+          if (!data || !/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(data)) throw new Error('image format unsupported');
+          if (data.length > 800000) throw new Error('image too large (>512KB)');
           var related = q.answers.filter(function (a) { return a.input && a.input.parentNode && a.input.parentNode.contains(img); })[0];
           return {data:data, label:related ? 'option: ' + related.text : 'question image ' + (index+1)};
-        }).catch(function () { return null; });
+        });
       })).then(function (all) {
-        var valid = all.filter(function (x) { return !!x; });
-        if (valid.reduce(function (n, image) { return n + image.data.length; }, 0) > 1500000) {
-          valid = valid.length ? [valid[0]] : [];
-        }
-        return valid;
-      }).catch(function () { return []; });
+        if (all.reduce(function (n, image) { return n + image.data.length; }, 0) > 1500000) throw new Error('images too large (over 1.5MB total)');
+        return all;
+      });
     }
 
     function runAgent(automatic, retryCount) {
@@ -1545,19 +1628,52 @@
             ls.set('mse.gateway.lastModel', res.model.trim());
           }
           state.agent = { state: 'ok', answer: res.answer };
-          var existing = (state.rows || []).find(function (r) { return r.label === res.answer; });
-          if (existing) {
-            existing.agent = true;
-          } else {
-            var row = { label: res.answer, correctness: 0, count: 0, agent: true };
-            state.rows = [row].concat(state.rows || []);
+
+          var rawAns = res.answer;
+          var ansParts = [];
+          if (Array.isArray(rawAns)) {
+            ansParts = rawAns.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+          } else if (typeof rawAns === 'string') {
+            if (rawAns.indexOf('|') >= 0) ansParts = rawAns.split('|').map(function (x) { return x.trim(); }).filter(Boolean);
+            else if (rawAns.indexOf('\n') >= 0) ansParts = rawAns.split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+            else ansParts = [rawAns.trim()];
           }
+          if (ansParts.length === 1 && (q.type === 'multichoiceset' || (q.answers && q.answers.some(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; })))) {
+            var spl = ansParts[0].split(/\s*,\s*|\s*;\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
+            if (spl.length > 1) ansParts = spl;
+          }
+
+          state.agentPicks = ansParts;
+          state.tappedPicks = state.tappedPicks || {};
+
+          var currentRows = (state.rows || []).slice();
+          if (!currentRows.length && q.answers && q.answers.length) {
+            currentRows = q.answers.map(function (answer) { return { label: answer.text, correctness: 0 }; });
+          }
+
+          ansParts.forEach(function (part) {
+            var hit = currentRows.find(function (r) { return norm(r.label) === norm(part); });
+            if (!hit) {
+              var pTrim = String(part || '').trim();
+              hit = currentRows.find(function (r, idx) {
+                return (r.letter && r.letter.toLowerCase() === pTrim.toLowerCase()) || String(idx + 1) === pTrim;
+              });
+            }
+            if (hit) {
+              hit.agent = true;
+              hit.agentPick = true;
+            } else {
+              currentRows.unshift({ label: part, correctness: 0, count: 0, agent: true, agentPick: true });
+            }
+          });
+          state.rows = currentRows;
           render();
           return;
         }
-        if (res.code === 'rate_limited') {
-          logAdd('agent', false, 'agent is busy (limit hit), retrying', { ms: ms });
-          startRetry(automatic);
+        var is429 = res.code === 'rate_limited' || res.status === 429;
+        if (is429) {
+          logAdd('agent', false, 'HTTP 429: rate limit hit · something went wrong', { ms: ms });
+          startAutoreconnect(5, 'something went wrong');
           return;
         }
         if ((res.code === 'network' || res.code === 'timeout') && attempt < 2) {
@@ -1569,15 +1685,21 @@
           }, 800);
           return;
         }
-        var text = res.code === 'network' || res.code === 'timeout' ? 'request did not go out · check the network'
+        var isHttpErr = (res.status >= 400 && res.status < 600);
+        var text = isHttpErr ? 'something went wrong'
+          : res.code === 'network' || res.code === 'timeout' ? 'request did not go out · check the network'
           : res.code === 'no_gateway' ? 'AI gateway is not set'
           : res.code === 'unauthorized' || res.code === 'invalid_key' ? 'key not accepted'
           : res.code === 'device_pending' ? 'waiting for approval by id'
           : res.message ? 'agent error: ' + res.message
           : 'agent failed: ' + (res.code || 'error');
-        logAdd('agent', false, text, { ms: ms });
-        state.agent = { state: 'error', text: text };
-        render();
+        logAdd('agent', false, 'HTTP ' + (res.status || res.code || 'err') + ': ' + (res.message || text), { ms: ms });
+        if (isHttpErr) {
+          startAutoreconnect(5, 'something went wrong');
+        } else {
+          state.agent = { state: 'error', text: text };
+          render();
+        }
       }, function (error) {
         var isNet = error && (error.name === 'AbortError' || /network|failed to fetch|offline/i.test(error.message));
         if (isNet && attempt < 2) {
@@ -1589,26 +1711,33 @@
           }, 800);
           return;
         }
-        var errText = isNet ? 'request did not go out · check the network' : ('image unsupported: ' + String(error && error.message || 'unavailable'));
-        state.agent = { state: 'error', text: errText };
-        render();
+        logAdd('agent', false, 'agent request failed: ' + String(error && error.message || 'error'), { ms: Date.now() - t0 });
+        startAutoreconnect(5, 'something went wrong');
       });
     }
-    function startRetry(automatic) {
+    function startAutoreconnect(seconds, msg) {
       if (state.agentTimer) { win.clearInterval(state.agentTimer); state.agentTimer = null; }
-      var left = Math.round(CONFIG.agentRetryMs / 1000);
-      state.agent = { state: 'retry', retryIn: left };
+      var count = seconds || 5;
+      var errTxt = msg || 'something went wrong';
+      state.agent = { state: 'reconnecting', text: errTxt, countdown: count };
       render();
       state.agentTimer = win.setInterval(function () {
-        left -= 1;
-        if (left <= 0) {
+        count -= 1;
+        if (count <= 0) {
           win.clearInterval(state.agentTimer);
           state.agentTimer = null;
+          state.agent = null;
           runAgent(true);
           return;
         }
-        if (state.agent) { state.agent.retryIn = left; if (pop && state.route === 'answers') render(); }
+        if (state.agent && state.agent.state === 'reconnecting') {
+          state.agent.countdown = count;
+          if (pop && state.route === 'answers') render();
+        }
       }, 1000);
+    }
+    function startRetry(automatic) {
+      startAutoreconnect(Math.round(CONFIG.agentRetryMs / 1000), 'agent busy');
     }
 
     function load() {
@@ -1833,22 +1962,33 @@
       frow.appendChild(check);
 
       var isDbg = br.debugEnabled();
-      var dbgBtn = el('button', 'btn dbg-toggle press' + (isDbg ? ' on' : ''), 'DEBG');
-      dbgBtn.addEventListener('click', function (ev) {
-        ev.preventDefault();
-        flash(dbgBtn);
-        var next = !br.debugEnabled();
-        br.setDebugEnabled(next);
-        dbgBtn.classList.toggle('on', next);
-        var curLight = dbgBtn.querySelector('.dbg-light');
-        if (curLight) curLight.classList.toggle('on', next);
-        if (next) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
-      });
-      dbgBtn.setAttribute('data-mse', 'debug-mode');
-      dbgBtn.setAttribute('title', 'Debug mode: sends diagnostics to owner');
+      var toggle = el('button', 'btn dbg-toggle press' + (isDbg ? ' on' : ''), 'DEBG');
+      toggle.setAttribute('type', 'button');
+      toggle.setAttribute('data-mse', 'debug-mode');
+      toggle.setAttribute('title', 'Debug mode: sends diagnostics to owner');
       var light = el('span', 'dbg-light' + (isDbg ? ' on' : ''));
-      dbgBtn.insertBefore(light, dbgBtn.firstChild);
-      frow.appendChild(dbgBtn);
+      toggle.insertBefore(light, toggle.firstChild);
+      Object.defineProperty(toggle, 'checked', {
+        get: function () { return br.debugEnabled(); },
+        set: function (v) {
+          var val = !!v;
+          br.setDebugEnabled(val);
+          toggle.classList.toggle('on', val);
+          light.classList.toggle('on', val);
+          if (val) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
+        },
+        configurable: true
+      });
+      toggle.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        flash(toggle);
+        var next = !br.debugEnabled();
+        toggle.checked = next;
+      });
+      toggle.addEventListener('change', function () {
+        if (toggle.checked) debugTraffic({ event: 'debug_mode_enabled', timestamp: Date.now(), force: true });
+      });
+      frow.appendChild(toggle);
 
       var statusRow = null;
       if (gw.check) {
@@ -1866,6 +2006,42 @@
       if (statusRow) {
         body.appendChild(N(el('div', 'sec', 'status'), 0));
         body.appendChild(N(statusRow, 1));
+      }
+
+      if (gw.check && gw.check.state === 'active') {
+        body.appendChild(N(el('div', 'sec', 'quota'), 0));
+        var qRow = el('div', 'val human press');
+        qRow.setAttribute('data-mse', 'quota-status');
+        var limit = (gw.check.quotaLimit != null) ? gw.check.quotaLimit : 200;
+        var left = (gw.check.quota != null) ? gw.check.quota : limit;
+        var used = (gw.check.quotaUsed != null) ? gw.check.quotaUsed : Math.max(0, limit - left);
+        var resetsAfter = gw.check.quotaResetsAfter || gw.check.resets_after || '24h 0m';
+
+        var qBox = el('div', 'v');
+        var qLine1 = el('div', null, 'quota: ' + (limit - used) + '/' + limit);
+        var qLine2 = el('div', null, 'resets after ' + resetsAfter);
+        qLine2.style.color = 'var(--muted)';
+        qLine2.style.fontSize = '10.5px';
+        qLine2.style.marginTop = '2px';
+        qBox.appendChild(qLine1);
+        qBox.appendChild(qLine2);
+        qRow.appendChild(qBox);
+
+        qRow.addEventListener('click', function () {
+          flash(qRow);
+          if (br && br.quota) {
+            br.quota().then(function (qr) {
+              if (qr && qr.ok && qr.quota) {
+                gw.check.quota = qr.quota.left;
+                gw.check.quotaUsed = qr.quota.used;
+                gw.check.quotaLimit = qr.quota.limit;
+                gw.check.quotaResetsAfter = qr.quota.resets_after;
+                render();
+              }
+            });
+          }
+        });
+        body.appendChild(N(qRow, 1));
       }
     }
 

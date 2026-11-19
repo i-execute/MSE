@@ -24,6 +24,8 @@ test.after(() => {
   router.server.close();
 });
 
+const PKG_VERSION = require('../package.json').version;
+
 test('2.10-E: public /health without admin token returns strictly minimal json', async () => {
   const res = await fetch(base + '/health');
   assert.equal(res.status, 200);
@@ -31,7 +33,7 @@ test('2.10-E: public /health without admin token returns strictly minimal json',
   const body = await res.json();
   assert.deepEqual(body, {
     name: 'MSE',
-    version: '2.11.0',
+    version: PKG_VERSION,
     layer: 1
   });
 });
@@ -44,7 +46,7 @@ test('2.10-E: /health with admin token returns full detailed report', async () =
   const body = await res.json();
   assert.equal(body.ok, true);
   assert.equal(body.name, 'MSE gateway');
-  assert.equal(body.version, '2.11.0');
+  assert.equal(body.version, PKG_VERSION);
   assert.equal(body.role, 'router');
   assert.equal(body.backend, 'tailscale');
   assert.ok('upstream' in body);

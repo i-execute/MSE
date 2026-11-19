@@ -48,7 +48,7 @@ process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
 process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
 const PORT = Number(process.env.MSE_PORT);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.12.0';
+const VERSION = '2.13.0';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
 const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
@@ -263,6 +263,20 @@ function deviceByKey(key) {
   } else { rec.keyHash = digest; saveState(); } // migrate legacy records on first use
   return rec;
 }
+function getQuotaResetInfo() {
+  const nowD = new Date();
+  const nextUtc = new Date(Date.UTC(nowD.getUTCFullYear(), nowD.getUTCMonth(), nowD.getUTCDate() + 1, 0, 0, 0));
+  const diffMs = Math.max(0, nextUtc.getTime() - nowD.getTime());
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  return {
+    resetsIn: `${hours}h ${mins}m`,
+    resetsInSec: Math.floor(diffMs / 1000),
+    resetsAt: nextUtc.toISOString()
+  };
+}
+
 function quotaOf(rec) {
   if (!rec) return 0;
   if (rec.quotaDay !== day()) { rec.quotaDay = day(); rec.quotaUsed = 0; }
@@ -363,6 +377,12 @@ function registerDevice(body) {
   const existing = state.devices[deviceId];
   if (existing && !deviceByKey(key)) return { error: 'invalid key' };
   if (existing && existing.banned) return { error: 'this key was revoked', device: existing };
+  if (existing && existing.site && site && existing.site === site && existing.moodleId !== moodleId) {
+    return { error: 'key already bound to another identity' };
+  }
+  if (existing && !existing.site && !site && existing.moodleId !== moodleId) {
+    return { error: 'key already bound to another identity' };
+  }
 
   const rec = existing || {
     deviceId, keyHash: sha256(key), moodleId, name, site, deviceName, status: 'pending',
@@ -1278,6 +1298,9 @@ const handler = async (req, res) => {
       const allowed = isDeviceAllowed(rec, moodleHeader);
       const effStatus = allowed ? 'active' : (rec.status === 'revoked' ? 'revoked' : 'pending');
       res.setHeader('x-mse-status', effStatus);
+      const resetInfo = getQuotaResetInfo();
+      const left = quotaOf(rec);
+      const used = rec.quotaUsed || 0;
       if (!allowed) {
         return send(req, res, 403, {
           ok: false,
@@ -1285,7 +1308,13 @@ const handler = async (req, res) => {
           state: effStatus,
           message: effStatus === 'revoked' ? 'key revoked' : 'waiting for approval',
           device: publicDevice(rec),
-          hint: rec.status === 'revoked' ? 'the key was revoked' : 'waiting for approval'
+          hint: rec.status === 'revoked' ? 'the key was revoked' : 'waiting for approval',
+          quota: left,
+          quotaUsed: used,
+          quotaLimit: CFG.dailyQuota,
+          resets_after: resetInfo.resetsIn,
+          quotaResetsAfter: resetInfo.resetsIn,
+          resets_at: resetInfo.resetsAt
         });
       }
       return send(req, res, 200, {
@@ -1295,7 +1324,31 @@ const handler = async (req, res) => {
         message: 'key accepted',
         device: publicDevice(rec),
         model: CFG.model,
-        quota: quotaOf(rec)
+        quota: left,
+        quotaUsed: used,
+        quotaLimit: CFG.dailyQuota,
+        resets_after: resetInfo.resetsIn,
+        quotaResetsAfter: resetInfo.resetsIn,
+        resets_at: resetInfo.resetsAt
+      });
+    }
+    if (url.pathname === '/mse/v1/quota' && req.method === 'GET') {
+      const rec = deviceByKey(keyOf(req));
+      if (!rec) return oaiError(req, res, 401, 'unknown key: register the device first', 'invalid_key');
+      rec.seen = now();
+      const resetInfo = getQuotaResetInfo();
+      const left = quotaOf(rec);
+      const used = rec.quotaUsed || 0;
+      return send(req, res, 200, {
+        ok: true,
+        quota: {
+          used,
+          left,
+          limit: CFG.dailyQuota,
+          resets_after: resetInfo.resetsIn,
+          resets_in_sec: resetInfo.resetsInSec,
+          resets_at: resetInfo.resetsAt
+        }
       });
     }
     if (url.pathname === '/v1/models' && req.method === 'GET') {
@@ -1320,7 +1373,10 @@ const handler = async (req, res) => {
       const body = parseJson(await readBody(req, 4 * 1024 * 1024));
       if (!body || !['report', 'debug'].includes(body.type) || !body.dump || typeof body.dump !== 'object')
         return oaiError(req, res, 400, 'type and dump required', 'bad_dump');
+      if (rec.dumpDay !== day()) { rec.dumpDay = day(); rec.dumpUsed = 0; }
+      if ((rec.dumpUsed || 0) >= 50) return oaiError(req, res, 429, 'dump quota reached', 'dump_quota');
       const meta = dumps.store(DATA_DIR, rec, body.type, body.dump, key);
+      rec.dumpUsed = (rec.dumpUsed || 0) + 1;
       rec.seen = now();
       state.dumpNotifications.push(meta);
       if (state.dumpNotifications.length > 100) state.dumpNotifications.splice(0, state.dumpNotifications.length - 100);

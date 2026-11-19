@@ -68,6 +68,7 @@ FIELDS: dict[str, Field] = {
                       "0123456789abcdef", True),
     "tailscale_key": Field("tailscale_key", "tailscale key", "tskey-auth-... from the keys page of the tailnet",
                            "tskey-auth-xxxx", True),
+    "notify_step": Field("notify_step", "notify every N requests", "requests between milestone notifications", "20", False, "digits"),
     "model": Field("model", "model", "the model the local AI backend serves", ""),
     "quota": Field("quota", "quota", "requests per day per device", "200", False, "digits"),
     "allow_id": Field("allow_id", "Moodle id", "the id of the person to let in", "2040", False, "digits"),
@@ -77,6 +78,7 @@ FIELDS: dict[str, Field] = {
 
 OPTIONS: dict[str, tuple[str, ...]] = {
     "quota": ("50", "100", "200", "500", "1000"),
+    "notify_step": ("10", "20", "40", "50", "100"),
     # the model list is never written down here: the bot fills it from the backend before it offers the inline query
     "model": (),
 }

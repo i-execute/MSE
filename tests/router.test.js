@@ -139,7 +139,7 @@ test('R8 /admin/state is the same report as before, and /admin/quota changes the
   assert.equal((await q.json()).quota, 50);
   const st = await (await get('/admin/state', admin)).json();
   assert.equal(st.quota, 50);
-  assert.equal(st.version, '2.12.0');
+  assert.equal(st.version, '2.13.0');
   assert.ok(Array.isArray(st.log) && st.log.length > 0, 'the log tells what happened');
   assert.equal(st.backend, 'tailscale');
 });

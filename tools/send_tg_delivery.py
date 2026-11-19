@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send MSE 2.8.0 delivery files and summary to Telegram owner.
+"""Send MSE 2.13.0 delivery files and summary to Telegram owner.
 Usage:
     MSE_BOT_TOKEN=... python3 tools/send_tg_delivery.py
 """
@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import uuid
+import zipfile
 import mimetypes
 import urllib.request
 import urllib.error
@@ -16,6 +17,48 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACTS = ROOT / "Storage" / "artifacts"
 CHAT_ID = os.environ.get("MSE_OWNER_ID") or os.environ.get("TELEGRAM_CHAT_ID") or "7610246474"
+
+def make_delivery_zip() -> Path:
+    zip_path = ARTIFACTS / "MSE-2.13.0.zip"
+    include_dirs = [
+        "Extensions/src",
+        "Extensions/tools",
+        "Server",
+        "Storage/Documentation",
+        "tests",
+        "tools",
+        "scripts",
+        "skills",
+    ]
+    include_files = [
+        "Storage/artifacts/mse.user.js",
+        "Storage/artifacts/build-report.json",
+        "Storage/artifacts/mse-2.13.0.patch",
+        "Storage/get.sh",
+        "package.json",
+        "package-lock.json",
+        "README.md",
+        "RELEASE_2.13.0.md",
+        "CHANGES.md",
+        "LICENSE",
+    ]
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for rel in include_files:
+            p = ROOT / rel
+            if p.exists():
+                zf.write(p, rel)
+        for dir_rel in include_dirs:
+            dp = ROOT / dir_rel
+            if not dp.exists():
+                continue
+            for p in dp.rglob("*"):
+                if p.is_file():
+                    if "__pycache__" in p.parts or ".pytest_cache" in p.parts or p.name.endswith(".pyc"):
+                        continue
+                    rel = p.relative_to(ROOT)
+                    zf.write(p, str(rel))
+    print(f"Created complete delivery zip: {zip_path} ({zip_path.stat().st_size} bytes)")
+    return zip_path
 
 def load_token() -> str:
     t = (os.environ.get("MSE_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
@@ -62,25 +105,23 @@ def call(method: str, payload: dict | None = None, files: dict | None = None) ->
         return {"ok": False, "error": str(exc)}
 
 def main():
-    if not TOKEN:
-        print("ERROR: MSE_BOT_TOKEN is not set", file=sys.stderr)
-        return 1
+    zip_path = make_delivery_zip()
 
-    report_text = """<b>MSE 2.11.0 Release Delivered</b>
+    if not TOKEN:
+        print("Note: MSE_BOT_TOKEN is not set in environment (offline packaging mode).", file=sys.stderr)
+        print("Delivery archive created successfully at:", zip_path)
+        return 0
+
+    report_text = """<b>MSE 2.13.0 Milestone Release Delivered</b>
 
 <b>Key Highlights:</b>
-• <b>Unified Button UI Kit (A4)</b>: Standardized 28px height, 8px border-radius, typography, and glowing borders across all screens.
-• <b>Single Dynamic Check Button (A2)</b>: Merged "Integrate request" into a unified <code>check</code> control that dynamically reflects status (check / checking… / active / waiting / denied).
-• <b>Instant DEBUG Light (A1)</b>: Immediate toggle of the DEBG indicator on tap; triggers instant diagnostic event.
-• <b>Network Log Enhancements (A3, A5)</b>: Styled copy button with press glow/toast; monochrome list/lines icon for account menu.
-• <b>Clean Question Subtitle (A7)</b>: Removed "question 1" bug; popover header displays <code>question #qid</code> or generic <code>question</code>.
-• <b>Active Model Chip (A8)</b>: Caches model from agent responses into <code>localStorage</code>; persistently displayed for active verified keys without calling <code>/v1/models</code>.
-• <b>Agent UI Cleanup (A6)</b>: Removed percentage/count indicators from agent answer rows; detailed stats preserved in dumps.
-• <b>Gateway Settings (A9, A11)</b>: Renamed to "gateway settings" with monochrome gear icon; explicit status in API (accepted/pending/revoked).
-• <b>Immediate Bot Alerts (A10)</b>: Telegram bot immediately delivers new registration alerts with inline <b>добавить</b> and <b>отклонить</b> buttons directly in the card; silent otherwise.
-• <b>Schema-Layer 1 Constructor (D1–D5)</b>: Registry of 18 question types, full constructor reconstruction protocol in dumps, questionless page dump suppression, server-side qtype logging.
-• <b>Live Stand Reliability (B1–B2)</b>: Probe accepts both "MSE" and "MSE gateway"; client SSE agent timeout extended to 120s.
-• <b>Strict Audit</b>: 123 files audited, 0 hits (clean)."""
+• <b>Multi-Answer AI Selection</b>: Marks all recommendations, leaves popover open until all are tapped, immediately clicks Moodle checkboxes, and provides brighter illumination feedback.
+• <b>Agent Status Bar Overhaul</b>: Flowing ambient light aura without element collisions, 3 action icons (brain for reasoning, eye for vision, pencil for answer composition), and shimmering flowing text.
+• <b>Daily Quota API & UTC Reset</b>: <code>GET /mse/v1/quota</code> with reset countdown calculated to 00:00 UTC and displayed in UI settings card.
+• <b>Full Documentation Suite</b>: 8 comprehensive guides in <code>Storage/Documentation/</code> for iOS, Android, Desktop, Russian overview, and extension layer breakdown.
+• <b>Streamlined TUI & Gateway Domain</b>: Removed redundant menus; added dedicated Gateway Domain selector with Cloudflared (GitHub latest release + pinned fallback, Telegram alert on URL change) and Tailscale on demand.
+• <b>Telegram Bot Cards & Milestone Alerts</b>: Interactive approve/decline buttons on applicant cards and configurable milestone notifications every N requests (editable inline).
+• <b>Resilient 429/5xx Handling</b>: Error logging with 5-second autoreconnect countdown timer under agent button."""
 
     print(f"Sending message to chat {CHAT_ID}...")
     res = call("sendMessage", {"chat_id": CHAT_ID, "text": report_text, "parse_mode": "HTML"})
@@ -90,10 +131,10 @@ def main():
     print("Message sent successfully.")
 
     files_to_send = [
-        ARTIFACTS / "mse-2.11.0-delivery.zip",
+        zip_path,
         ARTIFACTS / "mse.user.js",
-        ARTIFACTS / "mse-2.11.0.patch",
-        ROOT / "RELEASE_2.11.0.md"
+        ARTIFACTS / "mse-2.13.0.patch",
+        ROOT / "RELEASE_2.13.0.md"
     ]
 
     for p in files_to_send:
@@ -101,7 +142,7 @@ def main():
             print(f"File not found: {p}", file=sys.stderr)
             continue
         print(f"Sending {p.name} ({p.stat().st_size} bytes)...")
-        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.11.0 — {p.name}"}, {"document": p})
+        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.13.0 — {p.name}"}, {"document": p})
         if res.get("ok"):
             print(f"Successfully sent {p.name}")
         else:

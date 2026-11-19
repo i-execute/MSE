@@ -75,21 +75,17 @@ def main() -> int:
     menu = run_pty([])
     expect("banner: MSE · Control Center", "MSE · Control Center" in menu, menu[-400:])
     expect("badge line: router/backend/tunnel/bot", all(x in menu for x in ("router:", "backend:", "tunnel:", "bot:")), "")
-    for label in ("Health & Status", "Install / Self-Heal", "Update & Repair", "Service Control",
-                  "Tunnel (tailscale)", "Model, Quota & Keys", "Custom / Advanced Setup",
-                  "Uninstall MSE", "Full Wipe"):
+    for label in ("Health & Status", "Gateway Domain", "Install / Self-Heal", "Service Control",
+                  "Settings & Credentials", "Uninstall MSE"):
         expect("menu item: " + label, label in menu)
     expect("footer: keycaps", "move" in menu and "confirm" in menu)
 
-    settings = run_pty([DOWN] * 5 + [b"\r"])
-    expect("arrow+enter opens Model, Quota & Keys", "Model, Quota & Keys" in settings and "model name" in settings, settings[-600:])
+    domain = run_pty([DOWN] * 1 + [b"\r"])
+    expect("arrow+enter opens Gateway Domain", "Gateway Domain" in domain and "Cloudflared" in domain and "Tailscale" in domain, domain[-600:])
+
+    settings = run_pty([DOWN] * 4 + [b"\r"])
+    expect("arrow+enter opens Settings & Credentials", "Settings & Credentials" in settings and "model name" in settings, settings[-600:])
     expect("settings screen lists the bot token field", "bot token" in settings, "")
-
-    custom = run_pty([DOWN] * 6 + [b"\r"])
-    expect("Custom → Target Paths & Runtime", "Target Paths & Runtime" in custom, custom[-600:])
-
-    wipe = run_pty([DOWN] * 8 + [b"\r"])
-    expect("Full Wipe asks for confirmation", "Confirm Full Wipe" in wipe and "delete MSE completely" in wipe, wipe[-600:])
 
     status = os.popen(sys.executable + " " + str(SCRIPT) + " --status 2>&1").read()
     expect("--status without a tty prints the health", "stack health" in status, status[-400:])

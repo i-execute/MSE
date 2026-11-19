@@ -118,6 +118,7 @@ LIVE_HOST_OK = (
     'example.com', 'example.org', 'example.edu', 'example.net', 'sub.example.edu',
     'school.moodledemo.net', 'moodledemo.net', 'moodle.org', 'moodle.com', 'download.moodle.org',
     'localhost', '127.0.0.1', 'syncshare.ru', 'syncshare.naloaty.me', 'github.com', 'raw.githubusercontent.com',
+    'api.github.com',
     'api.telegram.org', 'tailscale.com', 'registry.npmjs.org', 'cdn.jsdelivr.net', 'fontawesome.com',
     'popper.js.org', 'codepen.io', 'www.w3.org', 'developer.mozilla.org', 'getbootstrap.com',
     'sentry.io', 'ya.ru', 'www.google.com', 'www.example.com', 'api.test', 'moodle.test',

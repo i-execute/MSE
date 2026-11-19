@@ -480,9 +480,13 @@
           return r.json().then(function (j) {
             var d = (j && j.device) || {};
             var headerStatus = r.headers.get('x-mse-status');
-            var effState = headerStatus || (j && j.status) || (j && j.state) || (r.ok ? 'active' : (d.status === 'revoked' ? 'revoked' : 'pending'));
+            var effState = headerStatus || (j && j.status) || (j && j.state) || (d && d.status) || (r.ok ? 'active' : (d.status === 'revoked' ? 'revoked' : 'pending'));
             var meta = self.saveMeta({ device: d, ok: r.ok }, { key: key, moodleId: d.moodleId || moodleId, name: d.name });
             var resObj;
+            var qLeft = (j && j.quota != null) ? j.quota : (d && d.quota != null ? d.quota : null);
+            var qLimit = (j && j.quotaLimit != null) ? j.quotaLimit : 200;
+            var qUsed = (j && j.quotaUsed != null) ? j.quotaUsed : 0;
+            var qResets = (j && (j.resets_after || j.quotaResetsAfter)) || null;
             if (r.status === 401 || effState === 'unregistered' || effState === 'unknown') {
               resObj = { state: 'unregistered', message: 'key is not bound', device: d, meta: meta };
             } else if (effState === 'revoked') {
@@ -490,7 +494,7 @@
             } else if (effState === 'pending') {
               resObj = { state: 'pending', message: 'waiting for approval', device: d, meta: meta };
             } else if (effState === 'active') {
-              resObj = { state: 'active', message: 'key accepted', device: d, meta: meta };
+              resObj = { state: 'active', message: 'key accepted', device: d, meta: meta, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets };
             } else {
               resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta };
             }
@@ -512,6 +516,22 @@
         if (parsed && parsed.key === this.key() && parsed.check) return parsed.check;
       } catch (_) {}
       return null;
+    },
+
+    quota: function () {
+      var self = this;
+      var url = self.url();
+      if (!url) return Promise.resolve({ ok: false, message: 'no gateway' });
+      return tracedFetch(url + '/mse/v1/quota', {
+        method: 'GET',
+        headers: { authorization: 'Bearer ' + self.key(), accept: 'application/json' }
+      }).then(function (r) {
+        return r.json().then(function (j) {
+          return Object.assign({ ok: r.ok, status: r.status }, j);
+        });
+      }, function (err) {
+        return { ok: false, message: err.message };
+      });
     },
 
     /* ---------------- the agent: the question goes out, the chosen answer comes back ---------------- */

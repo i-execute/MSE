@@ -29,7 +29,7 @@ const VENDOR = LAYOUT.VENDOR;
 const OUT = LAYOUT.OUT;
 const SRC = LAYOUT.SRC;
 const BRAND = 'MSE';
-const VERSION = '2.12.0';
+const VERSION = '2.13.0';
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const read = (p) => fs.readFileSync(path.join(VENDOR, p), 'utf8');

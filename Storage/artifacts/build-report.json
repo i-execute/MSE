@@ -1,5 +1,5 @@
 {
-  "version": "2.12.0",
+  "version": "2.13.0",
   "brand": "MSE",
   "base": "2.22.0",
   "bundles": {
@@ -215,13 +215,13 @@
   },
   "pageScripts": {
     "mse-ui": {
-      "bytes": 113325,
-      "sha256": "0bc42709ef7f3a6a522631b7f18b7ebdfa7655c1d53c3c5e3b2c201e835bbaa7",
+      "bytes": 127473,
+      "sha256": "8ace7c1e3ffa5b62c1dd9788ce467deab13043fd0135443c98519ea34ceba4a9",
       "sanitizer": {
         "comments": 84,
-        "strings": 5,
+        "strings": 10,
         "templates": 0,
-        "regexps": 12,
+        "regexps": 14,
         "windowRefs": 0,
         "windowProps": 0
       }
@@ -239,8 +239,8 @@
       }
     },
     "mse-bridge": {
-      "bytes": 30758,
-      "sha256": "5410a20a5a73cbec27b2544d97642ad9c8b7f5c26675c8091ed78e7ed3e0fc06",
+      "bytes": 31744,
+      "sha256": "83860e3b9cee87a68f53f7d4631531f0d81360ce10f71f6e378e75d57909bc97",
       "sanitizer": {
         "comments": 27,
         "strings": 3,
@@ -267,12 +267,12 @@
     "scripts": 1,
     "headers": 1,
     "requires": 0,
-    "bytes": 1672428
+    "bytes": 1687562
   },
   "userscript": {
     "file": "Storage/artifacts/mse.user.js",
-    "bytes": 1676592,
-    "sha256": "d2089be07d96ea99da2b8e967235f5a6d27be2d7b21ba7a3399acffb7ef5f908"
+    "bytes": 1691650,
+    "sha256": "564b0d483e6f8cdb52ee6487ebcd96e98aac660515b8f54586b8223fad8cca2b"
   },
   "sanitizer": {
     "comments": 68,
