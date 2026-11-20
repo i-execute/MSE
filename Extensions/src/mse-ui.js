@@ -114,6 +114,9 @@
     function logAdd(kind, ok, text, extra) {
       var line = { t: Date.now(), kind: kind, ok: ok, text: String(text || '') };
       if (extra && extra.ms != null) line.ms = extra.ms;
+      if (extra && extra.diag) line.diag = String(extra.diag);
+      if (extra && extra.url) line.url = String(extra.url);
+      if (extra && extra.attempt) line.attempt = Number(extra.attempt);
       log.push(line);
       if (log.length > 120) log.splice(0, log.length - 120);
       ls.set(CONFIG.logKey, JSON.stringify(log));
@@ -1915,7 +1918,10 @@
         if (!r.mine && !r.ok) {
           if (epoch === state.modelEpoch && raw === br.url()) state.gatewayModel = null;
           gw.busy = null;
-          logAdd('gateway', false, 'the gateway does not answer: ' + r.message);
+          var msg = r.message || 'the gateway does not answer';
+          var extra = { ms: r.ms, url: r.url || raw, attempt: r.attempt || 1 };
+          if (r.diag) extra.diag = r.diag;
+          logAdd('gateway', false, msg, extra);
           render();
           return null;
         }
@@ -1947,14 +1953,24 @@
           }
           var ms = (res && res.ms != null) ? res.ms : (r && r.ms ? r.ms : 0);
           var statusText = (res.state === 'active' ? 'key accepted' : (res.message || res.state)) + (ms ? ' · ' + ms + ' ms' : '');
-          logAdd('gateway', res.state === 'active', statusText, { ms: ms });
+          var extra = { ms: ms, url: res.url || raw, attempt: res.attempt || 1 };
+          if (res.diag) extra.diag = res.diag;
+          logAdd('gateway', res.state === 'active', statusText, extra);
           render();
           return r;
         });
       }, function (e) {
         gw.busy = null;
-        gw.probe = { ok: false, message: (e && e.message) || 'error' };
-        logAdd('gateway', false, 'the gateway does not answer: ' + ((e && e.message) || 'network'));
+        var isNet = (win.MSEBridge && win.MSEBridge.isLoadFailed) ? win.MSEBridge.isLoadFailed(e) : (e && e.name === 'TypeError');
+        var msg = isNet ? 'gateway unreachable from this network' : ((e && e.message) || 'error');
+        gw.probe = { ok: false, message: msg, netError: isNet };
+        var extra = {
+          ms: null,
+          url: raw,
+          attempt: (e && e.attempt) || 1,
+          diag: isNet ? ('URL: ' + raw + ' · attempt #' + ((e && e.attempt) || 1) + ' · problem with network or VPN (DNS/TCP/TLS blocked)') : ((e && e.message) || 'network')
+        };
+        logAdd('gateway', false, msg, extra);
         render();
         return null;
       });
@@ -2023,22 +2039,31 @@
       frow.appendChild(toggle);
 
       var statusRow = null;
+      var statusHint = null;
       if (gw.check) {
         statusRow = el('div', 'row');
         var isActive = gw.check.state === 'active';
-        statusRow.appendChild(el('span', 'dot ' + (isActive ? 'ok' : 'warn')));
+        var isUnreach = gw.check.state === 'unreachable' || gw.check.netError;
+        statusRow.appendChild(el('span', 'dot ' + (isActive ? 'ok' : (isUnreach ? 'bad' : 'warn'))));
         var msVal = gw.check.ms != null ? gw.check.ms : (gw.probe && gw.probe.ms != null ? gw.probe.ms : null);
         var msPart = msVal != null ? ' · ' + msVal + ' ms' : '';
         var statusText = isActive ? 'key accepted' + msPart : (gw.check.message || 'key not accepted') + msPart;
         statusRow.appendChild(el('span', 'txt', statusText));
+        if (isUnreach) {
+          statusHint = el('div', 'hint', 'problem with network or VPN: disable VPN or use Cloudflare tunnel');
+        }
       } else if (gw.probe) {
         statusRow = el('div', 'row');
         statusRow.appendChild(el('span', 'dot ' + (gw.probe.ok ? 'ok' : 'bad')));
         statusRow.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered · ' + gw.probe.ms + ' ms' : gw.probe.message));
+        if (!gw.probe.ok && (gw.probe.netError || /unreachable|offline/i.test(gw.probe.message))) {
+          statusHint = el('div', 'hint', 'problem with network or VPN: disable VPN or use Cloudflare tunnel');
+        }
       }
       if (statusRow) {
         body.appendChild(N(el('div', 'sec', 'status'), 0));
         body.appendChild(N(statusRow, 1));
+        if (statusHint) body.appendChild(N(statusHint, 1));
       }
 
       if (gw.check && gw.check.state === 'active') {
@@ -2087,14 +2112,20 @@
         var ln = el('div', 'ln ' + (l.ok ? 'ok' : 'warn'));
         ln.appendChild(el('span', 'g'));
         ln.appendChild(el('span', 't', ago(l.t)));
-        ln.appendChild(el('span', 'm', l.text + (l.ms != null ? ' · ' + l.ms + ' ms' : '')));
+        var msg = l.text + (l.ms != null ? ' · ' + l.ms + ' ms' : '');
+        if (l.diag) msg += ' (' + l.diag + ')';
+        ln.appendChild(el('span', 'm', msg));
         box.appendChild(ln);
       });
       body.appendChild(N(box, 1));
       var frow = el('div', 'frow');
       var copy = press(el('button', 'btn solid press', 'Copy'), function () {
         var lines = log.map(function (l) {
-          return new Date(l.t).toISOString() + ' [' + l.kind + '] ' + (l.ok ? 'OK' : 'FAIL') + ': ' + l.text + (l.ms != null ? ' (' + l.ms + ' ms)' : '');
+          var lineStr = new Date(l.t).toISOString() + ' [' + l.kind + '] ' + (l.ok ? 'OK' : 'FAIL') + ': ' + l.text + (l.ms != null ? ' (' + l.ms + ' ms)' : '');
+          if (l.diag) lineStr += ' | diag: ' + l.diag;
+          if (l.url) lineStr += ' | url: ' + l.url;
+          if (l.attempt) lineStr += ' | attempt #' + l.attempt;
+          return lineStr;
         });
         var text = lines.join('\n');
         if (win.MSEBridge) {

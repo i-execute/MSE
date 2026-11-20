@@ -282,6 +282,8 @@ class Bot:
         elif word == "tunnel":
             info = await asyncio.to_thread(tunnel_status, TUNNEL_SCRIPT)
             await self.render(chat_id, 0, screens.tunnel_screen(info))
+        elif word == "doctor":
+            await self.tunnel(chat_id, 0, "doctor")
         elif word == "services":
             await self.render(chat_id, 0, screens.services_screen(await self.snap()))
         elif word == "log":
@@ -449,7 +451,10 @@ class Bot:
                     env_write({"MSE_PUBLIC_URL": text.strip().splitlines()[0]})
                 except OSError as exc:
                     log.debug("could not save the address: %s", exc)
-            await self.render(chat_id, msg_id, screens.tunnel_screen(info, notice=text if ok else "", error="" if ok else text))
+            if action == "doctor":
+                await self.render(chat_id, msg_id, screens.tunnel_screen(info, notice=text))
+            else:
+                await self.render(chat_id, msg_id, screens.tunnel_screen(info, notice=text if ok else "", error="" if ok else text))
             return
         info = await asyncio.to_thread(tunnel_status, TUNNEL_SCRIPT)
         await self.render(chat_id, msg_id, screens.tunnel_screen(info))

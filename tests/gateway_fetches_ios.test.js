@@ -55,7 +55,7 @@ test('Criterion 1 & 2: WebKit/Stay never makes parallel fetches to gateway and r
                 message: 'key accepted',
                 device: { status: 'active', moodleId: '12345' },
                 model: 'test-model',
-                version: '2.13.1'
+                version: '2.14.0'
               }), {
                 status: 200,
                 headers: { 'content-type': 'application/json', 'x-mse-status': 'active' }
@@ -165,7 +165,7 @@ test('Criterion 3: Composite GET /mse/v1/me returns composite payload and client
     assert.equal(me.status, 'active');
     assert.equal(me.state, 'active');
     assert.equal(me.message, 'key accepted');
-    assert.equal(me.version, '2.13.1');
+    assert.equal(me.version, '2.14.0');
     assert.equal(me.schema_layer, 1);
     assert.equal(me.layer, 1);
     assert.ok(me.model, 'Composite response contains model: ' + me.model);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send MSE 2.13.1 delivery files and summary to Telegram owner.
+"""Send MSE 2.14.0 delivery files and summary to Telegram owner.
 Usage:
     MSE_BOT_TOKEN=... python3 tools/send_tg_delivery.py
 """
@@ -19,7 +19,7 @@ ARTIFACTS = ROOT / "Storage" / "artifacts"
 CHAT_ID = os.environ.get("MSE_OWNER_ID") or os.environ.get("TELEGRAM_CHAT_ID") or "7610246474"
 
 def make_delivery_zip() -> Path:
-    zip_path = ARTIFACTS / "MSE-2.13.1.zip"
+    zip_path = ARTIFACTS / "MSE-2.14.0.zip"
     include_dirs = [
         "Extensions/src",
         "Extensions/tools",
@@ -33,12 +33,12 @@ def make_delivery_zip() -> Path:
     include_files = [
         "Storage/artifacts/mse.user.js",
         "Storage/artifacts/build-report.json",
-        "Storage/artifacts/mse-2.13.1.patch",
+        "Storage/artifacts/mse-2.14.0.patch",
         "Storage/get.sh",
         "package.json",
         "package-lock.json",
         "README.md",
-        "RELEASE_2.13.1.md",
+        "RELEASE_2.14.0.md",
         "CHANGES.md",
         "LICENSE",
     ]
@@ -114,15 +114,16 @@ def main():
         print("Delivery archive created successfully at:", zip_path)
         return 0
 
-    report_text = """<b>MSE 2.13.1 Critical Hotfix Delivered</b>
+    report_text = """<b>MSE 2.14.0 «ДОСТУП ИЗ КОРОБКИ» Delivered</b>
 
 <b>Key Highlights:</b>
-• <b>Strict Gateway Fetch Serialization</b>: Removed fetch parallelism to gateway. All requests queued via <code>gatewayQueue</code> (<code>maxInFlight &lt;= 1</code>). Eliminates iOS Safari HTTP/2 multiplexing stream aborts.
-• <b>500ms Single Retry on TypeError</b>: Catches "Load failed" / "Failed to fetch" on first attempt, pauses 500ms, and performs exactly 1 sequential retry.
-• <b>Composite /mse/v1/me</b>: Returns status + active model + model catalog + quota + quotaUsed + quotaLimit + UTC resets countdown + version 2.13.1 + layer 1 in a single JSON response.
-• <b>Single Request Per Cycle</b>: Client makes exactly ONE request to gateway per standard cycle. Redundant /health probe removed from normal flow (reserved solely for manual URL entry).
-• <b>Clean UI & Single Status Row</b>: Single line <code>key accepted · N ms</code> in settings and journal. No simultaneous OK/FAIL rows. Instant cache display on popover open.
-• <b>Full Compatibility & Tests</b>: Automated WebKit concurrency test, retry test, single-request cycle test, UI status test, and 0 audit hits."""
+• <b>Port Persistence Across Reinstalls</b>: <code>install.sh</code> and <code>get.sh</code> preserve <code>MSE_PORT</code> and <code>MSE_UPSTREAM_PORT</code> from <code>/var/lib/mse/state.json</code> and env. Prevents Tailscale edge cache desync. Fresh ports allocated only with <code>--new-ports</code>.
+• <b>Tunnel Doctor (<code>mse-tunnel.sh doctor</code> + Bot/TUI)</b>: Comprehensive diagnosis of DNS (A/AAAA), external 443 latency/RTT, serve/funnel vs MSE_PORT match, and <code>tailscaled</code> journal parsing for drops (<code>no rules matched</code> &amp; <code>TLS EOF from fd7a:</code>). Provides clear verdict and ready-to-paste treatment command (<code>sudo mse-tunnel.sh funnel-reset</code>).
+• <b>Tunnel Auto-Recovery Watchdog</b>: Background watchdog (<code>mse-tunnel.sh watchdog</code>) checks external <code>/health</code> every minute; on 3 consecutive failures automatically resets funnel + restarts tailscaled and logs <code>tunnel watchdog: recovered</code> to <code>mse-router.log</code>.
+• <b>Cloudflared Named Tunnel as Primary Path</b>: Permanent CF Zero Trust tunnel (<code>cloudflared-named &lt;token&gt; &lt;domain&gt;</code>) configured via TUI; quick-tunnel fallback labeled as temporary; Telegram bot alerts owner on URL changes.
+• <b>Client Diagnostics on Network Drops</b>: Replaced raw "Load failed" with <code>gateway unreachable from this network</code> + detailed network log (URL, attempt #, VPN/network explanation: "problem with network or VPN"). Retains 500ms single retry.
+• <b>Known Issues Documentation</b>: Comprehensive «Известные хвори и их лечение» added to <code>README_RU.md</code>, <code>ios_ru.md</code>, and <code>README.md</code>.
+• <b>Audit &amp; Tests</b>: All tests pass (Gateway/Router 23/23, WebKit iOS 11/11, Bot selftest, 2.14 suite 5/5); <code>scripts/audit.py --strict</code> clean 0 hits x3."""
 
     print(f"Sending message to chat {CHAT_ID}...")
     res = call("sendMessage", {"chat_id": CHAT_ID, "text": report_text, "parse_mode": "HTML"})
@@ -134,8 +135,8 @@ def main():
     files_to_send = [
         zip_path,
         ARTIFACTS / "mse.user.js",
-        ARTIFACTS / "mse-2.13.1.patch",
-        ROOT / "RELEASE_2.13.1.md"
+        ARTIFACTS / "mse-2.14.0.patch",
+        ROOT / "RELEASE_2.14.0.md"
     ]
 
     for p in files_to_send:
@@ -143,7 +144,7 @@ def main():
             print(f"File not found: {p}", file=sys.stderr)
             continue
         print(f"Sending {p.name} ({p.stat().st_size} bytes)...")
-        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.13.1 — {p.name}"}, {"document": p})
+        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.14.0 — {p.name}"}, {"document": p})
         if res.get("ok"):
             print(f"Successfully sent {p.name}")
         else:

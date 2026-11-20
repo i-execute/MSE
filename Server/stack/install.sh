@@ -40,11 +40,13 @@ WITH_BOT=1
 WITH_TUNNEL=1
 DRY=0
 UPDATE=0
+NEW_PORTS=0
 
 for arg in "$@"; do
   case "$arg" in
     --yes|-y) ASSUME_YES=1 ;;
     --update|--upgrade) UPDATE=1; ASSUME_YES=1 ;;
+    --new-ports) NEW_PORTS=1 ;;
     --no-venv) WITH_VENV=0 ;;
     --no-bot) WITH_BOT=0 ;;
     --no-tunnel) WITH_TUNNEL=0 ;;
@@ -138,8 +140,9 @@ first_run_dialogue() {
 
   [ "$WITH_TUNNEL" = "1" ] || MSE_TAILSCALE_KEY="${MSE_TAILSCALE_KEY:-skip}"
   [ "$WITH_BOT" = "1" ] || MSE_BOT_TOKEN="${MSE_BOT_TOKEN:-skip}"
+  [ "$WITH_BOT" = "1" ] || MSE_OWNER_ID="${MSE_OWNER_ID:-12345}"
 
-  if valid_token "$MSE_BOT_TOKEN" && valid_owner "$MSE_OWNER_ID" && { [ "$WITH_TUNNEL" != "1" ] || valid_tskey "$MSE_TAILSCALE_KEY"; }; then
+  if { [ "$WITH_BOT" != "1" ] || (valid_token "$MSE_BOT_TOKEN" && valid_owner "$MSE_OWNER_ID"); } && { [ "$WITH_TUNNEL" != "1" ] || valid_tskey "$MSE_TAILSCALE_KEY"; }; then
     say "  keys:      bot token, owner id and tailscale key are already in place"
     return 0
   fi
@@ -329,13 +332,66 @@ pick();
 NODE
 }
 valid_port() { [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )); }
+
+find_existing_ports() {
+  local p_router="" p_upstream=""
+  # 1. Check existing ENV_FILE (/etc/mse/mse.env)
+  if [ -f "$ENV_FILE" ]; then
+    p_router="$(env_get MSE_PORT)"
+    p_upstream="$(env_get MSE_UPSTREAM_PORT)"
+  fi
+
+  # 2. Check state.json in STATE_DIR (/var/lib/mse/state.json)
+  local state_file="$STATE_DIR/state.json"
+  if [ -f "$state_file" ]; then
+    if [ -z "$p_router" ]; then
+      p_router="$("$NODE_BIN" -e 'try { const s = JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); const p = s.settings?.msePort || s.ports?.msePort || s.msePort || s.settings?.port || s.port || ""; if (p) console.log(p); } catch(e){}' "$state_file" 2>/dev/null || true)"
+    fi
+    if [ -z "$p_upstream" ]; then
+      p_upstream="$("$NODE_BIN" -e 'try { const s = JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); const p = s.settings?.upstreamPort || s.ports?.upstreamPort || s.upstreamPort || ""; if (p) console.log(p); } catch(e){}' "$state_file" 2>/dev/null || true)"
+    fi
+  fi
+
+  # 3. Check systemd unit file (/etc/systemd/system/mse-router.service)
+  local unit_file="$UNIT_DIR/mse-router.service"
+  if [ -f "$unit_file" ]; then
+    if [ -z "$p_router" ]; then
+      p_router="$(grep -E 'MSE_PORT=' "$unit_file" 2>/dev/null | head -1 | sed -E 's/.*MSE_PORT=([0-9]+).*/\1/' || true)"
+    fi
+    if [ -z "$p_upstream" ]; then
+      p_upstream="$(grep -E 'MSE_UPSTREAM_PORT=' "$unit_file" 2>/dev/null | head -1 | sed -E 's/.*MSE_UPSTREAM_PORT=([0-9]+).*/\1/' || true)"
+    fi
+  fi
+
+  [ -n "$p_router" ] && [ -z "${MSE_PORT:-}" ] && MSE_PORT="$p_router" || true
+  [ -n "$p_upstream" ] && [ -z "${MSE_UPSTREAM_PORT:-}" ] && MSE_UPSTREAM_PORT="$p_upstream" || true
+  return 0
+}
+
 choose_ports() {
-  MSE_PORT="${MSE_PORT:-$(env_get MSE_PORT)}"
-  MSE_UPSTREAM_PORT="${MSE_UPSTREAM_PORT:-$(env_get MSE_UPSTREAM_PORT)}"
+  if [ "$NEW_PORTS" = "1" ]; then
+    say "  ports:     --new-ports specified, allocating fresh ports"
+    MSE_PORT=""
+    MSE_UPSTREAM_PORT=""
+  else
+    find_existing_ports
+    MSE_PORT="${MSE_PORT:-$(env_get MSE_PORT)}"
+    MSE_UPSTREAM_PORT="${MSE_UPSTREAM_PORT:-$(env_get MSE_UPSTREAM_PORT)}"
+  fi
   if [ -n "$MSE_PORT" ]; then valid_port "$MSE_PORT" || die "invalid MSE_PORT"; MSE_PORT="$((10#$MSE_PORT))"; fi
   if [ -n "$MSE_UPSTREAM_PORT" ]; then valid_port "$MSE_UPSTREAM_PORT" || die "invalid MSE_UPSTREAM_PORT"; MSE_UPSTREAM_PORT="$((10#$MSE_UPSTREAM_PORT))"; fi
-  [ -n "$MSE_PORT" ] || MSE_PORT="$(free_port "$MSE_UPSTREAM_PORT")"
-  [ -n "$MSE_UPSTREAM_PORT" ] || MSE_UPSTREAM_PORT="$(free_port "$MSE_PORT")"
+  if [ -n "$MSE_PORT" ]; then
+    say "  ports:     reusing existing router port $MSE_PORT"
+  else
+    MSE_PORT="$(free_port "$MSE_UPSTREAM_PORT")"
+    say "  ports:     allocated router port $MSE_PORT"
+  fi
+  if [ -n "$MSE_UPSTREAM_PORT" ]; then
+    say "  ports:     reusing existing backend port $MSE_UPSTREAM_PORT"
+  else
+    MSE_UPSTREAM_PORT="$(free_port "$MSE_PORT")"
+    say "  ports:     allocated backend port $MSE_UPSTREAM_PORT"
+  fi
   [ "$MSE_PORT" != "$MSE_UPSTREAM_PORT" ] || die "router and backend ports must differ"
 }
 
@@ -478,6 +534,34 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 UNIT
+
+  cat > $UNIT_DIR/mse-watchdog.service <<UNIT
+[Unit]
+Description=MSE tunnel auto-recovery watchdog
+After=network-online.target mse-router.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-$ENV_FILE
+Environment=HOME=$STATE_DIR
+Environment=MSE_DATA_DIR=$STATE_DIR
+Environment=MSE_STATE_DIR=$STATE_DIR
+WorkingDirectory=$PREFIX
+ExecStart=$PREFIX/stack/mse-tunnel.sh watchdog --once
+UNIT
+
+  cat > $UNIT_DIR/mse-watchdog.timer <<UNIT
+[Unit]
+Description=Run MSE tunnel watchdog every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target
+UNIT
 }
 
 prepare_data_dir() {
@@ -499,6 +583,10 @@ start_services() {
   run systemctl daemon-reload
   run systemctl enable mse-router.service >/dev/null 2>&1 || true
   run systemctl restart mse-router.service || note "mse-router did not start: journalctl -u mse-router -n 40"
+  if [ "$DRY" = "1" ]; then
+    say "  [dry] would check router health"
+    return 0
+  fi
   # the router is the health probe the panel and the bot read: give it a moment, then say what really happened
   if have curl; then
     ready=0
@@ -523,6 +611,8 @@ start_services() {
     note "one step to fix it:  MSE_BOT_TOKEN=1234567890:AAH... bash $PREFIX/stack/install.sh --update --yes"
     note "or from the panel:   sudo mse  ->  Keys  ->  bot token"
   fi
+  run systemctl enable mse-watchdog.timer >/dev/null 2>&1 || true
+  run systemctl restart mse-watchdog.timer >/dev/null 2>&1 || true
 }
 
 # ------------------------------------------------------------------ tunnel

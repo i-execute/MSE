@@ -1,4 +1,4 @@
-# Руководство пользователя и администратора MSE (версия 2.13.0)
+# Руководство пользователя и администратора MSE (версия 2.14.0)
 
 MSE — это автономный комплекс для прохождения тестирования в системе дистанционного обучения Moodle, состоящий из клиентского расширения-юзерскрипта и серверного шлюза (Gateway).
 
@@ -10,7 +10,7 @@ MSE — это автономный комплекс для прохождени
 
 ```
 [ Браузер: Safari / Chrome / Firefox ]
-       │  (HTTPS через туннель Cloudflared или Tailscale)
+       │  (HTTPS через Cloudflare Named/Quick Tunnel или Tailscale Funnel)
        ▼
 [ MSE Gateway: mse-router.js ] ── /etc/mse/mse.env
        │  (локальный loopback 127.0.0.1:UPSTREAM_PORT)
@@ -85,7 +85,45 @@ curl -fsSL https://raw.githubusercontent.com/i-execute/MSE/main/Storage/get.sh |
 
 ---
 
-## 5. Дополнительная документация
+## 5. Известные хвори и их лечение (Troubleshooting)
+
+В версии 2.14.0 («Доступ из коробки») добавлены средства самодиагностики и автоисправления распространенных сетевых проблем:
+
+### 1. ts.net-funnel после переустановки: дропы «no rules matched»
+- **Причина:** При переустановке на новый порт edge-кэш Tailscale Funnel продолжает пересылать внешние HTTPS-пакеты на старый локальный порт. Локальный демон сбрасывает их с ошибкой `packet drop: ... no rules matched`.
+- **Профилактика в MSE 2.14:** Установщик по умолчанию сохраняет текущие порты (`MSE_PORT` и `MSE_UPSTREAM_PORT`) из `/var/lib/mse/state.json` и `/etc/mse/mse.env`. Новые случайные порты генерируются только при явном флаге `--new-ports`.
+- **Быстрое лечение:**
+  ```bash
+  # Проверить диагноз:
+  sudo mse-tunnel.sh doctor
+  # Выполнить сброс правил funnel и перезапуск:
+  sudo mse-tunnel.sh funnel-reset
+  ```
+  Или вручную:
+  ```bash
+  tailscale serve reset && tailscale funnel off && tailscale funnel --bg $MSE_PORT && sudo systemctl restart tailscaled
+  ```
+
+### 2. Funnel TLS залипает после re-login
+- **Симптом:** Внешние запросы к `https://<node>.ts.net` зависают или завершаются ошибкой `TLS: EOF from fd7a:`.
+- **Лечение:** `sudo systemctl restart tailscaled`.
+- **Автоматический Watchdog:** На сервере запущен watchdog-юнит (`mse-watchdog.timer`), проверяющий `/health` каждую минуту. При 3 сбоях подряд он автоматически выполняет сброс туннеля, перезапускает службу и пишет в `/var/lib/mse/mse-router.log`: `tunnel watchdog: recovered`.
+
+### 3. iOS Safari + VPN обрывает fetch к нестандартным доменам
+- **Симптом:** В расширении статус `gateway unreachable from this network` (вместо непонятного браузерного `TypeError: Load failed`), тогда как с сервера curl отвечает `200 OK`.
+- **Причина:** Многие VPN-клиенты и профили на iOS/iPadOS перехватывают или блокируют сетевые запросы из контекста расширений WebKit к доменам `*.ts.net` и `*.trycloudflare.com`.
+- **Лечение:**
+  1. Временно отключить VPN или добавить домен шлюза в исключения VPN-туннеля.
+  2. Использовать постоянный **Cloudflare Named Tunnel** с личным доменом (`sudo mse` -> `Gateway Domain` -> `Cloudflared (Named Tunnel)`).
+  3. Открыть вкладку `Journal` (журнал) в расширении для просмотра детального лога попыток и диагностики.
+
+### 4. Мобильный IPv6 + ts.net edge
+- **Симптом:** На мобильных операторах при работе через IPv6 соединение с сервером может периодически обрываться.
+- **Лечение:** Команда `sudo mse-tunnel.sh doctor` проверяет доступность записей A (IPv4) и AAAA (IPv6). При странностях в мобильной сети проверьте доступность по IPv4 (`curl -4`) или переключитесь на Wi-Fi.
+
+---
+
+## 6. Дополнительная документация
 
 Подробные инструкции по клиентам и архитектуре:
 - [Установка на iOS / iPadOS](ios_ru.md)

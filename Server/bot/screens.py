@@ -81,7 +81,7 @@ def home(snap: dict[str, Any], notice: str = "") -> Rich:
     subtitle = muted("Moodle answer panel " + SEP + " router, AI backend, tailscale, telegram")
     if not router_ok:
         subtitle = status_chip(False, "router is not answering") + " " + muted(SEP + " everything below may be stale")
-    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.13.1"), icon="bot")
+    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.14.0"), icon="bot")
 
 
 def _pending_list(devices: list[dict[str, Any]]) -> str:
@@ -271,6 +271,7 @@ def tunnel_screen(info: dict[str, Any], notice: str = "", error: str = "") -> Ri
         blocks.append(row(link_button("open /health", url.rstrip("/") + "/health", icon="world")))
 
     buttons = [
+        row(button("doctor", "tunnel:doctor", icon="health"), button("reset", "tunnel:funnel-reset", icon="refresh")),
         row(button("tailscale up", "tunnel:up", icon="plug"), button("funnel", "tunnel:funnel", icon="world")),
         row(button("serve", "tunnel:serve", icon="route"), button("turn off", "tunnel:off", icon="stop")),
         row(button("refresh", "tunnel:show", icon="refresh"), button("back", "home", icon="back")),

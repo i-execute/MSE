@@ -175,13 +175,13 @@ def tunnel_status(script: str = "/usr/local/bin/mse-tunnel.sh", timeout: float =
 
 
 def tunnel_do(action: str, script: str = "/usr/local/bin/mse-tunnel.sh", port: int | None = None, timeout: float = 120.0) -> tuple[bool, str]:
-    """funnel | serve | off. Returns (ok, text): the address when it came up, the reason when it did not."""
+    """funnel | serve | off | doctor | funnel-reset. Returns (ok, text): the address when it came up, the reason when it did not."""
     args = [script, action]
-    if action in ("funnel", "serve") and port:
+    if action in ("funnel", "serve", "funnel-reset") and port:
         args.append(str(port))
     try:
         out = subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
     except (OSError, subprocess.SubprocessError) as exc:
         return False, str(exc)
     text = (out.stdout or "").strip() or (out.stderr or "").strip()
-    return out.returncode == 0, text[:300]
+    return out.returncode == 0, text[:800]

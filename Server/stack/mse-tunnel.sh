@@ -17,6 +17,11 @@
 #   mse-tunnel.sh up [--exit-node]        tailscale up with the auth key from the env file
 #   mse-tunnel.sh funnel <port>           https funnel to the local port (public address)
 #   mse-tunnel.sh serve <port>            https inside the tailnet only
+#   mse-tunnel.sh funnel-reset [port]     reset serve/funnel mappings and restart tailscaled
+#   mse-tunnel.sh doctor [--json]         diagnose DNS, edge 443, port match, and journal drops
+#   mse-tunnel.sh watchdog [--once]       auto-recover tunnel on 3 consecutive /health failures
+#   mse-tunnel.sh cloudflared-named <tok> run permanent Cloudflare tunnel using account token
+#   mse-tunnel.sh cloudflared [port]      run temporary Cloudflare quick-tunnel
 #   mse-tunnel.sh off                     stop the funnel, keep the node in the tailnet
 #   mse-tunnel.sh status [--json]         what is on, and which address it answers on
 #   mse-tunnel.sh url                     just the address (empty if there is none yet)
@@ -101,6 +106,8 @@ cmd_cf_install() {
 cmd_cf_run() {
   local port="${1:-$GATEWAY_PORT}"
   [ -n "$port" ] || die "MSE_PORT is not configured"
+  note "warning: trycloudflare.com provides a temporary dynamic URL that changes on restart"
+  note "for a permanent address, use: mse-tunnel.sh cloudflared-named <token> <domain>"
   local cf_path
   cf_path="$(command -v "$CF_BIN" 2>/dev/null || true)"
   if [ -z "$cf_path" ]; then
@@ -110,7 +117,7 @@ cmd_cf_run() {
   [ -n "$cf_path" ] || die "cloudflared is not installed: mse-tunnel.sh cloudflared-install"
   mkdir -p "$STATE_DIR" 2>/dev/null || true
   local log_file="$STATE_DIR/cloudflared.log"
-  pkill -f "cloudflared tunnel --url" 2>/dev/null || true
+  pkill -f "cloudflared tunnel" 2>/dev/null || true
   nohup "$cf_path" tunnel --url "http://127.0.0.1:$port" >"$log_file" 2>&1 &
   local url="" waited=0 max_wait=25
   while [ "$waited" -lt "$max_wait" ]; do
@@ -124,28 +131,77 @@ cmd_cf_run() {
   [ -n "$url" ] || die "cloudflared did not provide a URL within ${max_wait}s"
   local prev_url
   prev_url="$(env_get MSE_PUBLIC_URL)"
-  write_state_cf "cloudflared" "$port" "$url"
+  write_state_cf "cloudflared-quick" "$port" "$url"
   if [ "$prev_url" != "$url" ]; then
-    cmd_notify_bot "🌐 Gateway URL updated:
+    cmd_notify_bot "🌐 Gateway URL updated (Cloudflare Quick Tunnel — temporary):
 $url"
   fi
   say "$url"
 }
 
+cmd_cf_named() {
+  local token="${1:-$(env_get MSE_CF_TOKEN)}"
+  local domain="${2:-$(env_get MSE_CF_DOMAIN)}"
+  local port="${3:-$GATEWAY_PORT}"
+  [ -n "$token" ] || die "Cloudflare tunnel token required (pass as argument or set MSE_CF_TOKEN)"
+  [ -n "$port" ] || die "MSE_PORT is not configured"
+
+  if [ -z "$domain" ]; then
+    domain="$(env_get MSE_PUBLIC_URL)"
+  fi
+  if [ -n "$domain" ] && [[ ! "$domain" =~ ^https?:// ]]; then
+    domain="https://$domain"
+  fi
+  [ -n "$domain" ] || die "Tunnel domain required (e.g. gateway.example.com or https://gateway.example.com)"
+
+  local cf_path
+  cf_path="$(command -v "$CF_BIN" 2>/dev/null || true)"
+  if [ -z "$cf_path" ]; then
+    [ -x "/usr/local/bin/cloudflared" ] && cf_path="/usr/local/bin/cloudflared"
+    [ -x "/opt/mse/bin/cloudflared" ] && cf_path="/opt/mse/bin/cloudflared"
+  fi
+  if [ -z "$cf_path" ]; then
+    cmd_cf_install
+    cf_path="/usr/local/bin/cloudflared"
+    [ -x "$cf_path" ] || cf_path="/opt/mse/bin/cloudflared"
+  fi
+  [ -n "$cf_path" ] && [ -x "$cf_path" ] || die "cloudflared binary not found"
+
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+  local log_file="$STATE_DIR/cloudflared-named.log"
+  pkill -f "cloudflared tunnel" 2>/dev/null || true
+  nohup "$cf_path" tunnel --no-autoupdate run --token "$token" >"$log_file" 2>&1 &
+  sleep 2
+
+  if ! pgrep -f "cloudflared tunnel" >/dev/null 2>&1; then
+    note "warning: cloudflared process did not stay running, see $log_file"
+  fi
+
+  local prev_url
+  prev_url="$(env_get MSE_PUBLIC_URL)"
+  write_state_cf "cloudflared-named" "$port" "$domain" "$token"
+  if [ "$prev_url" != "$domain" ]; then
+    cmd_notify_bot "🌐 Gateway URL updated (Cloudflare Named Tunnel — permanent):
+$domain"
+  fi
+  say "$domain"
+}
+
 cmd_cf_off() {
-  pkill -f "cloudflared tunnel --url" 2>/dev/null || true
+  pkill -f "cloudflared tunnel" 2>/dev/null || true
   write_state_cf off "$GATEWAY_PORT" ""
   say "cloudflared is off"
 }
 
 write_state_cf() {
-  local mode="$1" port="$2" url="$3"
+  local mode="$1" port="$2" url="$3" token="${4:-}"
   mkdir -p "$STATE_DIR" 2>/dev/null || true
-  python3 - "$TUNNEL_BACKEND_FILE" "$mode" "$port" "$url" <<'PY' 2>/dev/null || true
+  python3 - "$TUNNEL_BACKEND_FILE" "$mode" "$port" "$url" "$token" <<'PY' 2>/dev/null || true
 import json,sys,datetime
-path,mode,port,url=sys.argv[1:5]
+path,mode,port,url,token=sys.argv[1:6]
 rec={"backend":"cloudflared","mode":mode,"port":int(port or 0),"url":url,
      "at":datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00","Z")}
+if token: rec["token"]=token
 try:
     old=json.load(open(path))
     if isinstance(old,dict): rec={**old,**rec}
@@ -153,16 +209,19 @@ except Exception:
     pass
 json.dump(rec,open(path,"w"),indent=1)
 PY
-  if [ -f "$ENV_FILE" ] && [ -n "$url" ]; then
-    python3 - "$ENV_FILE" "MSE_PUBLIC_URL" "$url" <<'PY' 2>/dev/null || true
+  if [ -f "$ENV_FILE" ]; then
+    python3 - "$ENV_FILE" "MSE_PUBLIC_URL" "$url" "MSE_CF_TOKEN" "$token" <<'PY' 2>/dev/null || true
 import sys
-path,key,value=sys.argv[1:4]
+path,k1,v1,k2,v2=sys.argv[1:6]
 try:
     lines=open(path).read().splitlines()
 except Exception:
     lines=[]
-out=[l for l in lines if not l.startswith(key+"=")]
-out.append(f'{key}={value}')
+keys={k1:v1}
+if v2: keys[k2]=v2
+out=[l for l in lines if not any(l.startswith(k+"=") for k in keys)]
+for k,v in keys.items():
+    if v: out.append(f'{k}={v}')
 open(path,"w").write("\n".join(out)+"\n")
 PY
   fi
@@ -288,13 +347,16 @@ cmd_off() {
 
 cmd_url() {
   if [ -f "$TUNNEL_BACKEND_FILE" ]; then
-    python3 -c '
+    local u
+    u="$(python3 -c '
 import json,sys
 try: print(json.load(open(sys.argv[1])).get("url") or "")
 except Exception: print("")
-' "$TUNNEL_BACKEND_FILE"
-    return 0
+' "$TUNNEL_BACKEND_FILE")"
+    if [ -n "$u" ]; then printf '%s\n' "$u"; return 0; fi
   fi
+  local env_u; env_u="$(env_get MSE_PUBLIC_URL)"
+  if [ -n "$env_u" ]; then printf '%s\n' "$env_u"; return 0; fi
   local host; host="$(dns_name)"
   [ -n "$host" ] && printf 'https://%s\n' "$host" || true
 }
@@ -444,13 +506,343 @@ cmd_wait() {
   return 1
 }
 
+cmd_funnel_reset() {
+  local port="${1:-$GATEWAY_PORT}"
+  [ -n "$port" ] || die "MSE_PORT is not configured"
+  say "funnel reset: resetting serve and funnel mappings..."
+  ts serve reset 2>/dev/null || true
+  ts funnel --bg "$port" off 2>/dev/null || ts funnel off 2>/dev/null || true
+  sleep 1
+  ts funnel --bg --yes "$port" 2>/dev/null || ts funnel --bg "$port" 2>/dev/null || true
+  if have systemctl; then
+    say "restarting tailscaled to clear stale socket connections..."
+    systemctl restart tailscaled 2>/dev/null || true
+  fi
+  local host; host="$(dns_name)"
+  local url="https://$host"
+  write_state funnel "$port" "$url"
+  say "funnel reset complete: $url"
+}
+
+log_to_router() {
+  local msg="$1"
+  local log_file="$STATE_DIR/mse-router.log"
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+  local ts
+  ts="$(python3 -c 'import datetime; print(datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00","Z"))' 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '[%s] [INFO] [watchdog] %s\n' "$ts" "$msg" >> "$log_file" 2>/dev/null || true
+  say "tunnel watchdog: $msg"
+}
+
+cmd_watchdog() {
+  local once=0 interval=60
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --once) once=1; shift ;;
+      --interval) interval="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  local watchdog_state_file="$STATE_DIR/watchdog.json"
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+
+  watchdog_step() {
+    local url; url="$(cmd_url)"
+    if [ -z "$url" ]; then
+      return 0
+    fi
+    local prev_fails=0
+    if [ -f "$watchdog_state_file" ]; then
+      prev_fails="$(python3 -c 'import json,sys; print(int(json.load(open(sys.argv[1])).get("failures", 0)))' "$watchdog_state_file" 2>/dev/null || echo 0)"
+    fi
+    local health_code=0
+    if have curl; then
+      health_code="$(curl -k -fsS -o /dev/null -w "%{http_code}" --max-time 8 "$url/health" 2>/dev/null || echo 0)"
+    fi
+    local now_ts
+    now_ts="$(python3 -c 'import datetime; print(datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00","Z"))' 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+    if [ "$health_code" = "200" ]; then
+      python3 - "$watchdog_state_file" "0" "ok" "$url" "$now_ts" <<'PY' 2>/dev/null || true
+import json,sys
+path,fails,status,url,at=sys.argv[1:6]
+json.dump({"failures":int(fails),"status":status,"url":url,"at":at}, open(path,"w"), indent=1)
+PY
+      return 0
+    fi
+
+    local fails=$((prev_fails + 1))
+    python3 - "$watchdog_state_file" "$fails" "fail" "$url" "$now_ts" <<'PY' 2>/dev/null || true
+import json,sys
+path,fails,status,url,at=sys.argv[1:6]
+json.dump({"failures":int(fails),"status":status,"url":url,"at":at}, open(path,"w"), indent=1)
+PY
+
+    if [ "$fails" -ge 3 ]; then
+      log_to_router "tunnel watchdog: recovered"
+      local backend="tailscale"
+      if [ -f "$TUNNEL_BACKEND_FILE" ]; then
+        backend="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("backend","tailscale"))' "$TUNNEL_BACKEND_FILE" 2>/dev/null || echo tailscale)"
+      fi
+      if [ "$backend" = "cloudflared" ]; then
+        local mode="cloudflared-quick"
+        if [ -f "$TUNNEL_BACKEND_FILE" ]; then
+          mode="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("mode","cloudflared-quick"))' "$TUNNEL_BACKEND_FILE" 2>/dev/null || echo cloudflared-quick)"
+        fi
+        if [ "$mode" = "cloudflared-named" ]; then
+          cmd_cf_named "$(env_get MSE_CF_TOKEN)" "$(env_get MSE_CF_DOMAIN)" "$GATEWAY_PORT" >/dev/null 2>&1 || true
+        else
+          cmd_cf_run "$GATEWAY_PORT" >/dev/null 2>&1 || true
+        fi
+      else
+        cmd_funnel_reset "$GATEWAY_PORT" >/dev/null 2>&1 || true
+      fi
+      python3 - "$watchdog_state_file" "0" "recovered" "$url" "$now_ts" <<'PY' 2>/dev/null || true
+import json,sys
+path,fails,status,url,at=sys.argv[1:6]
+json.dump({"failures":int(fails),"status":status,"url":url,"recovered_at":at}, open(path,"w"), indent=1)
+PY
+    fi
+  }
+
+  if [ "$once" = "1" ]; then
+    watchdog_step
+    return 0
+  fi
+
+  while true; do
+    watchdog_step || true
+    sleep "$interval"
+  done
+}
+
+cmd_doctor() {
+  local json=0 log_file="${MSE_DOCTOR_LOG:-}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) json=1; shift ;;
+      --log-file) log_file="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  local url; url="$(cmd_url)"
+  [ -n "$url" ] || url="$(env_get MSE_PUBLIC_URL)"
+  local backend="none"
+  if [ -f "$TUNNEL_BACKEND_FILE" ]; then
+    backend="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("backend","tailscale"))' "$TUNNEL_BACKEND_FILE" 2>/dev/null || echo tailscale)"
+  elif [[ "$url" =~ \.ts\.net ]]; then
+    backend="tailscale"
+  elif [[ "$url" =~ \.trycloudflare\.com ]] || [[ "$url" =~ \.cloudflare ]]; then
+    backend="cloudflared"
+  elif have "$TS_BIN"; then
+    backend="tailscale"
+  fi
+
+  local journal_logs=""
+  if [ -n "$log_file" ] && [ -f "$log_file" ]; then
+    journal_logs="$(cat "$log_file")"
+  elif have journalctl; then
+    journal_logs="$(journalctl -u tailscaled -n 250 --no-pager 2>/dev/null || true)"
+  fi
+
+  local serve_status=""
+  if [ "$backend" = "tailscale" ] && have "$TS_BIN"; then
+    serve_status="$(ts serve status --json 2>/dev/null || ts serve status 2>/dev/null || true)"
+  fi
+
+  local cf_running=0
+  if pgrep -f "cloudflared tunnel" >/dev/null 2>&1; then
+    cf_running=1
+  fi
+
+  JOURNAL_LOGS_RAW="$journal_logs" SERVE_STATUS_RAW="$serve_status" python3 - "$json" "$backend" "$url" "$GATEWAY_PORT" "$cf_running" <<'PY'
+import sys, json, socket, subprocess, re, urllib.parse, os
+
+json_mode = (sys.argv[1] == "1")
+backend = sys.argv[2]
+url = sys.argv[3]
+gateway_port = int(sys.argv[4]) if sys.argv[4].isdigit() else 0
+cf_running = (sys.argv[5] == "1")
+
+domain = ""
+if url:
+    try:
+        domain = urllib.parse.urlparse(url).netloc.split(':')[0]
+    except Exception:
+        domain = url.replace('https://','').replace('http://','').split('/')[0]
+
+dns_v4, dns_v6 = [], []
+if domain:
+    try:
+        for res in socket.getaddrinfo(domain, 443, socket.AF_INET):
+            ip = res[4][0]
+            if ip not in dns_v4: dns_v4.append(ip)
+    except Exception:
+        pass
+    try:
+        for res in socket.getaddrinfo(domain, 443, socket.AF_INET6):
+            ip = res[4][0]
+            if ip not in dns_v6: dns_v6.append(ip)
+    except Exception:
+        pass
+
+http_ok = False
+http_code = 0
+latency = 0.0
+http_err = ""
+if url:
+    health_url = url.rstrip('/') + '/health'
+    try:
+        proc = subprocess.run(
+            ['curl', '-k', '-fsS', '-o', '/dev/null', '-w', '%{http_code}:%{time_total}', '--max-time', '6', health_url],
+            capture_output=True, text=True, timeout=8
+        )
+        if proc.returncode == 0:
+            parts = proc.stdout.strip().split(':')
+            http_code = int(parts[0]) if parts[0].isdigit() else 200
+            latency = float(parts[1]) if len(parts) > 1 else 0.0
+            http_ok = (http_code == 200)
+        else:
+            http_err = proc.stderr.strip()[:100] or "connection failed"
+    except Exception as e:
+        http_err = str(e)
+
+port_match = True
+funnel_port = None
+serve_raw = os.environ.get("SERVE_STATUS_RAW", "")
+if serve_raw:
+    m = re.findall(r'127\.0\.0\.1:([0-9]+)', serve_raw)
+    if m:
+        funnel_port = int(m[0])
+        if gateway_port and funnel_port != gateway_port:
+            port_match = False
+
+journal_raw = os.environ.get("JOURNAL_LOGS_RAW", "")
+drops = []
+tls_eofs = []
+if journal_raw:
+    for line in journal_raw.splitlines():
+        line_clean = line.strip()
+        if "no rules matched" in line_clean:
+            drops.append(line_clean)
+        elif ("TLS" in line_clean or "handshake" in line_clean) and ("EOF" in line_clean or "eof" in line_clean) and "fd7a:" in line_clean:
+            tls_eofs.append(line_clean)
+        elif "TLS: EOF from fd7a:" in line_clean or "EOF from fd7a:" in line_clean:
+            tls_eofs.append(line_clean)
+
+ok = True
+verdict = "healthy"
+diagnosis = "Все проверки пройдены: DNS резолвится, порт совпадает, внешний 443 отвечает."
+command = ""
+
+if backend == "tailscale":
+    has_drops = (len(drops) > 0 or len(tls_eofs) > 0)
+    if has_drops or (port_match is False) or (not http_ok and has_drops):
+        ok = False
+        verdict = "ts.net-edge протух, сделай funnel reset"
+        reasons = []
+        if not port_match and funnel_port:
+            reasons.append(f"порт funnel ({funnel_port}) не совпадает с портом роутера ({gateway_port})")
+        if drops:
+            reasons.append(f"в журнале tailscaled {len(drops)} дропов 'no rules matched'")
+        if tls_eofs:
+            reasons.append(f"в журнале {len(tls_eofs)} TLS EOF от прокси fd7a:")
+        if not http_ok:
+            reasons.append(f"внешний 443 не отвечает ({http_err or http_code})")
+        diagnosis = "Обнаружены неполадки edge-кэша: " + "; ".join(reasons)
+        command = f"sudo mse-tunnel.sh funnel-reset {gateway_port}"
+    elif not dns_v4 and not dns_v6 and domain:
+        ok = False
+        verdict = "DNS не резолвит имя туннеля"
+        diagnosis = f"Для домена {domain} не найдены записи A/AAAA."
+        command = f"sudo mse-tunnel.sh up && sudo mse-tunnel.sh funnel {gateway_port}"
+    elif not http_ok:
+        ok = False
+        verdict = "Внешний 443 не отвечает"
+        diagnosis = f"Запрос к {url}/health вернул {http_code or http_err}"
+        command = f"sudo mse-tunnel.sh funnel-reset {gateway_port}"
+    else:
+        diagnosis = f"DNS A/AAAA в норме (v4: {len(dns_v4)}, v6: {len(dns_v6)}), 443 ответил за {latency:.3f}s, порты совпадают, дропов нет."
+elif backend == "cloudflared":
+    if not cf_running:
+        ok = False
+        verdict = "cloudflared не запущен"
+        diagnosis = "Процесс cloudflared отсутствует в системе."
+        command = f"sudo mse-tunnel.sh cloudflared {gateway_port}"
+    elif not http_ok:
+        ok = False
+        verdict = "Cloudflare Edge не отвечает"
+        diagnosis = f"Запрос к {url}/health вернул {http_code or http_err}"
+        command = f"sudo mse-tunnel.sh cloudflared {gateway_port}"
+    else:
+        diagnosis = f"Cloudflared активен, DNS доступен, 443 ответил за {latency:.3f}s."
+else:
+    ok = False
+    verdict = "Туннель не настроен"
+    diagnosis = "Активный туннель отсутствует."
+    command = f"sudo mse-tunnel.sh funnel {gateway_port}"
+
+result = {
+    "ok": ok,
+    "verdict": verdict,
+    "diagnosis": diagnosis,
+    "command": command,
+    "backend": backend,
+    "domain": domain,
+    "url": url,
+    "checks": {
+        "dns_v4": dns_v4,
+        "dns_v6": dns_v6,
+        "http_443": http_ok,
+        "http_code": http_code,
+        "latency": latency,
+        "port_match": port_match,
+        "funnel_port": funnel_port,
+        "router_port": gateway_port,
+        "drops_count": len(drops),
+        "tls_eof_count": len(tls_eofs),
+        "cf_running": cf_running
+    }
+}
+
+if json_mode:
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+else:
+    print("Tunnel Doctor:")
+    print(f"  Backend:      {backend}")
+    print(f"  Domain:       {domain or '—'}")
+    print(f"  DNS A (v4):   {', '.join(dns_v4) if dns_v4 else ('none' if domain else '—')}")
+    print(f"  DNS AAAA (v6):{', '.join(dns_v6) if dns_v6 else ('none' if domain else '—')}")
+    lat_str = f" ({latency:.3f}s)" if http_ok else ""
+    http_stat = f"{http_code} OK{lat_str}" if http_ok else f"FAIL ({http_err or http_code or 'no response'})"
+    print(f"  Edge 443:     {http_stat}")
+    if backend == "tailscale":
+        pm_str = "OK" if port_match else f"MISMATCH (funnel={funnel_port}, router={gateway_port})"
+        print(f"  Port match:   {pm_str}")
+        print(f"  Log drops:    {len(drops)} 'no rules matched', {len(tls_eofs)} TLS EOF from fd7a:")
+    elif backend == "cloudflared":
+        print(f"  CF process:   {'running' if cf_running else 'stopped'}")
+    print("  " + "-" * 56)
+    print(f"  ВЕРДИКТ:      {verdict}")
+    print(f"  ДИАГНОЗ:      {diagnosis}")
+    if command:
+        print(f"  ЛЕЧЕНИЕ:      {command}")
+PY
+}
+
 main() {
   local cmd="${1:-status}"; shift || true
   case "$cmd" in
     install) cmd_install ;;
     cloudflared-install|cf-install) cmd_cf_install ;;
-    cloudflared|cf) cmd_cf_run "${1:-$GATEWAY_PORT}" ;;
+    cloudflared-named|cf-named) cmd_cf_named "$@" ;;
+    cloudflared|cf|cloudflared-quick|cf-quick) cmd_cf_run "${1:-$GATEWAY_PORT}" ;;
     cloudflared-off|cf-off) cmd_cf_off ;;
+    funnel-reset|reset) cmd_funnel_reset "${1:-$GATEWAY_PORT}" ;;
+    watchdog) cmd_watchdog "$@" ;;
+    doctor) cmd_doctor "$@" ;;
     notify) cmd_notify_bot "$*" ;;
     up) cmd_up "$@" ;;
     funnel) cmd_funnel "${1:-$GATEWAY_PORT}" ;;
@@ -460,7 +852,7 @@ main() {
     status|state) cmd_status "$@" ;;
     wait) cmd_wait "$@" ;;
     dns) dns_name ;;
-    *) die "unknown command: $cmd (install|cloudflared-install|cloudflared|cloudflared-off|notify|up|funnel|serve|off|url|status|wait|dns)" ;;
+    *) die "unknown command: $cmd (install|cloudflared-install|cloudflared-named|cloudflared|cloudflared-off|funnel-reset|watchdog|doctor|notify|up|funnel|serve|off|url|status|wait|dns)" ;;
   esac
 }
 main "$@"

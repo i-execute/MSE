@@ -48,7 +48,7 @@ process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
 process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
 const PORT = Number(process.env.MSE_PORT);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.13.1';
+const VERSION = '2.14.0';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
 const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
@@ -164,6 +164,8 @@ function loadState() {
         dumpNotifications: Array.isArray(parsed.dumpNotifications) ? parsed.dumpNotifications : [],
         settings: parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : {}
       };
+      if (Number.isFinite(PORT) && PORT > 0) state.settings.msePort = PORT;
+      if (Number.isFinite(UPSTREAM_PORT) && UPSTREAM_PORT > 0) state.settings.upstreamPort = UPSTREAM_PORT;
       const q = Number(state.settings.dailyQuota);
       if (Number.isFinite(q) && q >= 0) CFG.dailyQuota = Math.floor(q);
       const envModel = String(process.env.MSE_MODEL || '').trim();

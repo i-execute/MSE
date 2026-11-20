@@ -273,7 +273,7 @@
     if (!err) return false;
     if (err.name === 'TypeError') return true;
     var msg = String(err.message || '');
-    return /load failed|failed to fetch|network request failed/i.test(msg);
+    return /load failed|failed to fetch|network request failed|gateway unreachable/i.test(msg);
   }
 
   function gatewayFetch(url, options, retryCount) {
@@ -287,7 +287,13 @@
         gatewayInFlight--;
         if (attempt === 0 && isLoadFailed(err)) {
           if (window.__mse && window.__mse.onDebugTraffic) {
-            window.__mse.onDebugTraffic({ event: 'retry_load_failed', url: String(url), delay: 500 });
+            window.__mse.onDebugTraffic({
+              event: 'retry_load_failed',
+              url: String(url),
+              attempt: 1,
+              delay: 500,
+              diag: 'gateway unreachable from this network (VPN or DNS/TLS drop), retrying...'
+            });
           }
           return new Promise(function (resolve) {
             setTimeout(resolve, 500);
@@ -298,9 +304,25 @@
               return res2;
             }, function (err2) {
               gatewayInFlight--;
+              if (isLoadFailed(err2)) {
+                var wrapped = new TypeError('gateway unreachable from this network');
+                wrapped.originalError = err2;
+                wrapped.attempt = 2;
+                wrapped.url = String(url);
+                wrapped.diagnostic = 'gateway unreachable from this network (VPN or network drop): URL=' + url + ', attempt=2, DNS/TCP/TLS connection blocked by network or VPN';
+                throw wrapped;
+              }
               throw err2;
             });
           });
+        }
+        if (isLoadFailed(err)) {
+          var wrapped2 = new TypeError('gateway unreachable from this network');
+          wrapped2.originalError = err;
+          wrapped2.attempt = attempt + 1;
+          wrapped2.url = String(url);
+          wrapped2.diagnostic = 'gateway unreachable from this network (VPN or network drop): URL=' + url + ', attempt=' + (attempt + 1);
+          throw wrapped2;
         }
         throw err;
       });
@@ -438,7 +460,19 @@
           };
         }, function (e) {
           clearTimeout(timer);
-          return { ok: false, reachable: false, mine: false, ms: Date.now() - started, message: 'address offline: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network') };
+          var isNet = isLoadFailed(e);
+          var msg = isNet ? 'gateway unreachable from this network' : ('address offline: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network'));
+          return {
+            ok: false,
+            reachable: false,
+            mine: false,
+            ms: Date.now() - started,
+            message: msg,
+            netError: isNet,
+            url: url,
+            attempt: e && e.attempt || 1,
+            diag: isNet ? ('URL: ' + url + ' · attempt #' + (e && e.attempt || 1) + ' · problem with network or VPN (DNS/TCP/TLS drop)') : (e && e.message)
+          };
         });
     },
 
@@ -557,7 +591,17 @@
           });
         }, function (e) {
           var ms = Date.now() - started;
-          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network'), ms: ms };
+          var isNet = isLoadFailed(e);
+          var msg = isNet ? 'gateway unreachable from this network' : ('the gateway does not answer: ' + (e && e.message ? e.message : 'network'));
+          return {
+            state: 'unreachable',
+            message: msg,
+            ms: ms,
+            netError: isNet,
+            url: url,
+            attempt: e && e.attempt || 1,
+            diag: isNet ? ('URL: ' + url + ' · attempt #' + (e && e.attempt || 1) + ' · problem with network or VPN (DNS/TCP/TLS drop)') : (e && e.message)
+          };
         });
     },
 
@@ -750,7 +794,8 @@
         registered: !!this.meta(),
         meta: this.meta()
       };
-    }
+    },
+    isLoadFailed: isLoadFailed
   };
 
   function legacyCopy(text) {

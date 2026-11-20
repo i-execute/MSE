@@ -1753,8 +1753,10 @@ class Setup:
         sub = Menu(
             paint("2", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Gateway Domain", theme.title),
             [
-                RadioOption("cf", "Cloudflared (Quick Tunnel)", "Auto-download latest release with fallback, dynamic URL, Telegram alert on change", "quick"),
-                RadioOption("ts", "Tailscale (Funnel)", "Persistent HTTPS *.ts.net address (prompts for auth key on demand)", "stable"),
+                RadioOption("cf_named", "Cloudflared (Named Tunnel — постоянный)", "Персональный tunnel через Cloudflare-аккаунт: постоянный домен", "stable"),
+                RadioOption("cf_quick", "Cloudflared (Quick Tunnel — временный)", "Быстрый старт на *.trycloudflare.com (адрес временный, сменится при рестарте)", "quick"),
+                RadioOption("ts", "Tailscale (Funnel — ts.net)", "Persistent HTTPS *.ts.net address (prompts for auth key on demand)", "stable"),
+                RadioOption("doctor", "Tunnel Doctor & Diagnostics", "Проверка DNS, 443 latency, соответствия портов, логов дропов edge-кэша", "doctor"),
                 RadioOption("off", "Turn off Tunnel", "Stop the active tunnel process or funnel", "safe"),
                 RadioOption("status", "Status", "Show active tunnel backend, mode, and public address", "info"),
             ],
@@ -1772,16 +1774,54 @@ class Setup:
         self.limit = width()
         ok = False
         text = ""
-        if cmd == "cf":
-            with Spinner("installing & starting cloudflared") as spin:
+        if cmd == "cf_named":
+            token_field = Field("CF_TOKEN", "tunnel token", True, self.env.get("MSE_CF_TOKEN", ""), "Cloudflare Zero Trust tunnel token (eyJh...)")
+            domain_field = Field("CF_DOMAIN", "gateway domain", False, self.env.get("MSE_CF_DOMAIN", "") or self.env.get("MSE_PUBLIC_URL", ""), "Permanent domain, e.g. gateway.mycorp.com")
+            editor = FieldEditor(
+                paint("CF", theme.accent, theme.bold) + paint(" " + g.half + " ", theme.muted) + paint("Cloudflared Named Tunnel", theme.title),
+                [token_field, domain_field],
+                subtitle="Enter your Cloudflare tunnel token and domain (or Esc to cancel).",
+            )
+            if not editor.ask() or not token_field.value.strip() or not domain_field.value.strip():
+                return False
+            token_val = token_field.value.strip()
+            domain_val = domain_field.value.strip()
+            if not domain_val.startswith("http://") and not domain_val.startswith("https://"):
+                domain_val = "https://" + domain_val
+            with Spinner("installing & starting named cloudflared") as spin:
+                try:
+                    subprocess.run([script, "cloudflared-install"], capture_output=True, text=True, timeout=120)
+                    out = subprocess.run([script, "cloudflared-named", token_val, domain_val, self.stack.port], capture_output=True, text=True, timeout=60)
+                    ok = out.returncode == 0
+                    text = (out.stdout or "").strip() or (out.stderr or "").strip()
+                    if ok:
+                        self.env["MSE_CF_TOKEN"] = token_val
+                        self.env["MSE_CF_DOMAIN"] = domain_val
+                        self.env["MSE_PUBLIC_URL"] = domain_val
+                except (OSError, subprocess.SubprocessError) as exc:
+                    ok, text = False, str(exc)
+                spin.close(OK if ok else BAD, "named cloudflared")
+        elif cmd in ("cf_quick", "cf"):
+            with Spinner("installing & starting quick cloudflared") as spin:
                 try:
                     subprocess.run([script, "cloudflared-install"], capture_output=True, text=True, timeout=120)
                     out = subprocess.run([script, "cloudflared", self.stack.port], capture_output=True, text=True, timeout=60)
                     ok = out.returncode == 0
                     text = (out.stdout or "").strip() or (out.stderr or "").strip()
+                    if ok:
+                        text = text + "\n[!] Внимание: адрес trycloudflare.com временный. При смене URL бот пришлет уведомление."
                 except (OSError, subprocess.SubprocessError) as exc:
                     ok, text = False, str(exc)
-                spin.close(OK if ok else BAD, "cloudflared")
+                spin.close(OK if ok else BAD, "quick cloudflared")
+        elif cmd == "doctor":
+            with Spinner("running tunnel doctor") as spin:
+                try:
+                    out = subprocess.run([script, "doctor"], capture_output=True, text=True, timeout=30)
+                    ok = (out.returncode == 0)
+                    text = (out.stdout or "").strip() or (out.stderr or "").strip()
+                except (OSError, subprocess.SubprocessError) as exc:
+                    ok, text = False, str(exc)
+                spin.close(OK if ok else BAD, "tunnel doctor")
         elif cmd == "ts":
             current_key = self.env.get("MSE_TAILSCALE_KEY", "")
             if not current_key:
