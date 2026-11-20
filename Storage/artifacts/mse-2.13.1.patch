@@ -1,5 +1,5 @@
 diff --git a/Extensions/src/mse-bridge.js b/Extensions/src/mse-bridge.js
-index f15bc4e..21d7679 100644
+index f15bc4e..94fa615 100644
 --- a/Extensions/src/mse-bridge.js
 +++ b/Extensions/src/mse-bridge.js
 @@ -32,7 +32,8 @@
@@ -67,7 +67,75 @@ index f15bc4e..21d7679 100644
    function tracedFetch(url, options) {
      var opts = options || {};
      var request = {method: opts.method || 'GET', url: String(url), body: opts.body || null};
-@@ -326,7 +375,7 @@
+@@ -216,6 +265,50 @@
+       throw error;
+     });
+   }
++
++  var gatewayQueue = Promise.resolve();
++  var gatewayInFlight = 0;
++
++  function isLoadFailed(err) {
++    if (!err) return false;
++    if (err.name === 'TypeError') return true;
++    var msg = String(err.message || '');
++    return /load failed|failed to fetch|network request failed/i.test(msg);
++  }
++
++  function gatewayFetch(url, options, retryCount) {
++    var attempt = retryCount || 0;
++    var run = function () {
++      gatewayInFlight++;
++      return tracedFetch(url, options).then(function (res) {
++        gatewayInFlight--;
++        return res;
++      }, function (err) {
++        gatewayInFlight--;
++        if (attempt === 0 && isLoadFailed(err)) {
++          if (window.__mse && window.__mse.onDebugTraffic) {
++            window.__mse.onDebugTraffic({ event: 'retry_load_failed', url: String(url), delay: 500 });
++          }
++          return new Promise(function (resolve) {
++            setTimeout(resolve, 500);
++          }).then(function () {
++            gatewayInFlight++;
++            return tracedFetch(url, options).then(function (res2) {
++              gatewayInFlight--;
++              return res2;
++            }, function (err2) {
++              gatewayInFlight--;
++              throw err2;
++            });
++          });
++        }
++        throw err;
++      });
++    };
++    var next = gatewayQueue.then(run, run);
++    gatewayQueue = next.catch(function () {});
++    return next;
++  }
+   function redactDump(value, key, depth, secrets) {
+     if (depth > 30) return '[depth limit]';
+     if (typeof value === 'string') {
+@@ -241,6 +334,8 @@
+   }
+   var lastAgentRequest = null;
+   var MSEBridge = {
++    inFlight: function () { return gatewayInFlight; },
++
+     /* ---------------- the address ---------------- */
+     url: function () {
+       var fromLs = lsGet(CONFIG.urlKey) || lsGet(CONFIG.urlMirrorKey);
+@@ -319,14 +414,14 @@
+       var started = Date.now();
+       var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+       var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
+-      return tracedFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
++      return gatewayFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
+         .then(function (r) {
+           return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });
+         })
          .then(function (res) {
            clearTimeout(timer);
            var j = res.json || {};
@@ -76,7 +144,16 @@ index f15bc4e..21d7679 100644
            return {
              ok: !!res.ok && mine,
              reachable: true,
-@@ -357,6 +406,12 @@
+@@ -334,7 +429,7 @@
+             status: res.status,
+             ms: Date.now() - started,
+             version: j.version || null,
+-            model: j.model || null,
++            model: (j && (j.model || (Array.isArray(j.models) && j.models[0]))) || null,
+             quota: j.quota || null,
+             upstream: j.upstream || null,
+             message: !res.ok ? 'the address answered ' + res.status
+@@ -357,6 +452,12 @@
        return k;
      },
      ensureKey: function () { return this.key(); },
@@ -89,7 +166,16 @@ index f15bc4e..21d7679 100644
      maskedKey: function () {
        var k = this.key();
        return k ? k.slice(0, 8) + '…' + k.slice(-4) : null;
-@@ -412,42 +467,71 @@
+@@ -383,7 +484,7 @@
+       identity = identity || {};
+       var body = { key: key, moodleId: String(identity.id || ''), name: String(identity.name || ''), site: String(identity.site || ''), deviceName: String((window.navigator && window.navigator.userAgent) || '').slice(0, 120) };
+       if (!body.moodleId) return Promise.reject(new Error('user ID missing · open profile'));
+-      return tracedFetch(url + '/mse/v1/register', {
++      return gatewayFetch(url + '/mse/v1/register', {
+         method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key }, body: JSON.stringify(body)
+       }).then(function (r) {
+         return r.json().then(function (j) {
+@@ -412,42 +513,78 @@
      },
  
      /* ---------------- is this key live? ---------------- */
@@ -103,8 +189,10 @@ index f15bc4e..21d7679 100644
 +      var path = '/mse/v1/me' + (moodleId ? ('?moodleId=' + encodeURIComponent(moodleId)) : '');
 +      var headers = { authorization: 'Bearer ' + key, accept: 'application/json' };
 +      if (moodleId) headers['x-moodle-id'] = String(moodleId);
-+      return tracedFetch(url + path, { method: 'GET', headers: headers })
++      var started = Date.now();
++      return gatewayFetch(url + path, { method: 'GET', headers: headers })
          .then(function (r) {
++          var ms = Date.now() - started;
            return r.json().then(function (j) {
              var d = (j && j.device) || {};
 -            var st = (j && j.ok === false) ? (d.status || 'error') : (d.status || (r.ok ? 'active' : 'error'));
@@ -116,20 +204,24 @@ index f15bc4e..21d7679 100644
 +            var effState = headerStatus || (j && j.status) || (j && j.state) || (d && d.status) || (r.ok ? 'active' : (d.status === 'revoked' ? 'revoked' : 'pending'));
 +            var meta = self.saveMeta({ device: d, ok: r.ok }, { key: key, moodleId: d.moodleId || moodleId, name: d.name });
 +            var resObj;
-+            var qLeft = (j && j.quota != null) ? j.quota : (d && d.quota != null ? d.quota : null);
-+            var qLimit = (j && j.quotaLimit != null) ? j.quotaLimit : 200;
-+            var qUsed = (j && j.quotaUsed != null) ? j.quotaUsed : 0;
-+            var qResets = (j && (j.resets_after || j.quotaResetsAfter)) || null;
++            var qLeft = (j && j.quota != null) ? (typeof j.quota === 'object' ? j.quota.left : j.quota) : (d && d.quota != null ? d.quota : null);
++            var qLimit = (j && j.quotaLimit != null) ? j.quotaLimit : ((j && j.quota && j.quota.limit != null) ? j.quota.limit : 200);
++            var qUsed = (j && j.quotaUsed != null) ? j.quotaUsed : ((j && j.quota && j.quota.used != null) ? j.quota.used : 0);
++            var qResets = (j && (j.resets_after || j.quotaResetsAfter || (j.quota && j.quota.resets_after))) || null;
++            var model = (j && j.model !== undefined) ? j.model : ((j && Array.isArray(j.models) && j.models[0] !== undefined) ? j.models[0] : undefined);
++            var version = (j && j.version) || null;
++            var schema_layer = (j && j.schema_layer) || null;
++
 +            if (r.status === 401 || effState === 'unregistered' || effState === 'unknown') {
-+              resObj = { state: 'unregistered', message: 'key is not bound', device: d, meta: meta };
++              resObj = { state: 'unregistered', message: 'key is not bound', device: d, meta: meta, ms: ms };
 +            } else if (effState === 'revoked') {
-+              resObj = { state: 'revoked', message: 'key revoked', device: d, meta: meta };
++              resObj = { state: 'revoked', message: 'key revoked', device: d, meta: meta, ms: ms };
 +            } else if (effState === 'pending') {
-+              resObj = { state: 'pending', message: 'waiting for approval', device: d, meta: meta };
++              resObj = { state: 'pending', message: 'waiting for approval', device: d, meta: meta, ms: ms, model: model, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets, version: version, schema_layer: schema_layer };
 +            } else if (effState === 'active') {
-+              resObj = { state: 'active', message: 'key accepted', device: d, meta: meta, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets };
++              resObj = { state: 'active', message: 'key accepted', device: d, meta: meta, ms: ms, model: model, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets, version: version, schema_layer: schema_layer };
 +            } else {
-+              resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta };
++              resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta, ms: ms, model: model };
              }
 -            return { state: 'active', message: 'key accepted', device: d, meta: meta };
 +            try {
@@ -138,7 +230,9 @@ index f15bc4e..21d7679 100644
 +            return resObj;
            });
          }, function (e) {
-           return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };
+-          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };
++          var ms = Date.now() - started;
++          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network'), ms: ms };
          });
      },
  
@@ -167,7 +261,7 @@ index f15bc4e..21d7679 100644
 -        }, function (e) {
 -          return { ok: false, models: [], ms: Date.now() - started, message: 'gateway offline: ' + ((e && e.message) || 'network') };
 +      if (!url) return Promise.resolve({ ok: false, message: 'no gateway' });
-+      return tracedFetch(url + '/mse/v1/quota', {
++      return gatewayFetch(url + '/mse/v1/quota', {
 +        method: 'GET',
 +        headers: { authorization: 'Bearer ' + self.key(), accept: 'application/json' }
 +      }).then(function (r) {
@@ -180,7 +274,7 @@ index f15bc4e..21d7679 100644
      },
  
      /* ---------------- the agent: the question goes out, the chosen answer comes back ---------------- */
-@@ -465,15 +549,19 @@
+@@ -465,15 +602,19 @@
          selects: Array.isArray(payload.selects) ? payload.selects : [],
          textCount: Number(payload.textCount) || 0,
          image: payload.image || null,
@@ -194,16 +288,17 @@ index f15bc4e..21d7679 100644
 +      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, timeoutMs);
        var record = { request: { method: 'POST', url: url + '/mse/v1/agent', json: body }, response: null };
        lastAgentRequest = record;
+-      return tracedFetch(url + '/mse/v1/agent', {
 +      var reqHeaders = { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() };
 +      if (payload.moodleId) reqHeaders['x-moodle-id'] = String(payload.moodleId);
-       return tracedFetch(url + '/mse/v1/agent', {
++      return gatewayFetch(url + '/mse/v1/agent', {
          method: 'POST',
 -        headers: { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() },
 +        headers: reqHeaders,
          body: JSON.stringify(body),
          signal: ctrl ? ctrl.signal : undefined
        }).then(function (r) {
-@@ -482,6 +570,7 @@
+@@ -482,6 +623,7 @@
            function handle(block) {
              var name = '', data = [];
              block.split(/\r?\n/).forEach(function (line) {
@@ -211,7 +306,7 @@ index f15bc4e..21d7679 100644
                if (line.indexOf('event:') === 0) name = line.slice(6).trim();
                if (line.indexOf('data:') === 0) data.push(line.slice(5).trim());
              });
-@@ -522,7 +611,7 @@
+@@ -522,7 +664,7 @@
        }, function (e) {
          clearTimeout(timer);
          record.response = { error: (e && e.name) || 'network' };
@@ -220,8 +315,26 @@ index f15bc4e..21d7679 100644
        });
      },
      debugEnabled: function () { return lsGet('mse.debug.enabled') === '1'; },
+@@ -540,7 +682,7 @@
+       var safe = redactDump(dump, key, 0, secrets);
+       var json = JSON.stringify(safe);
+       if (json.length > 2000000) safe = {clientTruncated:true, preview:json.slice(0,160000)};
+-      return window.fetch(url + '/mse/v1/dump', {
++      return gatewayFetch(url + '/mse/v1/dump', {
+         method:'POST', headers:{'content-type':'application/json', authorization:'Bearer '+key},
+         body:JSON.stringify({type:type, dump:safe})
+       }).then(function (r) { return r.json().then(function (j) {
+@@ -556,7 +698,7 @@
+       if (!url) return Promise.reject(new Error('gateway address is not set'));
+       /* no model name here: the router decides which model the backend serves, the client never names one */
+       var body = { stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
+-      return tracedFetch(url + '/v1/chat/completions', {
++      return gatewayFetch(url + '/v1/chat/completions', {
+         method: 'POST',
+         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
+         body: JSON.stringify(body)
 diff --git a/Extensions/src/mse-ui.js b/Extensions/src/mse-ui.js
-index ebf8183..d9cdf92 100644
+index ebf8183..e68ee3b 100644
 --- a/Extensions/src/mse-ui.js
 +++ b/Extensions/src/mse-ui.js
 @@ -44,25 +44,48 @@
@@ -713,7 +826,7 @@ index ebf8183..d9cdf92 100644
 +          }
 +        });
 +        return {ok:true, how: interactive.every(function (c) { return c.kind === 'select'; }) ? 'select' : (interactive.every(function (c) { return c.kind === 'text'; }) ? 'text' : 'multi')};
-       }
++      }
 +
 +      /* single interactive control fallback */
 +      if (parts.length === 1 && interactive.length === 1) {
@@ -750,7 +863,7 @@ index ebf8183..d9cdf92 100644
 +          } catch (_) {}
 +          return {ok:true, how:'text'};
 +        }
-+      }
+       }
 +
 +      /* fallback for single radio / single checkbox when parts.length === 1 */
 +      if (parts.length === 1) {
@@ -770,7 +883,29 @@ index ebf8183..d9cdf92 100644
        return {ok:false, how:null};
      }
  
-@@ -860,20 +1141,30 @@
+@@ -818,10 +1099,20 @@
+       var all = readQuestions();
+       state.question = currentQuestion(all);
+       state.meta = attemptMeta();
++      var cached = win.MSEBridge ? win.MSEBridge.cachedCheck() : null;
++      if (cached) {
++        state.gw.check = cached;
++        if (cached.model) {
++          state.gatewayModel = cached.model;
++        }
++        if (cached.state === 'active') {
++          state.tier = 'owner';
++        }
++      }
+       render();
+       win.requestAnimationFrame(function () { if (pop) pop.classList.add('in'); });
+       load();
+-      refreshHeaderModel();
++      if (!state.question) refreshTier();
+     }
+ 
+     var rise = 0;
+@@ -860,20 +1151,30 @@
  
      function head(titleText, sub, leading) {
        var h = el('div', 'ph');
@@ -810,7 +945,29 @@ index ebf8183..d9cdf92 100644
          h.appendChild(chip);
        }
        var mini = el('button', 'mini-status');
-@@ -1056,43 +1347,134 @@
+@@ -969,10 +1270,20 @@
+       /* no address, or a device that never even applied: base, and the gateway is not called at all — a user
+          who has not registered a key produces not one byte of traffic towards it */
+       if (!br || !br.url() || !br.meta()) { state.tier = 'base'; return Promise.resolve('base'); }
+-      if (state.tier === 'owner') return Promise.resolve('owner');
+       return br.check().then(function (res) {
+         state.gw.check = res;
+         state.tier = isActive(res) ? 'owner' : 'base';
++        if (res && typeof res.model === 'string' && res.model.trim()) {
++          state.gatewayModel = res.model.trim();
++          ls.set('mse.gateway.lastModel', state.gatewayModel);
++          render();
++        } else if (!res || res.model === undefined) {
++          return refreshHeaderModel().then(function () { return state.tier; });
++        } else if (res.model === null) {
++          state.gatewayModel = null;
++          ls.set('mse.gateway.lastModel', '');
++          render();
++        }
+         return state.tier;
+       }, function () { state.tier = 'base'; return 'base'; });
+     }
+@@ -1056,43 +1367,134 @@
            var mark = el('span', 'mark' + (r.agent ? ' agent' : ''));
            a.appendChild(mark);
            a.appendChild(el('span', 'lbl', r.label));
@@ -955,7 +1112,7 @@ index ebf8183..d9cdf92 100644
          body.appendChild(N(errRow, 1));
          return;
        }
-@@ -1158,18 +1540,24 @@
+@@ -1158,18 +1560,24 @@
      }
  
      function questionImages(q) {
@@ -983,7 +1140,7 @@ index ebf8183..d9cdf92 100644
              return new Promise(function (resolve, reject) {
                var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); };
                reader.onerror = function () { reject(new Error('image unreadable')); }; reader.readAsDataURL(blob);
-@@ -1179,9 +1567,9 @@
+@@ -1179,9 +1587,9 @@
          return source.then(function (rawUrl) {
            return downscaleDataUrl(rawUrl, 1024);
          }).then(function (data) {
@@ -995,7 +1152,7 @@ index ebf8183..d9cdf92 100644
            return {data:data, label:related ? 'option: ' + related.text : 'question image ' + (index+1)};
          });
        })).then(function (all) {
-@@ -1190,24 +1578,40 @@
+@@ -1190,24 +1598,40 @@
        });
      }
  
@@ -1039,7 +1196,7 @@ index ebf8183..d9cdf92 100644
          textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
          image: images.length ? images : null
        }, function (stage) {
-@@ -1218,52 +1622,130 @@
+@@ -1218,52 +1642,130 @@
          var ms = Date.now() - t0;
          if (res.ok && res.answer) {
            logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
@@ -1193,7 +1350,7 @@ index ebf8183..d9cdf92 100644
  
      function load() {
        var q = state.question;
-@@ -1345,22 +1827,34 @@
+@@ -1345,22 +1847,34 @@
        var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
        body.appendChild(N(el('div', 'sec', 'account')));
        body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
@@ -1235,27 +1392,38 @@ index ebf8183..d9cdf92 100644
        net.appendChild(el('span', 'txt', 'network log'));
        net.appendChild(el('span', 'more', 'open'));
        body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
-@@ -1373,9 +1867,17 @@
+@@ -1368,14 +1882,24 @@
+ 
+     function refreshHeaderModel() {
+       var br = win.MSEBridge, url = br && br.url();
+-      if (!url) { state.gatewayModel = null; return; }
+-      if (!br.meta()) return;
++      if (!url) { state.gatewayModel = null; return Promise.resolve(null); }
++      if (!br.meta()) return Promise.resolve(null);
        var epoch = ++state.modelEpoch;
-       br.probe(url).then(function (r) {
-         if (epoch !== state.modelEpoch || br.url() !== url) return;
+-      br.probe(url).then(function (r) {
+-        if (epoch !== state.modelEpoch || br.url() !== url) return;
 -        state.gatewayModel = r.ok && typeof r.model === 'string' && r.model.trim() ? r.model.trim() : null;
-+        state.gatewayModel = (r.ok || r.mine) && typeof r.model === 'string' && r.model.trim() ? r.model.trim() : null;
++      return br.probe(url).then(function (r) {
++        if (epoch !== state.modelEpoch || br.url() !== url) return null;
++        state.gatewayModel = (r && (r.ok || r.mine) && typeof r.model === 'string' && r.model.trim()) ? r.model.trim() : null;
 +        if (!state.gatewayModel) { ls.set('mse.gateway.lastModel', ''); }
 +        else { ls.set('mse.gateway.lastModel', state.gatewayModel); }
          render();
 -      }, function () { if (epoch === state.modelEpoch && br.url() === url) { state.gatewayModel = null; render(); } });
++        return state.gatewayModel;
 +      }, function () {
 +        if (epoch === state.modelEpoch && br.url() === url) {
 +          state.gatewayModel = null;
 +          ls.set('mse.gateway.lastModel', '');
 +          render();
 +        }
++        return null;
 +      });
      }
  
      function checkGateway(raw) {
-@@ -1385,26 +1887,43 @@
+@@ -1385,32 +1909,52 @@
        var epoch = ++state.modelEpoch;
        gw.busy = 'check';
        gw.probe = null;
@@ -1269,7 +1437,7 @@ index ebf8183..d9cdf92 100644
 +        if (!r.mine && !r.ok) {
 +          if (epoch === state.modelEpoch && raw === br.url()) state.gatewayModel = null;
 +          gw.busy = null;
-+          logAdd('gateway', false, 'AI gateway: ' + r.message);
++          logAdd('gateway', false, 'the gateway does not answer: ' + r.message);
 +          render();
 +          return null;
 +        }
@@ -1283,7 +1451,6 @@ index ebf8183..d9cdf92 100644
 -        return Promise.all([br.models(), br.check()]).then(function (out) {
 -          gw.models = out[0];
 -          gw.check = out[1];
-+        logAdd('gateway', true, 'AI gateway is up' + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
 +        if (epoch === state.modelEpoch && r.model) {
 +          state.gatewayModel = r.model;
 +          ls.set('mse.gateway.lastModel', r.model);
@@ -1305,16 +1472,26 @@ index ebf8183..d9cdf92 100644
 -          /* the count is enough for the journal: which models there are is the router's and the bot's business */
 -          logAdd('gateway', true, 'AI gateway is up · ' + (out[0].models.length || 0) + ' models', { ms: r.ms });
 +          if (res.state === 'active') {
-+            refreshTier();
-+            if (epoch === state.modelEpoch) {
-+              state.gatewayModel = typeof r.model === 'string' && r.model.trim() ? r.model.trim() : (ls.get('mse.gateway.lastModel') || null);
++            state.tier = 'owner';
++            if (epoch === state.modelEpoch && res.model) {
++              state.gatewayModel = res.model;
++              ls.set('mse.gateway.lastModel', res.model);
 +            }
 +          }
-+          logAdd('gateway', res.state === 'active', (res.message || res.state) + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
++          var ms = (res && res.ms != null) ? res.ms : (r && r.ms ? r.ms : 0);
++          var statusText = (res.state === 'active' ? 'key accepted' : (res.message || res.state)) + (ms ? ' · ' + ms + ' ms' : '');
++          logAdd('gateway', res.state === 'active', statusText, { ms: ms });
            render();
            return r;
          });
-@@ -1430,7 +1949,6 @@
+       }, function (e) {
+         gw.busy = null;
+         gw.probe = { ok: false, message: (e && e.message) || 'error' };
++        logAdd('gateway', false, 'the gateway does not answer: ' + ((e && e.message) || 'network'));
+         render();
+         return null;
+       });
+@@ -1430,7 +1974,6 @@
        input.spellcheck = false;
        input.placeholder = 'https://…';
        input.value = br.url() || '';
@@ -1322,7 +1499,7 @@ index ebf8183..d9cdf92 100644
        input.addEventListener('input', function () {
          var typed = String(input.value || '').trim().replace(/\/+$/, '');
          var saved = br.url() || '';
-@@ -1440,79 +1958,98 @@
+@@ -1440,79 +1983,99 @@
        body.appendChild(N(el('div', 'sec', 'connection'), 0));
        var frow = el('div', 'frow');
        body.appendChild(N(frow, 0));
@@ -1435,7 +1612,8 @@ index ebf8183..d9cdf92 100644
 +        statusRow = el('div', 'row');
 +        var isActive = gw.check.state === 'active';
 +        statusRow.appendChild(el('span', 'dot ' + (isActive ? 'ok' : 'warn')));
-+        var msPart = gw.probe && gw.probe.ms != null ? ' · ' + gw.probe.ms + ' ms' : '';
++        var msVal = gw.check.ms != null ? gw.check.ms : (gw.probe && gw.probe.ms != null ? gw.probe.ms : null);
++        var msPart = msVal != null ? ' · ' + msVal + ' ms' : '';
 +        var statusText = isActive ? 'key accepted' + msPart : (gw.check.message || 'key not accepted') + msPart;
 +        statusRow.appendChild(el('span', 'txt', statusText));
 +      } else if (gw.probe) {
@@ -1486,7 +1664,7 @@ index ebf8183..d9cdf92 100644
      }
  
      /* ---------------- the network log ---------------- */
-@@ -1529,22 +2066,24 @@
+@@ -1529,22 +2092,24 @@
        });
        body.appendChild(N(box, 1));
        var frow = el('div', 'frow');
@@ -1517,7 +1695,7 @@ index ebf8183..d9cdf92 100644
        frow.appendChild(clear);
        body.appendChild(N(frow, 1));
      }
-@@ -1598,6 +2137,34 @@
+@@ -1598,6 +2163,34 @@
          method: formEl.getAttribute('method') || 'POST',
          elementsCount: formEl.elements ? formEl.elements.length : 0
        } : null;
@@ -1552,7 +1730,7 @@ index ebf8183..d9cdf92 100644
        var protocolView = q ? {
          page: null,
          question: q.text,
-@@ -1612,11 +2179,16 @@
+@@ -1612,11 +2205,16 @@
          text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) { return c.node.value || ''; }),
          images: images.map(function (im) { return im.src; }),
          question_image: images.length ? images[0].src : null,
@@ -1570,7 +1748,7 @@ index ebf8183..d9cdf92 100644
          warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
          page: { location: String(win.location.href), title: doc.title, headings: Array.prototype.map.call(doc.querySelectorAll('h1,h2,h3'), function (n) { return n.textContent.trim(); }),
            httpHeaders: 'unavailable to page JavaScript', cookieNamesVisibleToJavaScript: cookies, inlineMoodleScripts: scripts },
-@@ -1631,6 +2203,8 @@
+@@ -1631,6 +2229,8 @@
      }
      function debugTraffic(event) {
        if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
@@ -1579,7 +1757,7 @@ index ebf8183..d9cdf92 100644
        var dump = snifDump(); dump.traffic = event;
        win.MSEBridge.sendDump('debug', dump);
      }
-@@ -1644,6 +2218,7 @@
+@@ -1644,6 +2244,7 @@
      }
      var snifText = '';
      function viewSnif() {
@@ -1587,7 +1765,7 @@ index ebf8183..d9cdf92 100644
        body.appendChild(N(el('div', 'sec', 'Snif · local only')));
        body.appendChild(N(el('div', 'empty', 'May contain session keys and personal data. Review before sharing.')));
        var copy = el('button', 'btn solid', 'Copy');
-@@ -1669,8 +2244,8 @@
+@@ -1669,8 +2270,8 @@
        var title = CONFIG.brand;
        var leading = 'info';
        if (state.route === 'answers' && state.question) {
@@ -1598,7 +1776,7 @@ index ebf8183..d9cdf92 100644
        } else if (state.route === 'account') { sub = 'account'; }
        else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
        else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
-@@ -1733,6 +2308,7 @@
+@@ -1733,6 +2334,7 @@
          if (!q) return false;
          return applyAnswer(q, { label: label });
        },
@@ -1606,7 +1784,7 @@ index ebf8183..d9cdf92 100644
        agent: function () { return state.agent; },
        runAgent: function () { runAgent(false); return true; },
        log: function () { return log.slice(-40); },
-@@ -1779,6 +2355,7 @@
+@@ -1779,6 +2381,7 @@
              : state.agent && state.agent.state === 'error' ? { state: 'error', text: state.agent.text }
              : state.agent && state.agent.state === 'running' ? { state: 'running', text: '' }
              : null,
@@ -1614,7 +1792,7 @@ index ebf8183..d9cdf92 100644
            tier: state.tier,
            meta: state.meta,
            identity: identity(),
-@@ -1791,7 +2368,8 @@
+@@ -1791,7 +2394,8 @@
              supported: state.question.supported,
              identity: state.question.identity,
              questionId: state.question.questionId,
@@ -1854,7 +2032,7 @@ index 4e8c3b8..ae8ebdc 100644
  /* compact status screen */
  .status-grid{display:flex;flex-direction:column;gap:5px;margin:3px 0 6px}
 diff --git a/Extensions/tools/build-mse.js b/Extensions/tools/build-mse.js
-index c9d9c7c..e91f35a 100644
+index c9d9c7c..c074c39 100644
 --- a/Extensions/tools/build-mse.js
 +++ b/Extensions/tools/build-mse.js
 @@ -29,7 +29,7 @@ const VENDOR = LAYOUT.VENDOR;
@@ -1862,7 +2040,7 @@ index c9d9c7c..e91f35a 100644
  const SRC = LAYOUT.SRC;
  const BRAND = 'MSE';
 -const VERSION = '2.8.0';
-+const VERSION = '2.13.0';
++const VERSION = '2.13.1';
  
  const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
  const read = (p) => fs.readFileSync(path.join(VENDOR, p), 'utf8');
@@ -2249,7 +2427,7 @@ index 3ef8e8e..d867561 100644
              await self.render(OWNER_ID, 0, rich)
          except Exception as exc:  # noqa: BLE001
 diff --git a/Server/bot/screens.py b/Server/bot/screens.py
-index 35ad6de..e3621e2 100644
+index 35ad6de..7d9e62c 100644
 --- a/Server/bot/screens.py
 +++ b/Server/bot/screens.py
 @@ -81,7 +81,7 @@ def home(snap: dict[str, Any], notice: str = "") -> Rich:
@@ -2257,7 +2435,7 @@ index 35ad6de..e3621e2 100644
      if not router_ok:
          subtitle = status_chip(False, "router is not answering") + " " + muted(SEP + " everything below may be stale")
 -    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.8.0"), icon="bot")
-+    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.13.0"), icon="bot")
++    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.13.1"), icon="bot")
  
  
  def _pending_list(devices: list[dict[str, Any]]) -> str:
@@ -2323,7 +2501,7 @@ index 35ad6de..e3621e2 100644
          input_row("api hash", "api_hash", icon="lock"),
          input_row("tailscale key", "tailscale_key", icon="key"),
 diff --git a/Server/mse-router.js b/Server/mse-router.js
-index 941517b..eb2b6db 100644
+index 941517b..9dfca26 100644
 --- a/Server/mse-router.js
 +++ b/Server/mse-router.js
 @@ -32,6 +32,7 @@ const fs = require('fs');
@@ -2339,7 +2517,7 @@ index 941517b..eb2b6db 100644
  const PORT = Number(process.env.MSE_PORT);
  const HOST = process.env.MSE_HOST || '127.0.0.1';
 -const VERSION = '2.8.0';
-+const VERSION = '2.13.0';
++const VERSION = '2.13.1';
  const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
  const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
  const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
@@ -2599,17 +2777,16 @@ index 941517b..eb2b6db 100644
      user += (body.multiple ? 'Options (pick all that apply):\n' : 'Options (pick exactly one):\n') + options + '\n';
 -    user += 'Return the exact verbatim text of the chosen option as listed. Do NOT return numbers or option indexes; numbers are strictly forbidden.\n';
 +    user += 'Return the exact verbatim text of the chosen option as listed. Do not include option numbers or letters.\n';
-   }
--  if (body.multiple) user += 'Return selected option captions joined by |, exactly as listed (verbatim text only, no numbers).\n';
--  if (Array.isArray(body.selects) && body.selects.length) {
--    user += 'For each numbered dropdown choose one option, in order, joined by | (exact verbatim option text, no numbers):\n';
--    body.selects.forEach((values,i) => { user += (i+1) + ': ' + (Array.isArray(values) ? values.join(' / ') : '') + '\n'; });
++  }
 +  if (body.multiple && !isDdwtos && (!body.fields || body.fields.length <= 1)) user += 'Return selected option captions joined by |, exactly as listed.\n';
 +  if (!body.fields && Array.isArray(body.selects) && body.selects.length) {
 +    user += 'For each numbered dropdown choose one option, in order, joined by | (exact verbatim option text):\n';
 +    body.selects.forEach((values, i) => { user += (i + 1) + ': ' + (Array.isArray(values) ? values.join(' / ') : '') + '\n'; });
    }
--  if (Number(body.textCount) > 1) user += 'Give one value for each of the ' + Math.min(20, Number(body.textCount)) + ' text fields, in order, joined by |.\n';
+-  if (body.multiple) user += 'Return selected option captions joined by |, exactly as listed (verbatim text only, no numbers).\n';
+-  if (Array.isArray(body.selects) && body.selects.length) {
+-    user += 'For each numbered dropdown choose one option, in order, joined by | (exact verbatim option text, no numbers):\n';
+-    body.selects.forEach((values,i) => { user += (i+1) + ': ' + (Array.isArray(values) ? values.join(' / ') : '') + '\n'; });
 +  if (!body.fields && Number(body.textCount) > 1) {
 +    user += 'Give one value for each of the ' + Math.min(20, Number(body.textCount)) + ' text fields, in order, joined by |.\n';
 +  } else if (isNumeric) {
@@ -2618,7 +2795,8 @@ index 941517b..eb2b6db 100644
 +    user += 'Provide only the exact working code to solve the task. Do not wrap in markdown fences or explanations.\n';
 +  } else if (!options && !Array.isArray(body.selects) && (!body.fields || body.fields.length <= 1)) {
 +    user += 'Give the exact answer to fill in the field.\n';
-+  }
+   }
+-  if (Number(body.textCount) > 1) user += 'Give one value for each of the ' + Math.min(20, Number(body.textCount)) + ' text fields, in order, joined by |.\n';
 +
    const images = Array.isArray(body.image) ? body.image : [];
    if (images.length) {
@@ -2852,11 +3030,11 @@ index 941517b..eb2b6db 100644
 +      const f = body.fields[i];
 +      if (f && f.kind === 'select' && Array.isArray(f.options)) {
 +        return matchOption(part, f.options);
-+      }
-+      if (f && f.kind === 'place' && options.length) {
-+        return matchOption(part, options);
        }
 -      return [];
++      if (f && f.kind === 'place' && options.length) {
++        return matchOption(part, options);
++      }
 +      return part;
      });
 -    if (matches.some((xs) => xs.length !== 1)) {
@@ -2875,15 +3053,15 @@ index 941517b..eb2b6db 100644
        serverLog('warn', 'agent_error', 'dropdown answer not in the task', { deviceId: rec.deviceId });
 -      return reply(200, {ok:false, code:'agent_error', ms, message:'dropdown answer not in the task'});
 +      return reply(200, { ok: false, code: 'agent_error', ms, message: 'dropdown answer not in the task' });
-+    }
+     }
+-    picked = matches.map((xs) => xs[0]).join(' | ');
 +    picked = matches.join(' | ');
 +  } else if (String(body.type || '').toLowerCase() === 'ddwtos' || (Number(body.placesCount) > 0 && options.length)) {
 +    const expected = Number(body.placesCount) || 1;
 +    if (parts.length !== expected) {
 +      serverLog('warn', 'agent_error', 'wrong number of ddwtos answers', { deviceId: rec.deviceId });
 +      return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of drag answers' });
-     }
--    picked = matches.map((xs) => xs[0]).join(' | ');
++    }
 +    const matches = parts.map((part) => matchOption(part, options));
 +    if (matches.some((xs) => xs === null)) {
 +      serverLog('warn', 'agent_error', 'ddwtos option not in task: ' + answer, { deviceId: rec.deviceId });
@@ -3086,7 +3264,7 @@ index 941517b..eb2b6db 100644
            ? 'the key is live: use it as the api key of any OpenAI-compatible client'
            : 'waiting for the owner: Moodle id ' + r.device.moodleId + ' must be allowed (/admin/allow)'
        });
-@@ -927,17 +1294,67 @@ const handler = async (req, res) => {
+@@ -927,17 +1294,75 @@ const handler = async (req, res) => {
        const rec = deviceByKey(keyOf(req));
        if (!rec) return oaiError(req, res, 401, 'unknown key: register the device first', 'invalid_key');
        rec.seen = now(); saveState();
@@ -3100,37 +3278,45 @@ index 941517b..eb2b6db 100644
 +      const resetInfo = getQuotaResetInfo();
 +      const left = quotaOf(rec);
 +      const used = rec.quotaUsed || 0;
-+      if (!allowed) {
-+        return send(req, res, 403, {
-+          ok: false,
-+          status: effStatus,
-+          state: effStatus,
-+          message: effStatus === 'revoked' ? 'key revoked' : 'waiting for approval',
-+          device: publicDevice(rec),
-+          hint: rec.status === 'revoked' ? 'the key was revoked' : 'waiting for approval',
-+          quota: left,
-+          quotaUsed: used,
-+          quotaLimit: CFG.dailyQuota,
-+          resets_after: resetInfo.resetsIn,
-+          quotaResetsAfter: resetInfo.resetsIn,
-+          resets_at: resetInfo.resetsAt
-+        });
-       }
--      return send(req, res, 200, { ok: true, device: publicDevice(rec), model: CFG.model, quota: quotaOf(rec) });
-+      return send(req, res, 200, {
-+        ok: true,
-+        status: 'active',
-+        state: 'active',
-+        message: 'key accepted',
++      const quotaObj = {
++        used,
++        left,
++        limit: CFG.dailyQuota,
++        resets_after: resetInfo.resetsIn,
++        resets_in_sec: resetInfo.resetsInSec,
++        resets_at: resetInfo.resetsAt
++      };
++      const effModel = CFG.model || (CFG.models && CFG.models[0]) || 'qwen-2.5-coder-32b';
++      const effModels = (CFG.models && CFG.models.length) ? CFG.models : [effModel];
++      const compositeBase = {
++        name: 'MSE gateway',
++        version: VERSION,
++        schema_layer: 1,
++        layer: 1,
++        status: effStatus,
++        state: effStatus,
 +        device: publicDevice(rec),
-+        model: CFG.model,
++        model: effModel,
++        models: effModels,
++        modelsCount: effModels.length,
 +        quota: left,
 +        quotaUsed: used,
 +        quotaLimit: CFG.dailyQuota,
 +        resets_after: resetInfo.resetsIn,
 +        quotaResetsAfter: resetInfo.resetsIn,
-+        resets_at: resetInfo.resetsAt
-+      });
++        resets_at: resetInfo.resetsAt,
++        quotaDetails: quotaObj
++      };
++      if (!allowed) {
++        compositeBase.ok = false;
++        compositeBase.message = effStatus === 'revoked' ? 'key revoked' : 'waiting for approval';
++        compositeBase.hint = rec.status === 'revoked' ? 'the key was revoked' : 'waiting for approval';
++        return send(req, res, 403, compositeBase);
+       }
+-      return send(req, res, 200, { ok: true, device: publicDevice(rec), model: CFG.model, quota: quotaOf(rec) });
++      compositeBase.ok = true;
++      compositeBase.message = 'key accepted';
++      return send(req, res, 200, compositeBase);
      }
 -    if (url.pathname === '/v1/models' && req.method === 'GET') {
 -      /* a device that was not let in is told nothing, not even the list of models */
@@ -3162,7 +3348,7 @@ index 941517b..eb2b6db 100644
        const ids = CFG.models.length ? CFG.models : (CFG.model ? [CFG.model] : []);
        return send(req, res, 200, { object: 'list', data: ids.map((id) => ({ id, object: 'model', created: 1700000000, owned_by: 'backend' })) });
      }
-@@ -956,12 +1373,26 @@ const handler = async (req, res) => {
+@@ -956,12 +1381,26 @@ const handler = async (req, res) => {
        const body = parseJson(await readBody(req, 4 * 1024 * 1024));
        if (!body || !['report', 'debug'].includes(body.type) || !body.dump || typeof body.dump !== 'object')
          return oaiError(req, res, 400, 'type and dump required', 'bad_dump');
@@ -3877,13 +4063,13 @@ index b237293..21bd692 100644
      args = list(sys.argv[1:] if argv is None else argv)
      allowed = {"--status", "--version", "--help", "-h"}
 diff --git a/Storage/artifacts/build-report.json b/Storage/artifacts/build-report.json
-index 40706a0..a25bad8 100644
+index 40706a0..ea9e60a 100644
 --- a/Storage/artifacts/build-report.json
 +++ b/Storage/artifacts/build-report.json
 @@ -1,5 +1,5 @@
  {
 -  "version": "2.8.0",
-+  "version": "2.13.0",
++  "version": "2.13.1",
    "brand": "MSE",
    "base": "2.22.0",
    "bundles": {
@@ -3893,8 +4079,8 @@ index 40706a0..a25bad8 100644
      "mse-ui": {
 -      "bytes": 90587,
 -      "sha256": "9448cd3f07b904e927946a1c2a571015e99b66a2262a570761c665909daad279",
-+      "bytes": 127769,
-+      "sha256": "6dc164dac2b30ff2a6d55c058e915e8e1d5867559e4bafafef888a0f0b0a6765",
++      "bytes": 128854,
++      "sha256": "6c5e85d7660a7948e42320ca96483ec211cae7fc78031e9a6fce5d44ae22371b",
        "sanitizer": {
 -        "comments": 80,
 -        "strings": 3,
@@ -3906,38 +4092,43 @@ index 40706a0..a25bad8 100644
          "windowRefs": 0,
          "windowProps": 0
        }
-@@ -239,10 +239,10 @@
+@@ -239,14 +239,14 @@
        }
      },
      "mse-bridge": {
 -      "bytes": 27664,
 -      "sha256": "557dd575a3e09e32b57dbc59174015311b95f65a40f7b288e275954d64ac5cc7",
-+      "bytes": 31744,
-+      "sha256": "83860e3b9cee87a68f53f7d4631531f0d81360ce10f71f6e378e75d57909bc97",
++      "bytes": 34086,
++      "sha256": "09bab5ec24cb2e9a0edcc7e02a27441289df3364d70e09b3c6bd597cd6c1d46f",
        "sanitizer": {
 -        "comments": 28,
 +        "comments": 27,
          "strings": 3,
          "templates": 0,
          "regexps": 9,
+-        "windowRefs": 21,
++        "windowRefs": 23,
+         "windowProps": 0
+       }
+     },
 @@ -267,12 +267,12 @@
      "scripts": 1,
      "headers": 1,
      "requires": 0,
 -    "bytes": 1646595
-+    "bytes": 1687858
++    "bytes": 1691285
    },
    "userscript": {
      "file": "Storage/artifacts/mse.user.js",
 -    "bytes": 1650793,
 -    "sha256": "9623fc6dd11d1d327415683479da407af45ba4c58ad56ce1405b3fcc82ac4c08"
-+    "bytes": 1691946,
-+    "sha256": "2f81f55513358d25c96aee4a3204b177381aae481d6b8fb64bcf567abd8638ff"
++    "bytes": 1695372,
++    "sha256": "e0cf286ba718fb7577ff2541374f17f3c20aa61213076b781d4a2996c0858b65"
    },
    "sanitizer": {
      "comments": 68,
 diff --git a/Storage/artifacts/mse.user.js b/Storage/artifacts/mse.user.js
-index 2f684ea..bbd6248 100644
+index 2f684ea..d108cf2 100644
 --- a/Storage/artifacts/mse.user.js
 +++ b/Storage/artifacts/mse.user.js
 @@ -2,7 +2,7 @@
@@ -3945,7 +4136,7 @@ index 2f684ea..bbd6248 100644
  // @name:ru      MSE — Moodle Solver Extension
  // @namespace    https://github.com/mse
 -// @version      2.8.0
-+// @version      2.13.0
++// @version      2.13.1
  // @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.
  // @description Answers and hints for Moodle quizzes: the MSE button, a built-in traffic sniffer and the id of the signed-in user.
  // @author       MSE
@@ -4014,7 +4205,75 @@ index 2f684ea..bbd6248 100644
    function tracedFetch(url, options) {
      var opts = options || {};
      var request = {method: opts.method || 'GET', url: String(url), body: opts.body || null};
-@@ -2139,7 +2188,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -2029,6 +2078,50 @@ var __ssW=window,__msePageWindow=window;
+       throw error;
+     });
+   }
++
++  var gatewayQueue = Promise.resolve();
++  var gatewayInFlight = 0;
++
++  function isLoadFailed(err) {
++    if (!err) return false;
++    if (err.name === 'TypeError') return true;
++    var msg = String(err.message || '');
++    return /load failed|failed to fetch|network request failed/i.test(msg);
++  }
++
++  function gatewayFetch(url, options, retryCount) {
++    var attempt = retryCount || 0;
++    var run = function () {
++      gatewayInFlight++;
++      return tracedFetch(url, options).then(function (res) {
++        gatewayInFlight--;
++        return res;
++      }, function (err) {
++        gatewayInFlight--;
++        if (attempt === 0 && isLoadFailed(err)) {
++          if (__ssW.__mse && __ssW.__mse.onDebugTraffic) {
++            __ssW.__mse.onDebugTraffic({ event: 'retry_load_failed', url: String(url), delay: 500 });
++          }
++          return new Promise(function (resolve) {
++            setTimeout(resolve, 500);
++          }).then(function () {
++            gatewayInFlight++;
++            return tracedFetch(url, options).then(function (res2) {
++              gatewayInFlight--;
++              return res2;
++            }, function (err2) {
++              gatewayInFlight--;
++              throw err2;
++            });
++          });
++        }
++        throw err;
++      });
++    };
++    var next = gatewayQueue.then(run, run);
++    gatewayQueue = next.catch(function () {});
++    return next;
++  }
+   function redactDump(value, key, depth, secrets) {
+     if (depth > 30) return '[depth limit]';
+     if (typeof value === 'string') {
+@@ -2054,6 +2147,8 @@ var __ssW=window,__msePageWindow=window;
+   }
+   var lastAgentRequest = null;
+   var MSEBridge = {
++    inFlight: function () { return gatewayInFlight; },
++
+      
+     url: function () {
+       var fromLs = lsGet(CONFIG.urlKey) || lsGet(CONFIG.urlMirrorKey);
+@@ -2132,14 +2227,14 @@ var __ssW=window,__msePageWindow=window;
+       var started = Date.now();
+       var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+       var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
+-      return tracedFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
++      return gatewayFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
+         .then(function (r) {
+           return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });
+         })
          .then(function (res) {
            clearTimeout(timer);
            var j = res.json || {};
@@ -4023,7 +4282,16 @@ index 2f684ea..bbd6248 100644
            return {
              ok: !!res.ok && mine,
              reachable: true,
-@@ -2170,6 +2219,12 @@ var __ssW=window,__msePageWindow=window;
+@@ -2147,7 +2242,7 @@ var __ssW=window,__msePageWindow=window;
+             status: res.status,
+             ms: Date.now() - started,
+             version: j.version || null,
+-            model: j.model || null,
++            model: (j && (j.model || (Array.isArray(j.models) && j.models[0]))) || null,
+             quota: j.quota || null,
+             upstream: j.upstream || null,
+             message: !res.ok ? 'the address answered ' + res.status
+@@ -2170,6 +2265,12 @@ var __ssW=window,__msePageWindow=window;
        return k;
      },
      ensureKey: function () { return this.key(); },
@@ -4036,7 +4304,16 @@ index 2f684ea..bbd6248 100644
      maskedKey: function () {
        var k = this.key();
        return k ? k.slice(0, 8) + '…' + k.slice(-4) : null;
-@@ -2225,42 +2280,71 @@ var __ssW=window,__msePageWindow=window;
+@@ -2196,7 +2297,7 @@ var __ssW=window,__msePageWindow=window;
+       identity = identity || {};
+       var body = { key: key, moodleId: String(identity.id || ''), name: String(identity.name || ''), site: String(identity.site || ''), deviceName: String((__ssW.navigator && __ssW.navigator.userAgent) || '').slice(0, 120) };
+       if (!body.moodleId) return Promise.reject(new Error('user ID missing · open profile'));
+-      return tracedFetch(url + '/mse/v1/register', {
++      return gatewayFetch(url + '/mse/v1/register', {
+         method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key }, body: JSON.stringify(body)
+       }).then(function (r) {
+         return r.json().then(function (j) {
+@@ -2225,42 +2326,78 @@ var __ssW=window,__msePageWindow=window;
      },
  
       
@@ -4050,8 +4327,10 @@ index 2f684ea..bbd6248 100644
 +      var path = '/mse/v1/me' + (moodleId ? ('?moodleId=' + encodeURIComponent(moodleId)) : '');
 +      var headers = { authorization: 'Bearer ' + key, accept: 'application/json' };
 +      if (moodleId) headers['x-moodle-id'] = String(moodleId);
-+      return tracedFetch(url + path, { method: 'GET', headers: headers })
++      var started = Date.now();
++      return gatewayFetch(url + path, { method: 'GET', headers: headers })
          .then(function (r) {
++          var ms = Date.now() - started;
            return r.json().then(function (j) {
              var d = (j && j.device) || {};
 -            var st = (j && j.ok === false) ? (d.status || 'error') : (d.status || (r.ok ? 'active' : 'error'));
@@ -4063,20 +4342,24 @@ index 2f684ea..bbd6248 100644
 +            var effState = headerStatus || (j && j.status) || (j && j.state) || (d && d.status) || (r.ok ? 'active' : (d.status === 'revoked' ? 'revoked' : 'pending'));
 +            var meta = self.saveMeta({ device: d, ok: r.ok }, { key: key, moodleId: d.moodleId || moodleId, name: d.name });
 +            var resObj;
-+            var qLeft = (j && j.quota != null) ? j.quota : (d && d.quota != null ? d.quota : null);
-+            var qLimit = (j && j.quotaLimit != null) ? j.quotaLimit : 200;
-+            var qUsed = (j && j.quotaUsed != null) ? j.quotaUsed : 0;
-+            var qResets = (j && (j.resets_after || j.quotaResetsAfter)) || null;
++            var qLeft = (j && j.quota != null) ? (typeof j.quota === 'object' ? j.quota.left : j.quota) : (d && d.quota != null ? d.quota : null);
++            var qLimit = (j && j.quotaLimit != null) ? j.quotaLimit : ((j && j.quota && j.quota.limit != null) ? j.quota.limit : 200);
++            var qUsed = (j && j.quotaUsed != null) ? j.quotaUsed : ((j && j.quota && j.quota.used != null) ? j.quota.used : 0);
++            var qResets = (j && (j.resets_after || j.quotaResetsAfter || (j.quota && j.quota.resets_after))) || null;
++            var model = (j && j.model !== undefined) ? j.model : ((j && Array.isArray(j.models) && j.models[0] !== undefined) ? j.models[0] : undefined);
++            var version = (j && j.version) || null;
++            var schema_layer = (j && j.schema_layer) || null;
++
 +            if (r.status === 401 || effState === 'unregistered' || effState === 'unknown') {
-+              resObj = { state: 'unregistered', message: 'key is not bound', device: d, meta: meta };
++              resObj = { state: 'unregistered', message: 'key is not bound', device: d, meta: meta, ms: ms };
 +            } else if (effState === 'revoked') {
-+              resObj = { state: 'revoked', message: 'key revoked', device: d, meta: meta };
++              resObj = { state: 'revoked', message: 'key revoked', device: d, meta: meta, ms: ms };
 +            } else if (effState === 'pending') {
-+              resObj = { state: 'pending', message: 'waiting for approval', device: d, meta: meta };
++              resObj = { state: 'pending', message: 'waiting for approval', device: d, meta: meta, ms: ms, model: model, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets, version: version, schema_layer: schema_layer };
 +            } else if (effState === 'active') {
-+              resObj = { state: 'active', message: 'key accepted', device: d, meta: meta, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets };
++              resObj = { state: 'active', message: 'key accepted', device: d, meta: meta, ms: ms, model: model, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets, version: version, schema_layer: schema_layer };
 +            } else {
-+              resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta };
++              resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta, ms: ms, model: model };
              }
 -            return { state: 'active', message: 'key accepted', device: d, meta: meta };
 +            try {
@@ -4085,7 +4368,9 @@ index 2f684ea..bbd6248 100644
 +            return resObj;
            });
          }, function (e) {
-           return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };
+-          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };
++          var ms = Date.now() - started;
++          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network'), ms: ms };
          });
      },
  
@@ -4114,7 +4399,7 @@ index 2f684ea..bbd6248 100644
 -        }, function (e) {
 -          return { ok: false, models: [], ms: Date.now() - started, message: 'gateway offline: ' + ((e && e.message) || 'network') };
 +      if (!url) return Promise.resolve({ ok: false, message: 'no gateway' });
-+      return tracedFetch(url + '/mse/v1/quota', {
++      return gatewayFetch(url + '/mse/v1/quota', {
 +        method: 'GET',
 +        headers: { authorization: 'Bearer ' + self.key(), accept: 'application/json' }
 +      }).then(function (r) {
@@ -4127,7 +4412,7 @@ index 2f684ea..bbd6248 100644
      },
  
       
-@@ -2278,15 +2362,19 @@ var __ssW=window,__msePageWindow=window;
+@@ -2278,15 +2415,19 @@ var __ssW=window,__msePageWindow=window;
          selects: Array.isArray(payload.selects) ? payload.selects : [],
          textCount: Number(payload.textCount) || 0,
          image: payload.image || null,
@@ -4141,16 +4426,17 @@ index 2f684ea..bbd6248 100644
 +      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, timeoutMs);
        var record = { request: { method: 'POST', url: url + '/mse/v1/agent', json: body }, response: null };
        lastAgentRequest = record;
+-      return tracedFetch(url + '/mse/v1/agent', {
 +      var reqHeaders = { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() };
 +      if (payload.moodleId) reqHeaders['x-moodle-id'] = String(payload.moodleId);
-       return tracedFetch(url + '/mse/v1/agent', {
++      return gatewayFetch(url + '/mse/v1/agent', {
          method: 'POST',
 -        headers: { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() },
 +        headers: reqHeaders,
          body: JSON.stringify(body),
          signal: ctrl ? ctrl.signal : undefined
        }).then(function (r) {
-@@ -2295,6 +2383,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -2295,6 +2436,7 @@ var __ssW=window,__msePageWindow=window;
            function handle(block) {
              var name = '', data = [];
              block.split(/\r?\n/).forEach(function (line) {
@@ -4158,7 +4444,7 @@ index 2f684ea..bbd6248 100644
                if (line.indexOf('event:') === 0) name = line.slice(6).trim();
                if (line.indexOf('data:') === 0) data.push(line.slice(5).trim());
              });
-@@ -2335,7 +2424,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -2335,7 +2477,7 @@ var __ssW=window,__msePageWindow=window;
        }, function (e) {
          clearTimeout(timer);
          record.response = { error: (e && e.name) || 'network' };
@@ -4167,7 +4453,25 @@ index 2f684ea..bbd6248 100644
        });
      },
      debugEnabled: function () { return lsGet('mse.debug.enabled') === '1'; },
-@@ -3644,7 +3733,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -2353,7 +2495,7 @@ var __ssW=window,__msePageWindow=window;
+       var safe = redactDump(dump, key, 0, secrets);
+       var json = JSON.stringify(safe);
+       if (json.length > 2000000) safe = {clientTruncated:true, preview:json.slice(0,160000)};
+-      return __ssW.fetch(url + '/mse/v1/dump', {
++      return gatewayFetch(url + '/mse/v1/dump', {
+         method:'POST', headers:{'content-type':'application/json', authorization:'Bearer '+key},
+         body:JSON.stringify({type:type, dump:safe})
+       }).then(function (r) { return r.json().then(function (j) {
+@@ -2369,7 +2511,7 @@ var __ssW=window,__msePageWindow=window;
+       if (!url) return Promise.reject(new Error('gateway address is not set'));
+        
+       var body = { stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
+-      return tracedFetch(url + '/v1/chat/completions', {
++      return gatewayFetch(url + '/v1/chat/completions', {
+         method: 'POST',
+         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
+         body: JSON.stringify(body)
+@@ -3644,7 +3786,7 @@ var __ssW=window,__msePageWindow=window;
    }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
  
     
@@ -4176,7 +4480,7 @@ index 2f684ea..bbd6248 100644
  
     
     
-@@ -3655,25 +3744,48 @@ var __ssW=window,__msePageWindow=window;
+@@ -3655,25 +3797,48 @@ var __ssW=window,__msePageWindow=window;
      shortanswer: { label: 'short answer', kind: 'text' },
      numerical: { label: 'number', kind: 'text' },
      match: { label: 'matching', kind: 'select' },
@@ -4228,7 +4532,7 @@ index 2f684ea..bbd6248 100644
    function boot() {
      var win = window;
      var doc = document;
-@@ -3691,7 +3803,9 @@ var __ssW=window,__msePageWindow=window;
+@@ -3691,7 +3856,9 @@ var __ssW=window,__msePageWindow=window;
      }
      function norm(s) {
        return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase()
@@ -4239,7 +4543,7 @@ index 2f684ea..bbd6248 100644
      }
  
       
-@@ -3729,19 +3843,17 @@ var __ssW=window,__msePageWindow=window;
+@@ -3729,19 +3896,17 @@ var __ssW=window,__msePageWindow=window;
        return s;
      }
      function learnedKey() { return 'mse.id.' + String(win.location.host); }
@@ -4261,7 +4565,7 @@ index 2f684ea..bbd6248 100644
        }
         
        var candidates = [];
-@@ -3801,11 +3913,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -3801,11 +3966,7 @@ var __ssW=window,__msePageWindow=window;
          var kept = ls.get(learnedKey() + '.name', null);
          if (kept) { out.name = kept; out.nameSource = 'remembered'; }
        }
@@ -4274,7 +4578,7 @@ index 2f684ea..bbd6248 100644
        return out;
      }
  
-@@ -3934,14 +4042,16 @@ var __ssW=window,__msePageWindow=window;
+@@ -3934,14 +4095,16 @@ var __ssW=window,__msePageWindow=window;
          if (m) return m[1];
        }
        var m2 = /^question-(\d+)-/.exec(block.id || '');
@@ -4294,7 +4598,7 @@ index 2f684ea..bbd6248 100644
          if (x.parentNode) x.parentNode.removeChild(x);
        });
        var text = textOf(clone);
-@@ -3964,7 +4074,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -3964,7 +4127,7 @@ var __ssW=window,__msePageWindow=window;
        var inputs = block.querySelectorAll('input[type=radio], input[type=checkbox]');
        for (var i = 0; i < inputs.length; i++) {
          var inp = inputs[i];
@@ -4303,7 +4607,7 @@ index 2f684ea..bbd6248 100644
          if (String(inp.getAttribute('value')) === '-1') continue;  
          if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;
          var caption = answerText(inp);
-@@ -3973,27 +4083,59 @@ var __ssW=window,__msePageWindow=window;
+@@ -3973,27 +4136,59 @@ var __ssW=window,__msePageWindow=window;
            var image = holder && holder.querySelector('img');
            if (image) caption = image.getAttribute('alt') || ('image ' + (q.answers.length + 1));
          }
@@ -4378,7 +4682,7 @@ index 2f684ea..bbd6248 100644
        return q;
      }
  
-@@ -4026,7 +4168,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -4026,7 +4221,7 @@ var __ssW=window,__msePageWindow=window;
      function attemptMeta() {
        var meta = { host: String(win.location.host), courseId: null, quizId: null, attemptId: null, moodleId: null, missing: [] };
        var id = identity();
@@ -4387,7 +4691,7 @@ index 2f684ea..bbd6248 100644
        if (id.id) meta.moodleId = id.id;
        var bodyCls = (doc.body && doc.body.className) || '';
        var bodyId = (doc.body && doc.body.id) || '';
-@@ -4109,7 +4251,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -4109,7 +4304,7 @@ var __ssW=window,__msePageWindow=window;
        var timeoutPromise = new Promise(function (_, reject) {
          timer = win.setTimeout(function () {
            if (controller) try { controller.abort(); } catch (_) {}
@@ -4396,7 +4700,7 @@ index 2f684ea..bbd6248 100644
          }, 10000);
        });
  
-@@ -4141,18 +4283,18 @@ var __ssW=window,__msePageWindow=window;
+@@ -4141,18 +4336,18 @@ var __ssW=window,__msePageWindow=window;
          });
        }, function (e) {
          if (timer) { win.clearTimeout(timer); timer = null; }
@@ -4420,7 +4724,7 @@ index 2f684ea..bbd6248 100644
          throw e;
        });
      }
-@@ -4204,46 +4346,274 @@ var __ssW=window,__msePageWindow=window;
+@@ -4204,46 +4399,274 @@ var __ssW=window,__msePageWindow=window;
  
       
      function applyAnswer(q, row) {
@@ -4663,7 +4967,7 @@ index 2f684ea..bbd6248 100644
 +          }
 +        });
 +        return {ok:true, how: interactive.every(function (c) { return c.kind === 'select'; }) ? 'select' : (interactive.every(function (c) { return c.kind === 'text'; }) ? 'text' : 'multi')};
-       }
++      }
 +
 +       
 +      if (parts.length === 1 && interactive.length === 1) {
@@ -4715,12 +5019,34 @@ index 2f684ea..bbd6248 100644
 +          if (!anyHits[0].input.checked) anyHits[0].input.click();
 +          return {ok:true, how:'choice'};
 +        }
-+      }
+       }
 +
        return {ok:false, how:null};
      }
  
-@@ -4460,20 +4830,30 @@ var __ssW=window,__msePageWindow=window;
+@@ -4418,10 +4841,20 @@ var __ssW=window,__msePageWindow=window;
+       var all = readQuestions();
+       state.question = currentQuestion(all);
+       state.meta = attemptMeta();
++      var cached = win.MSEBridge ? win.MSEBridge.cachedCheck() : null;
++      if (cached) {
++        state.gw.check = cached;
++        if (cached.model) {
++          state.gatewayModel = cached.model;
++        }
++        if (cached.state === 'active') {
++          state.tier = 'owner';
++        }
++      }
+       render();
+       win.requestAnimationFrame(function () { if (pop) pop.classList.add('in'); });
+       load();
+-      refreshHeaderModel();
++      if (!state.question) refreshTier();
+     }
+ 
+     var rise = 0;
+@@ -4460,20 +4893,30 @@ var __ssW=window,__msePageWindow=window;
  
      function head(titleText, sub, leading) {
        var h = el('div', 'ph');
@@ -4760,7 +5086,29 @@ index 2f684ea..bbd6248 100644
          h.appendChild(chip);
        }
        var mini = el('button', 'mini-status');
-@@ -4651,43 +5031,134 @@ var __ssW=window,__msePageWindow=window;
+@@ -4564,10 +5007,20 @@ var __ssW=window,__msePageWindow=window;
+       
+ 
+       if (!br || !br.url() || !br.meta()) { state.tier = 'base'; return Promise.resolve('base'); }
+-      if (state.tier === 'owner') return Promise.resolve('owner');
+       return br.check().then(function (res) {
+         state.gw.check = res;
+         state.tier = isActive(res) ? 'owner' : 'base';
++        if (res && typeof res.model === 'string' && res.model.trim()) {
++          state.gatewayModel = res.model.trim();
++          ls.set('mse.gateway.lastModel', state.gatewayModel);
++          render();
++        } else if (!res || res.model === undefined) {
++          return refreshHeaderModel().then(function () { return state.tier; });
++        } else if (res.model === null) {
++          state.gatewayModel = null;
++          ls.set('mse.gateway.lastModel', '');
++          render();
++        }
+         return state.tier;
+       }, function () { state.tier = 'base'; return 'base'; });
+     }
+@@ -4651,43 +5104,134 @@ var __ssW=window,__msePageWindow=window;
            var mark = el('span', 'mark' + (r.agent ? ' agent' : ''));
            a.appendChild(mark);
            a.appendChild(el('span', 'lbl', r.label));
@@ -4905,7 +5253,7 @@ index 2f684ea..bbd6248 100644
          body.appendChild(N(errRow, 1));
          return;
        }
-@@ -4753,18 +5224,24 @@ var __ssW=window,__msePageWindow=window;
+@@ -4753,18 +5297,24 @@ var __ssW=window,__msePageWindow=window;
      }
  
      function questionImages(q) {
@@ -4933,7 +5281,7 @@ index 2f684ea..bbd6248 100644
              return new Promise(function (resolve, reject) {
                var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); };
                reader.onerror = function () { reject(new Error('image unreadable')); }; reader.readAsDataURL(blob);
-@@ -4774,9 +5251,9 @@ var __ssW=window,__msePageWindow=window;
+@@ -4774,9 +5324,9 @@ var __ssW=window,__msePageWindow=window;
          return source.then(function (rawUrl) {
            return downscaleDataUrl(rawUrl, 1024);
          }).then(function (data) {
@@ -4945,7 +5293,7 @@ index 2f684ea..bbd6248 100644
            return {data:data, label:related ? 'option: ' + related.text : 'question image ' + (index+1)};
          });
        })).then(function (all) {
-@@ -4785,24 +5262,40 @@ var __ssW=window,__msePageWindow=window;
+@@ -4785,24 +5335,40 @@ var __ssW=window,__msePageWindow=window;
        });
      }
  
@@ -4989,7 +5337,7 @@ index 2f684ea..bbd6248 100644
          textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
          image: images.length ? images : null
        }, function (stage) {
-@@ -4813,52 +5306,130 @@ var __ssW=window,__msePageWindow=window;
+@@ -4813,52 +5379,130 @@ var __ssW=window,__msePageWindow=window;
          var ms = Date.now() - t0;
          if (res.ok && res.answer) {
            logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
@@ -5015,7 +5363,7 @@ index 2f684ea..bbd6248 100644
 +            if (rawAns.indexOf('|') >= 0) ansParts = rawAns.split('|').map(function (x) { return x.trim(); }).filter(Boolean);
 +            else if (rawAns.indexOf('\n') >= 0) ansParts = rawAns.split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
 +            else ansParts = [rawAns.trim()];
-           }
++          }
 +          if (ansParts.length === 1 && (q.type === 'multichoiceset' || (q.answers && q.answers.some(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; })))) {
 +            var spl = ansParts[0].split(/\s*,\s*|\s*;\s{0,}/).map(function (x) { return x.trim(); }).filter(Boolean);
 +            if (spl.length > 1) ansParts = spl;
@@ -5027,7 +5375,7 @@ index 2f684ea..bbd6248 100644
 +          var currentRows = (state.rows || []).slice();
 +          if (!currentRows.length && q.answers && q.answers.length) {
 +            currentRows = q.answers.map(function (answer) { return { label: answer.text, correctness: 0 }; });
-+          }
+           }
 +
 +          ansParts.forEach(function (part) {
 +            var hit = currentRows.find(function (r) { return norm(r.label) === norm(part); });
@@ -5055,9 +5403,8 @@ index 2f684ea..bbd6248 100644
 +        if (is429) {
 +          logAdd('agent', false, 'HTTP 429: rate limit hit · something went wrong', { ms: ms });
 +          startAutoreconnect(5, 'something went wrong');
-           return;
-         }
--        var text = res.code === 'network' || res.code === 'timeout' ? 'request did not go out · check the network'
++          return;
++        }
 +        if ((res.code === 'network' || res.code === 'timeout') && attempt < 2) {
 +          logAdd('agent', false, 'network glitch, retrying (' + (attempt + 1) + '/2)', { ms: ms });
 +          state.agent = { state: 'running', stage: 'network retry…' };
@@ -5065,8 +5412,9 @@ index 2f684ea..bbd6248 100644
 +          win.setTimeout(function () {
 +            runAgent(automatic, attempt + 1);
 +          }, 800);
-+          return;
-+        }
+           return;
+         }
+-        var text = res.code === 'network' || res.code === 'timeout' ? 'request did not go out · check the network'
 +        var isHttpErr = (res.status >= 400 && res.status < 600);
 +        var text = isHttpErr ? 'something went wrong'
 +          : res.code === 'network' || res.code === 'timeout' ? 'request did not go out · check the network'
@@ -5143,7 +5491,7 @@ index 2f684ea..bbd6248 100644
  
      function load() {
        var q = state.question;
-@@ -4940,22 +5511,34 @@ var __ssW=window,__msePageWindow=window;
+@@ -4940,22 +5584,34 @@ var __ssW=window,__msePageWindow=window;
        var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
        body.appendChild(N(el('div', 'sec', 'account')));
        body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
@@ -5185,27 +5533,38 @@ index 2f684ea..bbd6248 100644
        net.appendChild(el('span', 'txt', 'network log'));
        net.appendChild(el('span', 'more', 'open'));
        body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
-@@ -4968,9 +5551,17 @@ var __ssW=window,__msePageWindow=window;
+@@ -4963,14 +5619,24 @@ var __ssW=window,__msePageWindow=window;
+ 
+     function refreshHeaderModel() {
+       var br = win.MSEBridge, url = br && br.url();
+-      if (!url) { state.gatewayModel = null; return; }
+-      if (!br.meta()) return;
++      if (!url) { state.gatewayModel = null; return Promise.resolve(null); }
++      if (!br.meta()) return Promise.resolve(null);
        var epoch = ++state.modelEpoch;
-       br.probe(url).then(function (r) {
-         if (epoch !== state.modelEpoch || br.url() !== url) return;
+-      br.probe(url).then(function (r) {
+-        if (epoch !== state.modelEpoch || br.url() !== url) return;
 -        state.gatewayModel = r.ok && typeof r.model === 'string' && r.model.trim() ? r.model.trim() : null;
-+        state.gatewayModel = (r.ok || r.mine) && typeof r.model === 'string' && r.model.trim() ? r.model.trim() : null;
++      return br.probe(url).then(function (r) {
++        if (epoch !== state.modelEpoch || br.url() !== url) return null;
++        state.gatewayModel = (r && (r.ok || r.mine) && typeof r.model === 'string' && r.model.trim()) ? r.model.trim() : null;
 +        if (!state.gatewayModel) { ls.set('mse.gateway.lastModel', ''); }
 +        else { ls.set('mse.gateway.lastModel', state.gatewayModel); }
          render();
 -      }, function () { if (epoch === state.modelEpoch && br.url() === url) { state.gatewayModel = null; render(); } });
++        return state.gatewayModel;
 +      }, function () {
 +        if (epoch === state.modelEpoch && br.url() === url) {
 +          state.gatewayModel = null;
 +          ls.set('mse.gateway.lastModel', '');
 +          render();
 +        }
++        return null;
 +      });
      }
  
      function checkGateway(raw) {
-@@ -4980,26 +5571,43 @@ var __ssW=window,__msePageWindow=window;
+@@ -4980,32 +5646,52 @@ var __ssW=window,__msePageWindow=window;
        var epoch = ++state.modelEpoch;
        gw.busy = 'check';
        gw.probe = null;
@@ -5219,7 +5578,7 @@ index 2f684ea..bbd6248 100644
 +        if (!r.mine && !r.ok) {
 +          if (epoch === state.modelEpoch && raw === br.url()) state.gatewayModel = null;
 +          gw.busy = null;
-+          logAdd('gateway', false, 'AI gateway: ' + r.message);
++          logAdd('gateway', false, 'the gateway does not answer: ' + r.message);
 +          render();
 +          return null;
 +        }
@@ -5233,7 +5592,6 @@ index 2f684ea..bbd6248 100644
 -        return Promise.all([br.models(), br.check()]).then(function (out) {
 -          gw.models = out[0];
 -          gw.check = out[1];
-+        logAdd('gateway', true, 'AI gateway is up' + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
 +        if (epoch === state.modelEpoch && r.model) {
 +          state.gatewayModel = r.model;
 +          ls.set('mse.gateway.lastModel', r.model);
@@ -5255,16 +5613,26 @@ index 2f684ea..bbd6248 100644
 -           
 -          logAdd('gateway', true, 'AI gateway is up · ' + (out[0].models.length || 0) + ' models', { ms: r.ms });
 +          if (res.state === 'active') {
-+            refreshTier();
-+            if (epoch === state.modelEpoch) {
-+              state.gatewayModel = typeof r.model === 'string' && r.model.trim() ? r.model.trim() : (ls.get('mse.gateway.lastModel') || null);
++            state.tier = 'owner';
++            if (epoch === state.modelEpoch && res.model) {
++              state.gatewayModel = res.model;
++              ls.set('mse.gateway.lastModel', res.model);
 +            }
 +          }
-+          logAdd('gateway', res.state === 'active', (res.message || res.state) + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
++          var ms = (res && res.ms != null) ? res.ms : (r && r.ms ? r.ms : 0);
++          var statusText = (res.state === 'active' ? 'key accepted' : (res.message || res.state)) + (ms ? ' · ' + ms + ' ms' : '');
++          logAdd('gateway', res.state === 'active', statusText, { ms: ms });
            render();
            return r;
          });
-@@ -5025,7 +5633,6 @@ var __ssW=window,__msePageWindow=window;
+       }, function (e) {
+         gw.busy = null;
+         gw.probe = { ok: false, message: (e && e.message) || 'error' };
++        logAdd('gateway', false, 'the gateway does not answer: ' + ((e && e.message) || 'network'));
+         render();
+         return null;
+       });
+@@ -5025,7 +5711,6 @@ var __ssW=window,__msePageWindow=window;
        input.spellcheck = false;
        input.placeholder = 'https:/\/…';
        input.value = br.url() || '';
@@ -5272,7 +5640,7 @@ index 2f684ea..bbd6248 100644
        input.addEventListener('input', function () {
          var typed = String(input.value || '').trim().replace(/\x2F+$/, '');
          var saved = br.url() || '';
-@@ -5035,79 +5642,98 @@ var __ssW=window,__msePageWindow=window;
+@@ -5035,79 +5720,99 @@ var __ssW=window,__msePageWindow=window;
        body.appendChild(N(el('div', 'sec', 'connection'), 0));
        var frow = el('div', 'frow');
        body.appendChild(N(frow, 0));
@@ -5385,7 +5753,8 @@ index 2f684ea..bbd6248 100644
 +        statusRow = el('div', 'row');
 +        var isActive = gw.check.state === 'active';
 +        statusRow.appendChild(el('span', 'dot ' + (isActive ? 'ok' : 'warn')));
-+        var msPart = gw.probe && gw.probe.ms != null ? ' · ' + gw.probe.ms + ' ms' : '';
++        var msVal = gw.check.ms != null ? gw.check.ms : (gw.probe && gw.probe.ms != null ? gw.probe.ms : null);
++        var msPart = msVal != null ? ' · ' + msVal + ' ms' : '';
 +        var statusText = isActive ? 'key accepted' + msPart : (gw.check.message || 'key not accepted') + msPart;
 +        statusRow.appendChild(el('span', 'txt', statusText));
 +      } else if (gw.probe) {
@@ -5436,7 +5805,7 @@ index 2f684ea..bbd6248 100644
      }
  
       
-@@ -5124,22 +5750,24 @@ var __ssW=window,__msePageWindow=window;
+@@ -5124,22 +5829,24 @@ var __ssW=window,__msePageWindow=window;
        });
        body.appendChild(N(box, 1));
        var frow = el('div', 'frow');
@@ -5467,7 +5836,7 @@ index 2f684ea..bbd6248 100644
        frow.appendChild(clear);
        body.appendChild(N(frow, 1));
      }
-@@ -5193,6 +5821,34 @@ var __ssW=window,__msePageWindow=window;
+@@ -5193,6 +5900,34 @@ var __ssW=window,__msePageWindow=window;
          method: formEl.getAttribute('method') || 'POST',
          elementsCount: formEl.elements ? formEl.elements.length : 0
        } : null;
@@ -5502,7 +5871,7 @@ index 2f684ea..bbd6248 100644
        var protocolView = q ? {
          page: null,
          question: q.text,
-@@ -5207,11 +5863,16 @@ var __ssW=window,__msePageWindow=window;
+@@ -5207,11 +5942,16 @@ var __ssW=window,__msePageWindow=window;
          text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) { return c.node.value || ''; }),
          images: images.map(function (im) { return im.src; }),
          question_image: images.length ? images[0].src : null,
@@ -5520,7 +5889,7 @@ index 2f684ea..bbd6248 100644
          warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
          page: { location: String(win.location.href), title: doc.title, headings: Array.prototype.map.call(doc.querySelectorAll('h1,h2,h3'), function (n) { return n.textContent.trim(); }),
            httpHeaders: 'unavailable to page JavaScript', cookieNamesVisibleToJavaScript: cookies, inlineMoodleScripts: scripts },
-@@ -5226,6 +5887,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -5226,6 +5966,8 @@ var __ssW=window,__msePageWindow=window;
      }
      function debugTraffic(event) {
        if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
@@ -5529,7 +5898,7 @@ index 2f684ea..bbd6248 100644
        var dump = snifDump(); dump.traffic = event;
        win.MSEBridge.sendDump('debug', dump);
      }
-@@ -5239,6 +5902,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5239,6 +5981,7 @@ var __ssW=window,__msePageWindow=window;
      }
      var snifText = '';
      function viewSnif() {
@@ -5537,7 +5906,7 @@ index 2f684ea..bbd6248 100644
        body.appendChild(N(el('div', 'sec', 'Snif · local only')));
        body.appendChild(N(el('div', 'empty', 'May contain session keys and personal data. Review before sharing.')));
        var copy = el('button', 'btn solid', 'Copy');
-@@ -5264,8 +5928,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -5264,8 +6007,8 @@ var __ssW=window,__msePageWindow=window;
        var title = CONFIG.brand;
        var leading = 'info';
        if (state.route === 'answers' && state.question) {
@@ -5548,7 +5917,7 @@ index 2f684ea..bbd6248 100644
        } else if (state.route === 'account') { sub = 'account'; }
        else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
        else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
-@@ -5328,6 +5992,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5328,6 +6071,7 @@ var __ssW=window,__msePageWindow=window;
          if (!q) return false;
          return applyAnswer(q, { label: label });
        },
@@ -5556,7 +5925,7 @@ index 2f684ea..bbd6248 100644
        agent: function () { return state.agent; },
        runAgent: function () { runAgent(false); return true; },
        log: function () { return log.slice(-40); },
-@@ -5374,6 +6039,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5374,6 +6118,7 @@ var __ssW=window,__msePageWindow=window;
              : state.agent && state.agent.state === 'error' ? { state: 'error', text: state.agent.text }
              : state.agent && state.agent.state === 'running' ? { state: 'running', text: '' }
              : null,
@@ -5564,7 +5933,7 @@ index 2f684ea..bbd6248 100644
            tier: state.tier,
            meta: state.meta,
            identity: identity(),
-@@ -5386,7 +6052,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -5386,7 +6131,8 @@ var __ssW=window,__msePageWindow=window;
              supported: state.question.supported,
              identity: state.question.identity,
              questionId: state.question.questionId,
@@ -5575,14 +5944,14 @@ index 2f684ea..bbd6248 100644
          };
        }
 diff --git a/package.json b/package.json
-index ae78558..f869caf 100644
+index ae78558..4634bb4 100644
 --- a/package.json
 +++ b/package.json
 @@ -1,6 +1,6 @@
  {
    "name": "mse",
 -  "version": "2.8.0",
-+  "version": "2.13.0",
++  "version": "2.13.1",
    "private": true,
    "description": "MSE — Moodle answer panel (userscript) and the gateway/router stack behind it",
    "license": "UNLICENSED",
@@ -5920,7 +6289,7 @@ index 460786e..c80a1a0 100644
 +  assert.equal(invalid.status, 400);
  });
 diff --git a/tests/bot_280.py b/tests/bot_280.py
-index d16b8c2..44bee5e 100644
+index d16b8c2..ff2dd27 100644
 --- a/tests/bot_280.py
 +++ b/tests/bot_280.py
 @@ -38,8 +38,8 @@ h_screen = screens.home(st_mock)
@@ -5929,7 +6298,7 @@ index d16b8c2..44bee5e 100644
  assert 'data="dump:list"' not in html, "Old dump:list button should not be on home screen"
 -assert 'version 2.8.0' in html, "Version 2.8.0 should be displayed in footer"
 -print("ok 2 - Bug 6: button labeled 'дампы/логи' with data='dump:all' and version 2.8.0")
-+assert ('version 2.13.0' in html or 'version 2.12.0' in html or 'version 2.11.0' in html or 'version 2.10.0' in html or 'version 2.8.0' in html), "Version should be displayed in footer"
++assert ('version 2.13.1' in html or 'version 2.13.0' in html or 'version 2.12.0' in html or 'version 2.11.0' in html or 'version 2.10.0' in html or 'version 2.8.0' in html), "Version should be displayed in footer"
 +print("ok 2 - Bug 6: button labeled 'дампы/логи' with data='dump:all' and version 2.10.0")
  
  # 3. Test Bug 6: packaging dumps and logs into zip archive
@@ -6172,7 +6541,7 @@ index c8d31bf..66355e8 100644
  
      /* 3. the registration is pending, and the agent refuses until the owner allows the id */
 diff --git a/tests/onefile.test.js b/tests/onefile.test.js
-index 3d567b7..42ef9ac 100644
+index 3d567b7..0f24250 100644
 --- a/tests/onefile.test.js
 +++ b/tests/onefile.test.js
 @@ -17,9 +17,9 @@ const src = fs.readFileSync(path.join(ART, 'mse.user.js'), 'utf8');
@@ -6182,9 +6551,9 @@ index 3d567b7..42ef9ac 100644
 -  assert.match(src, /^\/\/ @version\s+2\.8\.0$/m);
 -  assert.equal(report.version, '2.8.0');
 -  assert.equal(require('../package.json').version, '2.8.0');
-+  assert.match(src, /^\/\/ @version\s+2\.13\.0$/m);
-+  assert.equal(report.version, '2.13.0');
-+  assert.equal(require('../package.json').version, '2.13.0');
++  assert.match(src, /^\/\/ @version\s+2\.13\.1$/m);
++  assert.equal(report.version, '2.13.1');
++  assert.equal(require('../package.json').version, '2.13.1');
    assert.equal((src.match(/==UserScript==/g) || []).length, 1, 'exactly one userscript header');
    assert.equal((src.match(/==\/UserScript==/g) || []).length, 1, 'exactly one userscript footer');
    assert.equal((src.match(/^\s*\/\/\s*@require\b/gm) || []).length, 0, 'no @require');
@@ -6518,7 +6887,7 @@ index 0000000..8d87627
 +  }
 +});
 diff --git a/tests/router.test.js b/tests/router.test.js
-index 2e87aee..5d09b72 100644
+index 2e87aee..4c3aacb 100644
 --- a/tests/router.test.js
 +++ b/tests/router.test.js
 @@ -45,7 +45,7 @@ const key = (n) => 'mse_' + String(n).repeat(48);
@@ -6535,7 +6904,7 @@ index 2e87aee..5d09b72 100644
    const st = await (await get('/admin/state', admin)).json();
    assert.equal(st.quota, 50);
 -  assert.equal(st.version, '2.8.0');
-+  assert.equal(st.version, '2.13.0');
++  assert.equal(st.version, '2.13.1');
    assert.ok(Array.isArray(st.log) && st.log.length > 0, 'the log tells what happened');
    assert.equal(st.backend, 'tailscale');
  });

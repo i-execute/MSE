@@ -48,7 +48,7 @@ process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
 process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
 const PORT = Number(process.env.MSE_PORT);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.13.0';
+const VERSION = '2.13.1';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
 const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
@@ -1301,36 +1301,44 @@ const handler = async (req, res) => {
       const resetInfo = getQuotaResetInfo();
       const left = quotaOf(rec);
       const used = rec.quotaUsed || 0;
-      if (!allowed) {
-        return send(req, res, 403, {
-          ok: false,
-          status: effStatus,
-          state: effStatus,
-          message: effStatus === 'revoked' ? 'key revoked' : 'waiting for approval',
-          device: publicDevice(rec),
-          hint: rec.status === 'revoked' ? 'the key was revoked' : 'waiting for approval',
-          quota: left,
-          quotaUsed: used,
-          quotaLimit: CFG.dailyQuota,
-          resets_after: resetInfo.resetsIn,
-          quotaResetsAfter: resetInfo.resetsIn,
-          resets_at: resetInfo.resetsAt
-        });
-      }
-      return send(req, res, 200, {
-        ok: true,
-        status: 'active',
-        state: 'active',
-        message: 'key accepted',
+      const quotaObj = {
+        used,
+        left,
+        limit: CFG.dailyQuota,
+        resets_after: resetInfo.resetsIn,
+        resets_in_sec: resetInfo.resetsInSec,
+        resets_at: resetInfo.resetsAt
+      };
+      const effModel = CFG.model || (CFG.models && CFG.models[0]) || 'qwen-2.5-coder-32b';
+      const effModels = (CFG.models && CFG.models.length) ? CFG.models : [effModel];
+      const compositeBase = {
+        name: 'MSE gateway',
+        version: VERSION,
+        schema_layer: 1,
+        layer: 1,
+        status: effStatus,
+        state: effStatus,
         device: publicDevice(rec),
-        model: CFG.model,
+        model: effModel,
+        models: effModels,
+        modelsCount: effModels.length,
         quota: left,
         quotaUsed: used,
         quotaLimit: CFG.dailyQuota,
         resets_after: resetInfo.resetsIn,
         quotaResetsAfter: resetInfo.resetsIn,
-        resets_at: resetInfo.resetsAt
-      });
+        resets_at: resetInfo.resetsAt,
+        quotaDetails: quotaObj
+      };
+      if (!allowed) {
+        compositeBase.ok = false;
+        compositeBase.message = effStatus === 'revoked' ? 'key revoked' : 'waiting for approval';
+        compositeBase.hint = rec.status === 'revoked' ? 'the key was revoked' : 'waiting for approval';
+        return send(req, res, 403, compositeBase);
+      }
+      compositeBase.ok = true;
+      compositeBase.message = 'key accepted';
+      return send(req, res, 200, compositeBase);
     }
     if (url.pathname === '/mse/v1/quota' && req.method === 'GET') {
       const rec = deviceByKey(keyOf(req));

@@ -81,7 +81,7 @@ assert "dev:approve:mse-dev-multi:102" in p_html, "Pending sub-account has appro
 
 h_screen = screens.home(state_multi)
 h_html = h_screen.to_msg().get("html", "")
-assert ("version 2.13.0" in h_html or "version 2.12.0" in h_html or "version 2.11.0" in h_html or "version 2.10.0" in h_html), "Version is shown in home footer"
+assert ("version 2.13.1" in h_html or "version 2.13.0" in h_html or "version 2.12.0" in h_html or "version 2.11.0" in h_html or "version 2.10.0" in h_html), "Version is shown in home footer"
 print("ok 4 - 2.10/2.11 multi-account buttons and version footer verified")
 
 print("\nALL BOT 2.10 TESTS PASSED")

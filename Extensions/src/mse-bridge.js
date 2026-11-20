@@ -265,6 +265,50 @@
       throw error;
     });
   }
+
+  var gatewayQueue = Promise.resolve();
+  var gatewayInFlight = 0;
+
+  function isLoadFailed(err) {
+    if (!err) return false;
+    if (err.name === 'TypeError') return true;
+    var msg = String(err.message || '');
+    return /load failed|failed to fetch|network request failed/i.test(msg);
+  }
+
+  function gatewayFetch(url, options, retryCount) {
+    var attempt = retryCount || 0;
+    var run = function () {
+      gatewayInFlight++;
+      return tracedFetch(url, options).then(function (res) {
+        gatewayInFlight--;
+        return res;
+      }, function (err) {
+        gatewayInFlight--;
+        if (attempt === 0 && isLoadFailed(err)) {
+          if (window.__mse && window.__mse.onDebugTraffic) {
+            window.__mse.onDebugTraffic({ event: 'retry_load_failed', url: String(url), delay: 500 });
+          }
+          return new Promise(function (resolve) {
+            setTimeout(resolve, 500);
+          }).then(function () {
+            gatewayInFlight++;
+            return tracedFetch(url, options).then(function (res2) {
+              gatewayInFlight--;
+              return res2;
+            }, function (err2) {
+              gatewayInFlight--;
+              throw err2;
+            });
+          });
+        }
+        throw err;
+      });
+    };
+    var next = gatewayQueue.then(run, run);
+    gatewayQueue = next.catch(function () {});
+    return next;
+  }
   function redactDump(value, key, depth, secrets) {
     if (depth > 30) return '[depth limit]';
     if (typeof value === 'string') {
@@ -290,6 +334,8 @@
   }
   var lastAgentRequest = null;
   var MSEBridge = {
+    inFlight: function () { return gatewayInFlight; },
+
     /* ---------------- the address ---------------- */
     url: function () {
       var fromLs = lsGet(CONFIG.urlKey) || lsGet(CONFIG.urlMirrorKey);
@@ -368,7 +414,7 @@
       var started = Date.now();
       var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
       var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
-      return tracedFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
+      return gatewayFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
         .then(function (r) {
           return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });
         })
@@ -383,7 +429,7 @@
             status: res.status,
             ms: Date.now() - started,
             version: j.version || null,
-            model: j.model || null,
+            model: (j && (j.model || (Array.isArray(j.models) && j.models[0]))) || null,
             quota: j.quota || null,
             upstream: j.upstream || null,
             message: !res.ok ? 'the address answered ' + res.status
@@ -438,7 +484,7 @@
       identity = identity || {};
       var body = { key: key, moodleId: String(identity.id || ''), name: String(identity.name || ''), site: String(identity.site || ''), deviceName: String((window.navigator && window.navigator.userAgent) || '').slice(0, 120) };
       if (!body.moodleId) return Promise.reject(new Error('user ID missing · open profile'));
-      return tracedFetch(url + '/mse/v1/register', {
+      return gatewayFetch(url + '/mse/v1/register', {
         method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key }, body: JSON.stringify(body)
       }).then(function (r) {
         return r.json().then(function (j) {
@@ -475,28 +521,34 @@
       var path = '/mse/v1/me' + (moodleId ? ('?moodleId=' + encodeURIComponent(moodleId)) : '');
       var headers = { authorization: 'Bearer ' + key, accept: 'application/json' };
       if (moodleId) headers['x-moodle-id'] = String(moodleId);
-      return tracedFetch(url + path, { method: 'GET', headers: headers })
+      var started = Date.now();
+      return gatewayFetch(url + path, { method: 'GET', headers: headers })
         .then(function (r) {
+          var ms = Date.now() - started;
           return r.json().then(function (j) {
             var d = (j && j.device) || {};
             var headerStatus = r.headers.get('x-mse-status');
             var effState = headerStatus || (j && j.status) || (j && j.state) || (d && d.status) || (r.ok ? 'active' : (d.status === 'revoked' ? 'revoked' : 'pending'));
             var meta = self.saveMeta({ device: d, ok: r.ok }, { key: key, moodleId: d.moodleId || moodleId, name: d.name });
             var resObj;
-            var qLeft = (j && j.quota != null) ? j.quota : (d && d.quota != null ? d.quota : null);
-            var qLimit = (j && j.quotaLimit != null) ? j.quotaLimit : 200;
-            var qUsed = (j && j.quotaUsed != null) ? j.quotaUsed : 0;
-            var qResets = (j && (j.resets_after || j.quotaResetsAfter)) || null;
+            var qLeft = (j && j.quota != null) ? (typeof j.quota === 'object' ? j.quota.left : j.quota) : (d && d.quota != null ? d.quota : null);
+            var qLimit = (j && j.quotaLimit != null) ? j.quotaLimit : ((j && j.quota && j.quota.limit != null) ? j.quota.limit : 200);
+            var qUsed = (j && j.quotaUsed != null) ? j.quotaUsed : ((j && j.quota && j.quota.used != null) ? j.quota.used : 0);
+            var qResets = (j && (j.resets_after || j.quotaResetsAfter || (j.quota && j.quota.resets_after))) || null;
+            var model = (j && j.model !== undefined) ? j.model : ((j && Array.isArray(j.models) && j.models[0] !== undefined) ? j.models[0] : undefined);
+            var version = (j && j.version) || null;
+            var schema_layer = (j && j.schema_layer) || null;
+
             if (r.status === 401 || effState === 'unregistered' || effState === 'unknown') {
-              resObj = { state: 'unregistered', message: 'key is not bound', device: d, meta: meta };
+              resObj = { state: 'unregistered', message: 'key is not bound', device: d, meta: meta, ms: ms };
             } else if (effState === 'revoked') {
-              resObj = { state: 'revoked', message: 'key revoked', device: d, meta: meta };
+              resObj = { state: 'revoked', message: 'key revoked', device: d, meta: meta, ms: ms };
             } else if (effState === 'pending') {
-              resObj = { state: 'pending', message: 'waiting for approval', device: d, meta: meta };
+              resObj = { state: 'pending', message: 'waiting for approval', device: d, meta: meta, ms: ms, model: model, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets, version: version, schema_layer: schema_layer };
             } else if (effState === 'active') {
-              resObj = { state: 'active', message: 'key accepted', device: d, meta: meta, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets };
+              resObj = { state: 'active', message: 'key accepted', device: d, meta: meta, ms: ms, model: model, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets, version: version, schema_layer: schema_layer };
             } else {
-              resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta };
+              resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta, ms: ms, model: model };
             }
             try {
               lsSet('mse.cache.gw_check', JSON.stringify({ key: key, check: resObj, t: Date.now() }));
@@ -504,7 +556,8 @@
             return resObj;
           });
         }, function (e) {
-          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };
+          var ms = Date.now() - started;
+          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network'), ms: ms };
         });
     },
 
@@ -522,7 +575,7 @@
       var self = this;
       var url = self.url();
       if (!url) return Promise.resolve({ ok: false, message: 'no gateway' });
-      return tracedFetch(url + '/mse/v1/quota', {
+      return gatewayFetch(url + '/mse/v1/quota', {
         method: 'GET',
         headers: { authorization: 'Bearer ' + self.key(), accept: 'application/json' }
       }).then(function (r) {
@@ -559,7 +612,7 @@
       lastAgentRequest = record;
       var reqHeaders = { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() };
       if (payload.moodleId) reqHeaders['x-moodle-id'] = String(payload.moodleId);
-      return tracedFetch(url + '/mse/v1/agent', {
+      return gatewayFetch(url + '/mse/v1/agent', {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(body),
@@ -629,7 +682,7 @@
       var safe = redactDump(dump, key, 0, secrets);
       var json = JSON.stringify(safe);
       if (json.length > 2000000) safe = {clientTruncated:true, preview:json.slice(0,160000)};
-      return window.fetch(url + '/mse/v1/dump', {
+      return gatewayFetch(url + '/mse/v1/dump', {
         method:'POST', headers:{'content-type':'application/json', authorization:'Bearer '+key},
         body:JSON.stringify({type:type, dump:safe})
       }).then(function (r) { return r.json().then(function (j) {
@@ -645,7 +698,7 @@
       if (!url) return Promise.reject(new Error('gateway address is not set'));
       /* no model name here: the router decides which model the backend serves, the client never names one */
       var body = { stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
-      return tracedFetch(url + '/v1/chat/completions', {
+      return gatewayFetch(url + '/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
         body: JSON.stringify(body)

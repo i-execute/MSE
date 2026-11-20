@@ -1099,10 +1099,20 @@
       var all = readQuestions();
       state.question = currentQuestion(all);
       state.meta = attemptMeta();
+      var cached = win.MSEBridge ? win.MSEBridge.cachedCheck() : null;
+      if (cached) {
+        state.gw.check = cached;
+        if (cached.model) {
+          state.gatewayModel = cached.model;
+        }
+        if (cached.state === 'active') {
+          state.tier = 'owner';
+        }
+      }
       render();
       win.requestAnimationFrame(function () { if (pop) pop.classList.add('in'); });
       load();
-      refreshHeaderModel();
+      if (!state.question) refreshTier();
     }
 
     var rise = 0;
@@ -1260,10 +1270,20 @@
       /* no address, or a device that never even applied: base, and the gateway is not called at all — a user
          who has not registered a key produces not one byte of traffic towards it */
       if (!br || !br.url() || !br.meta()) { state.tier = 'base'; return Promise.resolve('base'); }
-      if (state.tier === 'owner') return Promise.resolve('owner');
       return br.check().then(function (res) {
         state.gw.check = res;
         state.tier = isActive(res) ? 'owner' : 'base';
+        if (res && typeof res.model === 'string' && res.model.trim()) {
+          state.gatewayModel = res.model.trim();
+          ls.set('mse.gateway.lastModel', state.gatewayModel);
+          render();
+        } else if (!res || res.model === undefined) {
+          return refreshHeaderModel().then(function () { return state.tier; });
+        } else if (res.model === null) {
+          state.gatewayModel = null;
+          ls.set('mse.gateway.lastModel', '');
+          render();
+        }
         return state.tier;
       }, function () { state.tier = 'base'; return 'base'; });
     }
@@ -1862,21 +1882,23 @@
 
     function refreshHeaderModel() {
       var br = win.MSEBridge, url = br && br.url();
-      if (!url) { state.gatewayModel = null; return; }
-      if (!br.meta()) return;
+      if (!url) { state.gatewayModel = null; return Promise.resolve(null); }
+      if (!br.meta()) return Promise.resolve(null);
       var epoch = ++state.modelEpoch;
-      br.probe(url).then(function (r) {
-        if (epoch !== state.modelEpoch || br.url() !== url) return;
-        state.gatewayModel = (r.ok || r.mine) && typeof r.model === 'string' && r.model.trim() ? r.model.trim() : null;
+      return br.probe(url).then(function (r) {
+        if (epoch !== state.modelEpoch || br.url() !== url) return null;
+        state.gatewayModel = (r && (r.ok || r.mine) && typeof r.model === 'string' && r.model.trim()) ? r.model.trim() : null;
         if (!state.gatewayModel) { ls.set('mse.gateway.lastModel', ''); }
         else { ls.set('mse.gateway.lastModel', state.gatewayModel); }
         render();
+        return state.gatewayModel;
       }, function () {
         if (epoch === state.modelEpoch && br.url() === url) {
           state.gatewayModel = null;
           ls.set('mse.gateway.lastModel', '');
           render();
         }
+        return null;
       });
     }
 
@@ -1893,12 +1915,11 @@
         if (!r.mine && !r.ok) {
           if (epoch === state.modelEpoch && raw === br.url()) state.gatewayModel = null;
           gw.busy = null;
-          logAdd('gateway', false, 'AI gateway: ' + r.message);
+          logAdd('gateway', false, 'the gateway does not answer: ' + r.message);
           render();
           return null;
         }
         br.setUrl(raw);
-        logAdd('gateway', true, 'AI gateway is up' + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
         if (epoch === state.modelEpoch && r.model) {
           state.gatewayModel = r.model;
           ls.set('mse.gateway.lastModel', r.model);
@@ -1918,18 +1939,22 @@
           gw.check = res;
           gw.busy = null;
           if (res.state === 'active') {
-            refreshTier();
-            if (epoch === state.modelEpoch) {
-              state.gatewayModel = typeof r.model === 'string' && r.model.trim() ? r.model.trim() : (ls.get('mse.gateway.lastModel') || null);
+            state.tier = 'owner';
+            if (epoch === state.modelEpoch && res.model) {
+              state.gatewayModel = res.model;
+              ls.set('mse.gateway.lastModel', res.model);
             }
           }
-          logAdd('gateway', res.state === 'active', (res.message || res.state) + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
+          var ms = (res && res.ms != null) ? res.ms : (r && r.ms ? r.ms : 0);
+          var statusText = (res.state === 'active' ? 'key accepted' : (res.message || res.state)) + (ms ? ' · ' + ms + ' ms' : '');
+          logAdd('gateway', res.state === 'active', statusText, { ms: ms });
           render();
           return r;
         });
       }, function (e) {
         gw.busy = null;
         gw.probe = { ok: false, message: (e && e.message) || 'error' };
+        logAdd('gateway', false, 'the gateway does not answer: ' + ((e && e.message) || 'network'));
         render();
         return null;
       });
@@ -2002,7 +2027,8 @@
         statusRow = el('div', 'row');
         var isActive = gw.check.state === 'active';
         statusRow.appendChild(el('span', 'dot ' + (isActive ? 'ok' : 'warn')));
-        var msPart = gw.probe && gw.probe.ms != null ? ' · ' + gw.probe.ms + ' ms' : '';
+        var msVal = gw.check.ms != null ? gw.check.ms : (gw.probe && gw.probe.ms != null ? gw.probe.ms : null);
+        var msPart = msVal != null ? ' · ' + msVal + ' ms' : '';
         var statusText = isActive ? 'key accepted' + msPart : (gw.check.message || 'key not accepted') + msPart;
         statusRow.appendChild(el('span', 'txt', statusText));
       } else if (gw.probe) {

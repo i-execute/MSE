@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send MSE 2.13.0 delivery files and summary to Telegram owner.
+"""Send MSE 2.13.1 delivery files and summary to Telegram owner.
 Usage:
     MSE_BOT_TOKEN=... python3 tools/send_tg_delivery.py
 """
@@ -19,7 +19,7 @@ ARTIFACTS = ROOT / "Storage" / "artifacts"
 CHAT_ID = os.environ.get("MSE_OWNER_ID") or os.environ.get("TELEGRAM_CHAT_ID") or "7610246474"
 
 def make_delivery_zip() -> Path:
-    zip_path = ARTIFACTS / "MSE-2.13.0.zip"
+    zip_path = ARTIFACTS / "MSE-2.13.1.zip"
     include_dirs = [
         "Extensions/src",
         "Extensions/tools",
@@ -33,12 +33,12 @@ def make_delivery_zip() -> Path:
     include_files = [
         "Storage/artifacts/mse.user.js",
         "Storage/artifacts/build-report.json",
-        "Storage/artifacts/mse-2.13.0.patch",
+        "Storage/artifacts/mse-2.13.1.patch",
         "Storage/get.sh",
         "package.json",
         "package-lock.json",
         "README.md",
-        "RELEASE_2.13.0.md",
+        "RELEASE_2.13.1.md",
         "CHANGES.md",
         "LICENSE",
     ]
@@ -47,6 +47,8 @@ def make_delivery_zip() -> Path:
             p = ROOT / rel
             if p.exists():
                 zf.write(p, rel)
+            else:
+                print(f"Warning: file {rel} not found", file=sys.stderr)
         for dir_rel in include_dirs:
             dp = ROOT / dir_rel
             if not dp.exists():
@@ -112,16 +114,15 @@ def main():
         print("Delivery archive created successfully at:", zip_path)
         return 0
 
-    report_text = """<b>MSE 2.13.0 Milestone Release Delivered</b>
+    report_text = """<b>MSE 2.13.1 Critical Hotfix Delivered</b>
 
 <b>Key Highlights:</b>
-• <b>Multi-Answer AI Selection</b>: Marks all recommendations, leaves popover open until all are tapped, immediately clicks Moodle checkboxes, and provides brighter illumination feedback.
-• <b>Agent Status Bar Overhaul</b>: Flowing ambient light aura without element collisions, 3 action icons (brain for reasoning, eye for vision, pencil for answer composition), and shimmering flowing text.
-• <b>Daily Quota API & UTC Reset</b>: <code>GET /mse/v1/quota</code> with reset countdown calculated to 00:00 UTC and displayed in UI settings card.
-• <b>Full Documentation Suite</b>: 8 comprehensive guides in <code>Storage/Documentation/</code> for iOS, Android, Desktop, Russian overview, and extension layer breakdown.
-• <b>Streamlined TUI & Gateway Domain</b>: Removed redundant menus; added dedicated Gateway Domain selector with Cloudflared (GitHub latest release + pinned fallback, Telegram alert on URL change) and Tailscale on demand.
-• <b>Telegram Bot Cards & Milestone Alerts</b>: Interactive approve/decline buttons on applicant cards and configurable milestone notifications every N requests (editable inline).
-• <b>Resilient 429/5xx Handling</b>: Error logging with 5-second autoreconnect countdown timer under agent button."""
+• <b>Strict Gateway Fetch Serialization</b>: Removed fetch parallelism to gateway. All requests queued via <code>gatewayQueue</code> (<code>maxInFlight &lt;= 1</code>). Eliminates iOS Safari HTTP/2 multiplexing stream aborts.
+• <b>500ms Single Retry on TypeError</b>: Catches "Load failed" / "Failed to fetch" on first attempt, pauses 500ms, and performs exactly 1 sequential retry.
+• <b>Composite /mse/v1/me</b>: Returns status + active model + model catalog + quota + quotaUsed + quotaLimit + UTC resets countdown + version 2.13.1 + layer 1 in a single JSON response.
+• <b>Single Request Per Cycle</b>: Client makes exactly ONE request to gateway per standard cycle. Redundant /health probe removed from normal flow (reserved solely for manual URL entry).
+• <b>Clean UI & Single Status Row</b>: Single line <code>key accepted · N ms</code> in settings and journal. No simultaneous OK/FAIL rows. Instant cache display on popover open.
+• <b>Full Compatibility & Tests</b>: Automated WebKit concurrency test, retry test, single-request cycle test, UI status test, and 0 audit hits."""
 
     print(f"Sending message to chat {CHAT_ID}...")
     res = call("sendMessage", {"chat_id": CHAT_ID, "text": report_text, "parse_mode": "HTML"})
@@ -133,8 +134,8 @@ def main():
     files_to_send = [
         zip_path,
         ARTIFACTS / "mse.user.js",
-        ARTIFACTS / "mse-2.13.0.patch",
-        ROOT / "RELEASE_2.13.0.md"
+        ARTIFACTS / "mse-2.13.1.patch",
+        ROOT / "RELEASE_2.13.1.md"
     ]
 
     for p in files_to_send:
@@ -142,7 +143,7 @@ def main():
             print(f"File not found: {p}", file=sys.stderr)
             continue
         print(f"Sending {p.name} ({p.stat().st_size} bytes)...")
-        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.13.0 — {p.name}"}, {"document": p})
+        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.13.1 — {p.name}"}, {"document": p})
         if res.get("ok"):
             print(f"Successfully sent {p.name}")
         else:

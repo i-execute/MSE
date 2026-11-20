@@ -2,7 +2,7 @@
 // @name         MSE
 // @name:ru      MSE — Moodle Solver Extension
 // @namespace    https://github.com/mse
-// @version      2.13.0
+// @version      2.13.1
 // @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @description Answers and hints for Moodle quizzes: the MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @author       MSE
@@ -2078,6 +2078,50 @@ var __ssW=window,__msePageWindow=window;
       throw error;
     });
   }
+
+  var gatewayQueue = Promise.resolve();
+  var gatewayInFlight = 0;
+
+  function isLoadFailed(err) {
+    if (!err) return false;
+    if (err.name === 'TypeError') return true;
+    var msg = String(err.message || '');
+    return /load failed|failed to fetch|network request failed/i.test(msg);
+  }
+
+  function gatewayFetch(url, options, retryCount) {
+    var attempt = retryCount || 0;
+    var run = function () {
+      gatewayInFlight++;
+      return tracedFetch(url, options).then(function (res) {
+        gatewayInFlight--;
+        return res;
+      }, function (err) {
+        gatewayInFlight--;
+        if (attempt === 0 && isLoadFailed(err)) {
+          if (__ssW.__mse && __ssW.__mse.onDebugTraffic) {
+            __ssW.__mse.onDebugTraffic({ event: 'retry_load_failed', url: String(url), delay: 500 });
+          }
+          return new Promise(function (resolve) {
+            setTimeout(resolve, 500);
+          }).then(function () {
+            gatewayInFlight++;
+            return tracedFetch(url, options).then(function (res2) {
+              gatewayInFlight--;
+              return res2;
+            }, function (err2) {
+              gatewayInFlight--;
+              throw err2;
+            });
+          });
+        }
+        throw err;
+      });
+    };
+    var next = gatewayQueue.then(run, run);
+    gatewayQueue = next.catch(function () {});
+    return next;
+  }
   function redactDump(value, key, depth, secrets) {
     if (depth > 30) return '[depth limit]';
     if (typeof value === 'string') {
@@ -2103,6 +2147,8 @@ var __ssW=window,__msePageWindow=window;
   }
   var lastAgentRequest = null;
   var MSEBridge = {
+    inFlight: function () { return gatewayInFlight; },
+
      
     url: function () {
       var fromLs = lsGet(CONFIG.urlKey) || lsGet(CONFIG.urlMirrorKey);
@@ -2181,7 +2227,7 @@ var __ssW=window,__msePageWindow=window;
       var started = Date.now();
       var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
       var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
-      return tracedFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
+      return gatewayFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
         .then(function (r) {
           return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });
         })
@@ -2196,7 +2242,7 @@ var __ssW=window,__msePageWindow=window;
             status: res.status,
             ms: Date.now() - started,
             version: j.version || null,
-            model: j.model || null,
+            model: (j && (j.model || (Array.isArray(j.models) && j.models[0]))) || null,
             quota: j.quota || null,
             upstream: j.upstream || null,
             message: !res.ok ? 'the address answered ' + res.status
@@ -2251,7 +2297,7 @@ var __ssW=window,__msePageWindow=window;
       identity = identity || {};
       var body = { key: key, moodleId: String(identity.id || ''), name: String(identity.name || ''), site: String(identity.site || ''), deviceName: String((__ssW.navigator && __ssW.navigator.userAgent) || '').slice(0, 120) };
       if (!body.moodleId) return Promise.reject(new Error('user ID missing · open profile'));
-      return tracedFetch(url + '/mse/v1/register', {
+      return gatewayFetch(url + '/mse/v1/register', {
         method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key }, body: JSON.stringify(body)
       }).then(function (r) {
         return r.json().then(function (j) {
@@ -2288,28 +2334,34 @@ var __ssW=window,__msePageWindow=window;
       var path = '/mse/v1/me' + (moodleId ? ('?moodleId=' + encodeURIComponent(moodleId)) : '');
       var headers = { authorization: 'Bearer ' + key, accept: 'application/json' };
       if (moodleId) headers['x-moodle-id'] = String(moodleId);
-      return tracedFetch(url + path, { method: 'GET', headers: headers })
+      var started = Date.now();
+      return gatewayFetch(url + path, { method: 'GET', headers: headers })
         .then(function (r) {
+          var ms = Date.now() - started;
           return r.json().then(function (j) {
             var d = (j && j.device) || {};
             var headerStatus = r.headers.get('x-mse-status');
             var effState = headerStatus || (j && j.status) || (j && j.state) || (d && d.status) || (r.ok ? 'active' : (d.status === 'revoked' ? 'revoked' : 'pending'));
             var meta = self.saveMeta({ device: d, ok: r.ok }, { key: key, moodleId: d.moodleId || moodleId, name: d.name });
             var resObj;
-            var qLeft = (j && j.quota != null) ? j.quota : (d && d.quota != null ? d.quota : null);
-            var qLimit = (j && j.quotaLimit != null) ? j.quotaLimit : 200;
-            var qUsed = (j && j.quotaUsed != null) ? j.quotaUsed : 0;
-            var qResets = (j && (j.resets_after || j.quotaResetsAfter)) || null;
+            var qLeft = (j && j.quota != null) ? (typeof j.quota === 'object' ? j.quota.left : j.quota) : (d && d.quota != null ? d.quota : null);
+            var qLimit = (j && j.quotaLimit != null) ? j.quotaLimit : ((j && j.quota && j.quota.limit != null) ? j.quota.limit : 200);
+            var qUsed = (j && j.quotaUsed != null) ? j.quotaUsed : ((j && j.quota && j.quota.used != null) ? j.quota.used : 0);
+            var qResets = (j && (j.resets_after || j.quotaResetsAfter || (j.quota && j.quota.resets_after))) || null;
+            var model = (j && j.model !== undefined) ? j.model : ((j && Array.isArray(j.models) && j.models[0] !== undefined) ? j.models[0] : undefined);
+            var version = (j && j.version) || null;
+            var schema_layer = (j && j.schema_layer) || null;
+
             if (r.status === 401 || effState === 'unregistered' || effState === 'unknown') {
-              resObj = { state: 'unregistered', message: 'key is not bound', device: d, meta: meta };
+              resObj = { state: 'unregistered', message: 'key is not bound', device: d, meta: meta, ms: ms };
             } else if (effState === 'revoked') {
-              resObj = { state: 'revoked', message: 'key revoked', device: d, meta: meta };
+              resObj = { state: 'revoked', message: 'key revoked', device: d, meta: meta, ms: ms };
             } else if (effState === 'pending') {
-              resObj = { state: 'pending', message: 'waiting for approval', device: d, meta: meta };
+              resObj = { state: 'pending', message: 'waiting for approval', device: d, meta: meta, ms: ms, model: model, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets, version: version, schema_layer: schema_layer };
             } else if (effState === 'active') {
-              resObj = { state: 'active', message: 'key accepted', device: d, meta: meta, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets };
+              resObj = { state: 'active', message: 'key accepted', device: d, meta: meta, ms: ms, model: model, quota: qLeft, quotaLimit: qLimit, quotaUsed: qUsed, quotaResetsAfter: qResets, version: version, schema_layer: schema_layer };
             } else {
-              resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta };
+              resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta, ms: ms, model: model };
             }
             try {
               lsSet('mse.cache.gw_check', JSON.stringify({ key: key, check: resObj, t: Date.now() }));
@@ -2317,7 +2369,8 @@ var __ssW=window,__msePageWindow=window;
             return resObj;
           });
         }, function (e) {
-          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };
+          var ms = Date.now() - started;
+          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network'), ms: ms };
         });
     },
 
@@ -2335,7 +2388,7 @@ var __ssW=window,__msePageWindow=window;
       var self = this;
       var url = self.url();
       if (!url) return Promise.resolve({ ok: false, message: 'no gateway' });
-      return tracedFetch(url + '/mse/v1/quota', {
+      return gatewayFetch(url + '/mse/v1/quota', {
         method: 'GET',
         headers: { authorization: 'Bearer ' + self.key(), accept: 'application/json' }
       }).then(function (r) {
@@ -2372,7 +2425,7 @@ var __ssW=window,__msePageWindow=window;
       lastAgentRequest = record;
       var reqHeaders = { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() };
       if (payload.moodleId) reqHeaders['x-moodle-id'] = String(payload.moodleId);
-      return tracedFetch(url + '/mse/v1/agent', {
+      return gatewayFetch(url + '/mse/v1/agent', {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(body),
@@ -2442,7 +2495,7 @@ var __ssW=window,__msePageWindow=window;
       var safe = redactDump(dump, key, 0, secrets);
       var json = JSON.stringify(safe);
       if (json.length > 2000000) safe = {clientTruncated:true, preview:json.slice(0,160000)};
-      return __ssW.fetch(url + '/mse/v1/dump', {
+      return gatewayFetch(url + '/mse/v1/dump', {
         method:'POST', headers:{'content-type':'application/json', authorization:'Bearer '+key},
         body:JSON.stringify({type:type, dump:safe})
       }).then(function (r) { return r.json().then(function (j) {
@@ -2458,7 +2511,7 @@ var __ssW=window,__msePageWindow=window;
       if (!url) return Promise.reject(new Error('gateway address is not set'));
        
       var body = { stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
-      return tracedFetch(url + '/v1/chat/completions', {
+      return gatewayFetch(url + '/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
         body: JSON.stringify(body)
@@ -4788,10 +4841,20 @@ var __ssW=window,__msePageWindow=window;
       var all = readQuestions();
       state.question = currentQuestion(all);
       state.meta = attemptMeta();
+      var cached = win.MSEBridge ? win.MSEBridge.cachedCheck() : null;
+      if (cached) {
+        state.gw.check = cached;
+        if (cached.model) {
+          state.gatewayModel = cached.model;
+        }
+        if (cached.state === 'active') {
+          state.tier = 'owner';
+        }
+      }
       render();
       win.requestAnimationFrame(function () { if (pop) pop.classList.add('in'); });
       load();
-      refreshHeaderModel();
+      if (!state.question) refreshTier();
     }
 
     var rise = 0;
@@ -4944,10 +5007,20 @@ var __ssW=window,__msePageWindow=window;
       
 
       if (!br || !br.url() || !br.meta()) { state.tier = 'base'; return Promise.resolve('base'); }
-      if (state.tier === 'owner') return Promise.resolve('owner');
       return br.check().then(function (res) {
         state.gw.check = res;
         state.tier = isActive(res) ? 'owner' : 'base';
+        if (res && typeof res.model === 'string' && res.model.trim()) {
+          state.gatewayModel = res.model.trim();
+          ls.set('mse.gateway.lastModel', state.gatewayModel);
+          render();
+        } else if (!res || res.model === undefined) {
+          return refreshHeaderModel().then(function () { return state.tier; });
+        } else if (res.model === null) {
+          state.gatewayModel = null;
+          ls.set('mse.gateway.lastModel', '');
+          render();
+        }
         return state.tier;
       }, function () { state.tier = 'base'; return 'base'; });
     }
@@ -5546,21 +5619,23 @@ var __ssW=window,__msePageWindow=window;
 
     function refreshHeaderModel() {
       var br = win.MSEBridge, url = br && br.url();
-      if (!url) { state.gatewayModel = null; return; }
-      if (!br.meta()) return;
+      if (!url) { state.gatewayModel = null; return Promise.resolve(null); }
+      if (!br.meta()) return Promise.resolve(null);
       var epoch = ++state.modelEpoch;
-      br.probe(url).then(function (r) {
-        if (epoch !== state.modelEpoch || br.url() !== url) return;
-        state.gatewayModel = (r.ok || r.mine) && typeof r.model === 'string' && r.model.trim() ? r.model.trim() : null;
+      return br.probe(url).then(function (r) {
+        if (epoch !== state.modelEpoch || br.url() !== url) return null;
+        state.gatewayModel = (r && (r.ok || r.mine) && typeof r.model === 'string' && r.model.trim()) ? r.model.trim() : null;
         if (!state.gatewayModel) { ls.set('mse.gateway.lastModel', ''); }
         else { ls.set('mse.gateway.lastModel', state.gatewayModel); }
         render();
+        return state.gatewayModel;
       }, function () {
         if (epoch === state.modelEpoch && br.url() === url) {
           state.gatewayModel = null;
           ls.set('mse.gateway.lastModel', '');
           render();
         }
+        return null;
       });
     }
 
@@ -5577,12 +5652,11 @@ var __ssW=window,__msePageWindow=window;
         if (!r.mine && !r.ok) {
           if (epoch === state.modelEpoch && raw === br.url()) state.gatewayModel = null;
           gw.busy = null;
-          logAdd('gateway', false, 'AI gateway: ' + r.message);
+          logAdd('gateway', false, 'the gateway does not answer: ' + r.message);
           render();
           return null;
         }
         br.setUrl(raw);
-        logAdd('gateway', true, 'AI gateway is up' + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
         if (epoch === state.modelEpoch && r.model) {
           state.gatewayModel = r.model;
           ls.set('mse.gateway.lastModel', r.model);
@@ -5602,18 +5676,22 @@ var __ssW=window,__msePageWindow=window;
           gw.check = res;
           gw.busy = null;
           if (res.state === 'active') {
-            refreshTier();
-            if (epoch === state.modelEpoch) {
-              state.gatewayModel = typeof r.model === 'string' && r.model.trim() ? r.model.trim() : (ls.get('mse.gateway.lastModel') || null);
+            state.tier = 'owner';
+            if (epoch === state.modelEpoch && res.model) {
+              state.gatewayModel = res.model;
+              ls.set('mse.gateway.lastModel', res.model);
             }
           }
-          logAdd('gateway', res.state === 'active', (res.message || res.state) + (r && r.ms ? ' · ' + r.ms + ' ms' : ''), { ms: r.ms });
+          var ms = (res && res.ms != null) ? res.ms : (r && r.ms ? r.ms : 0);
+          var statusText = (res.state === 'active' ? 'key accepted' : (res.message || res.state)) + (ms ? ' · ' + ms + ' ms' : '');
+          logAdd('gateway', res.state === 'active', statusText, { ms: ms });
           render();
           return r;
         });
       }, function (e) {
         gw.busy = null;
         gw.probe = { ok: false, message: (e && e.message) || 'error' };
+        logAdd('gateway', false, 'the gateway does not answer: ' + ((e && e.message) || 'network'));
         render();
         return null;
       });
@@ -5686,7 +5764,8 @@ var __ssW=window,__msePageWindow=window;
         statusRow = el('div', 'row');
         var isActive = gw.check.state === 'active';
         statusRow.appendChild(el('span', 'dot ' + (isActive ? 'ok' : 'warn')));
-        var msPart = gw.probe && gw.probe.ms != null ? ' · ' + gw.probe.ms + ' ms' : '';
+        var msVal = gw.check.ms != null ? gw.check.ms : (gw.probe && gw.probe.ms != null ? gw.probe.ms : null);
+        var msPart = msVal != null ? ' · ' + msVal + ' ms' : '';
         var statusText = isActive ? 'key accepted' + msPart : (gw.check.message || 'key not accepted') + msPart;
         statusRow.appendChild(el('span', 'txt', statusText));
       } else if (gw.probe) {

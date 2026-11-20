@@ -81,7 +81,7 @@ def home(snap: dict[str, Any], notice: str = "") -> Rich:
     subtitle = muted("Moodle answer panel " + SEP + " router, AI backend, tailscale, telegram")
     if not router_ok:
         subtitle = status_chip(False, "router is not answering") + " " + muted(SEP + " everything below may be stale")
-    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.13.0"), icon="bot")
+    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.13.1"), icon="bot")
 
 
 def _pending_list(devices: list[dict[str, Any]]) -> str:
