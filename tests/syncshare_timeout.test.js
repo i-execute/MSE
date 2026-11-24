@@ -3,11 +3,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const h = require('./lib/harness.js');
 
-test('Bug 1: Syncshare hanging query times out at 10s with "база не ответила" and falls back to agent without blocking popover', { timeout: 30000 }, async () => {
-  // Mock API that hangs indefinitely to simulate syncshare hanging on iOS
+test('MSE 2.15.0: Question opens directly to agent without syncshare delay', { timeout: 30000 }, async () => {
   const t = await h.launch({
-    allowLocal: true,
-    api: () => new Promise(() => {})
+    allowLocal: true
   });
 
   try {
@@ -22,24 +20,23 @@ test('Bug 1: Syncshare hanging query times out at 10s with "база не отв
       window.MSEBridge.agent = () => Promise.resolve({ ok: true, answer: '1:М', model: 'mock-agent' });
     });
 
-    // Trigger load which initiates the 10s timeout fetch
+    // Trigger open which immediately loads question and calls agent
     await page.evaluate(() => {
       window.__mse.open();
     });
 
-    // Verify initial state is loading
-    const initialLoading = await page.evaluate(() => window.__mse.state().loading);
-    assert.equal(initialLoading, true, 'Initially in loading state while waiting for DB');
+    // Verify initial state is NOT stuck in database loading
+    const state = await page.evaluate(() => window.__mse.state());
+    assert.equal(state.loading, false, 'Loading is false because database phase is removed');
 
-    // Wait for the 10s timeout to trigger "database timed out"
+    // Wait for agent answer to appear (immediate without 10s database delay)
     await page.waitForFunction(() => {
       const st = window.__mse.state();
-      return !st.loading && (st.error === 'database timed out' || st.error === 'база не ответила' || (st.rows && st.rows.some(r => r.agent)));
-    }, { timeout: 15000 });
+      return st.agent && st.agent.state === 'ok' && st.rows && st.rows.some(r => r.agent);
+    }, { timeout: 5000 });
 
-    const state = await page.evaluate(() => window.__mse.state());
-    assert.equal(state.loading, false, 'Loading flag cleared on timeout');
-    assert.ok(state.rows && state.rows.some(r => r.label === '1:М' && r.agent), 'Agent answered automatically after DB timeout');
+    const finalState = await page.evaluate(() => window.__mse.state());
+    assert.ok(finalState.rows.some(r => r.label === '1:М' && r.agent), 'Agent answered directly without DB delay');
   } finally {
     await t.close();
   }

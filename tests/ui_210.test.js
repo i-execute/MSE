@@ -36,12 +36,11 @@ test('MSE 2.10 UI Acceptance: question N, gear icon, no login, copyable device, 
     await page.evaluate(() => window.__mse.open());
     await page.waitForFunction(() => !!window.__mse.state().pop);
 
-    // 1. A1: Question subtitle is "question N", no "куэшон"
+    // 1. A1 & B4: Question subtitle is removed in 2.15, no "куэшон"
     const subText = await page.evaluate(() => {
       const em = window.__mse.root().querySelector('.ph .t em');
       return em ? em.textContent : '';
     });
-    assert.match(subText, /question(?:\s*#?\d+)?/i, 'Question header uses question or question #qid');
     assert.doesNotMatch(subText, /куэшон/i, 'No "куэшон" in header');
 
     // 2. A9: Letter 'i' replaced by gear icon

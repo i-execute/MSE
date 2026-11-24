@@ -83,12 +83,12 @@
 
 /* the head: the name, the view, buttons, mini status bar — compact, no empty margins */
 .ph{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--rule)}
-.ph .t{flex:1 1 auto;min-width:0;font:700 11px/1 -apple-system,sans-serif;letter-spacing:.14em;
+.ph .t{flex:0 0 auto;min-width:0;font:700 11px/1 -apple-system,sans-serif;letter-spacing:.14em;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:none}
 .ph .t em{font:400 10px/1 -apple-system,sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none;display:block;margin-top:3px}
-.ph .model-chip{flex:0 1 auto;min-width:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  padding:3px 6px;border:1px solid rgba(255,255,255,.17);border-radius:7px;color:var(--ink-2);
-  font:500 9px/1.15 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.01em;
+.ph .model-chip{flex:0 1 auto;margin:0 auto;text-align:center;min-width:0;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  padding:3px 8px;border:1px solid rgba(255,255,255,.2);border-radius:7px;color:var(--ink-2);
+  font:500 10.5px/1.2 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.01em;
   text-shadow:0 0 5px rgba(255,255,255,.55),0 0 11px rgba(255,255,255,.24);box-shadow:0 0 7px rgba(255,255,255,.08)}
 .mini-status{display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:6px;
   background:transparent;border:1px solid transparent;cursor:pointer;

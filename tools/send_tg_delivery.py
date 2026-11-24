@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send MSE 2.14.1 delivery files and summary to Telegram owner.
+"""Send MSE 2.15.0 delivery files and summary to Telegram owner.
 Usage:
     MSE_BOT_TOKEN=... python3 tools/send_tg_delivery.py
 """
@@ -19,7 +19,7 @@ ARTIFACTS = ROOT / "Storage" / "artifacts"
 CHAT_ID = os.environ.get("MSE_OWNER_ID") or os.environ.get("TELEGRAM_CHAT_ID") or "7610246474"
 
 def make_delivery_zip() -> Path:
-    zip_path = ARTIFACTS / "MSE-2.14.1.zip"
+    zip_path = ARTIFACTS / "MSE-2.15.0.zip"
     include_dirs = [
         "Extensions/src",
         "Extensions/tools",
@@ -33,12 +33,12 @@ def make_delivery_zip() -> Path:
     include_files = [
         "Storage/artifacts/mse.user.js",
         "Storage/artifacts/build-report.json",
-        "Storage/artifacts/mse-2.14.1.patch",
+        "Storage/artifacts/mse-2.15.0.patch",
         "Storage/get.sh",
         "package.json",
         "package-lock.json",
         "README.md",
-        "RELEASE_2.14.1.md",
+        "RELEASE_2.15.0.md",
         "CHANGES.md",
         "LICENSE",
     ]
@@ -114,17 +114,16 @@ def main():
         print("Delivery archive created successfully at:", zip_path)
         return 0
 
-    report_text = """<b>MSE 2.14.1 CRITICAL HOTFIX Delivered</b>
+    report_text = """<b>MSE 2.15.0 Delivered — Live Moodle Fixes &amp; Syncshare Purged</b>
 
 <b>Key Highlights:</b>
-• <b>Privileged GM_xmlhttpRequest Transport</b>: All gateway calls (<code>probe</code>, <code>check</code>, <code>register</code>, <code>agent</code>, <code>quota</code>, <code>dump</code>, <code>chat</code>) now execute via <code>GM_xmlhttpRequest</code>. Completely bypasses Safari/Stay page-level CSP (<code>connect-src</code>) and WebKit ITP cross-origin restrictions.
-• <b>Fallback to window.fetch</b>: Retained strictly as fallback when runner lacks GM capabilities (order: <code>GM -> window.fetch</code>).
-• <b>Upgraded Timeouts &amp; AbortController</b>: 30s standard timeout, 120s for agent/chat SSE. Proper cancellation via <code>signal.abort()</code> calling <code>handle.abort()</code>.
-• <b>Anti-Avalanche Queue Protection</b>: Strict cap of 1 retry (max 2 attempts per request); button debouncing prevents duplicate concurrent checks.
-• <b>Transport Diagnostic Tag</b>: Network log and diagnostics explicitly report active transport (<code>transport: gm</code> vs <code>transport: fetch</code>).
-• <b>Purged False VPN Errors &amp; Cringe Messages</b>: Removed all misleading "VPN problem / disable VPN" text and Russian strings; replaced with clean, objective English status and error indicators.
-• <b>Watchdog IPv6 Routing Fix</b>: Tunnel health checks enforce <code>curl -4</code> to avoid false failures on hosts with broken IPv6 default routes.
-• <b>Quality &amp; Tests</b>: Unit &amp; integration tests passed (<code>tests/mse_2141.py</code>, <code>tests/mse_214.py</code>, <code>tests/onefile.test.js</code>, <code>npm test</code>); <code>audit.py --strict</code> clean 0 hits x3."""
+• <b>Полное удаление остатков Syncshare</b>: вырезаны все запросы к <code>syncshare.ru</code>, <code>fetchSolution</code>, <code>serviceUrl</code>, таймаут 10с и UI-фаза <i>«asking the database…»</i>. Вопрос открывается напрямую в вызов агента. Добавлен локальный кэш ответов (<code>mse.answers.cache</code>).
+• <b>Кнопка Report разблокирована</b>: таймаут 15с, статус 201 от роутера отображается как <code>sent</code>, ошибки/таймаут как <code>report failed</code>, через 3с возвращается надпись <code>Report</code>. Без бесконечных ретраев.
+• <b>Тап по ответу закрывает панель</b>: успешный <code>applyAnswer</code> вызывает <code>closePop()</code>, на странице остаётся только пилюля.
+• <b>Устранение задержки гейтвея (декаплинг очередей)</b>: запросы агента не ждут в общей очереди за 100КБ+ дебаг-дампами; дампы вынесены в <code>dumpQueue</code>, отправка дебага откладывается до ответа агента.
+• <b>Очистка шапки и центрирование модели</b>: строка «question» убрана из шапки режима answers; чип модели увеличен и отцентрирован (<code>margin: 0 auto</code>).
+• <b>Сниф-дампы с ответом</b>: событие <code>agent_response</code> наполняет дамп ответом модели и статусом завершения.
+• <b>Качество и тесты</b>: <code>tests/mse_215.py</code>, <code>tests/mse_2141.py</code>, <code>tests/onefile.test.js</code>, <code>npm test</code> — все GREEN; <code>audit.py --strict</code> — 0 hits x3."""
 
     print(f"Sending message to chat {CHAT_ID}...")
     res = call("sendMessage", {"chat_id": CHAT_ID, "text": report_text, "parse_mode": "HTML"})
@@ -136,8 +135,8 @@ def main():
     files_to_send = [
         zip_path,
         ARTIFACTS / "mse.user.js",
-        ARTIFACTS / "mse-2.14.1.patch",
-        ROOT / "RELEASE_2.14.1.md"
+        ARTIFACTS / "mse-2.15.0.patch",
+        ROOT / "RELEASE_2.15.0.md"
     ]
 
     for p in files_to_send:
@@ -145,7 +144,7 @@ def main():
             print(f"File not found: {p}", file=sys.stderr)
             continue
         print(f"Sending {p.name} ({p.stat().st_size} bytes)...")
-        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.14.1 — {p.name}"}, {"document": p})
+        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.15.0 — {p.name}"}, {"document": p})
         if res.get("ok"):
             print(f"Successfully sent {p.name}")
         else:

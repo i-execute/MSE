@@ -1,6 +1,6 @@
 'use strict';
 /*
- * SyncShare debug v2 — the diagnostic edition for Stay (iPhone/iPad/macOS Safari).
+ * MSE debug v2 — the diagnostic edition for Stay (iPhone/iPad/macOS Safari).
  *
  * Two jobs, one panel:
  *
@@ -552,7 +552,7 @@
     function reportText() {
       var idc = state.identity || analyseIdentity();
       var out = [];
-      out.push('SyncShare debug v2');
+      out.push('MSE debug v2');
       out.push('page: ' + String(win.location.href));
       out.push('time: ' + new Date().toISOString());
       out.push('browser: ' + (win.navigator && win.navigator.userAgent));
@@ -595,7 +595,7 @@
     /* ------------------------------------------------------------ render */
     function renderHead() {
       var head = el('div', 'head');
-      var h1 = el('h1', null, 'SyncShare · debug');
+      var h1 = el('h1', null, 'MSE · debug');
       var hs = el('div', 'host', String(win.location.host));
       var close = el('button', 'icon', '×');
       close.setAttribute('aria-label', 'Close');
@@ -906,7 +906,7 @@
     try { fabRoot = fab.attachShadow({ mode: 'closed' }); } catch (e) { fabRoot = fab; }
     var fabBtn = doc.createElement('button');
     fabBtn.setAttribute('type', 'button');
-    fabBtn.setAttribute('aria-label', 'SyncShare debug');
+    fabBtn.setAttribute('aria-label', 'MSE debug');
     fabBtn.setAttribute('style', 'all:initial;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;' +
       'background:rgba(18,21,31,.92);border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(0,0,0,.35);cursor:pointer;' +
       '-webkit-appearance:none;appearance:none;');
@@ -921,7 +921,7 @@
     }
     fabBtn.addEventListener('click', function () { open(); });
 
-    try { if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('SyncShare debug: open', function () { open(); }); } catch (e) {}
+    try { if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('MSE debug: open', function () { open(); }); } catch (e) {}
 
     doc.addEventListener('keydown', function (ev) {
       var t = ev.target && ev.target.tagName;

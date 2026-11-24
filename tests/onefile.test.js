@@ -17,9 +17,9 @@ const src = fs.readFileSync(path.join(ART, 'mse.user.js'), 'utf8');
 const report = JSON.parse(fs.readFileSync(path.join(ART, 'build-report.json'), 'utf8'));
 
 test('iOS: one file, one userscript header, no @require', () => {
-  assert.match(src, /^\/\/ @version\s+2\.14\.1$/m);
-  assert.equal(report.version, '2.14.1');
-  assert.equal(require('../package.json').version, '2.14.1');
+  assert.match(src, /^\/\/ @version\s+2\.15\.0$/m);
+  assert.equal(report.version, '2.15.0');
+  assert.equal(require('../package.json').version, '2.15.0');
   assert.equal((src.match(/==UserScript==/g) || []).length, 1, 'exactly one userscript header');
   assert.equal((src.match(/==\/UserScript==/g) || []).length, 1, 'exactly one userscript footer');
   assert.equal((src.match(/^\s*\/\/\s*@require\b/gm) || []).length, 0, 'no @require');

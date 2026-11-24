@@ -32,7 +32,7 @@ test('MSE 2.11 Acceptance: UI kit, unified check, gear & log icons, no agent pct
       window.MSEBridge.saveMeta({ device: { deviceId: 'test-device-id-211', moodleId: '12345', status: 'active' } }, {});
     });
 
-    // 1. Open panel and verify A7 (Question subtitle uses question #qid or question, never hardcoded question 1)
+    // 1. Open panel and verify B4 (Question subtitle removed from header to make room for model chip)
     await page.evaluate(() => window.__mse.open());
     await page.waitForFunction(() => !!window.__mse.state().pop && !window.__mse.state().loading);
 
@@ -40,8 +40,7 @@ test('MSE 2.11 Acceptance: UI kit, unified check, gear & log icons, no agent pct
       const em = window.__mse.root().querySelector('.ph .t em');
       return em ? em.textContent : '';
     });
-    assert.match(subText, /^question(\s*#\d+)?$/i, 'A7: question subtitle is "question #<qid>" or "question"');
-    assert.notEqual(subText.toLowerCase(), 'question 1', 'A7: question subtitle does not hardcode "question 1"');
+    assert.equal(subText, '', 'B4: question subtitle removed from header to make room for model chip');
 
     // 2. A6: Verify Agent answer row does not show percentage or count
     await page.evaluate(() => {

@@ -22,9 +22,8 @@
 
   var CONFIG = Object.assign({
     brand: 'MSE',
-    version: '0.3.0',
-    apiBase: 'https://syncshare.ru/api/',
-    client: '2.22.0',
+    version: '2.15.0',
+    client: '2.15.0',
     posKey: 'mse.pos',
     logKey: 'mse.log',
     width: 300,
@@ -528,135 +527,85 @@
       return meta;
     }
 
-    /* ---------------------------------------------------------------- their answer service */
-    function serviceUrl(q, meta) {
-      var params = [
-        'client=' + encodeURIComponent(CONFIG.client),
-        'host=' + encodeURIComponent(meta.host),
-        'courseId=' + encodeURIComponent(meta.courseId),
-        'quizId=' + encodeURIComponent(meta.quizId),
-        'attemptId=' + encodeURIComponent(meta.attemptId),
-        'moodleId=' + encodeURIComponent(meta.moodleId),
-        'questionIdentity=' + encodeURIComponent(q.identity),
-        'questionType=' + encodeURIComponent(q.type)
-      ];
-      if (q.questionId) params.push('questionId=' + encodeURIComponent(q.questionId));
-      return CONFIG.apiBase.replace(/\/$/, '') + '/v2/quiz/solution?' + params.join('&');
+    /* ---------------------------------------------------------------- answer cache & agent answers */
+    var ANSWER_CACHE_KEY = 'mse.answers.cache';
+    function getAnswerCache(identity) {
+      if (!identity) return null;
+      try {
+        var raw = ls.get(ANSWER_CACHE_KEY, null);
+        if (!raw) return null;
+        var all = JSON.parse(raw);
+        return all && all[identity] ? all[identity] : null;
+      } catch (_) {
+        return null;
+      }
+    }
+    function saveAnswerCache(identity, data) {
+      if (!identity || !data) return;
+      try {
+        var raw = ls.get(ANSWER_CACHE_KEY, null);
+        var all = raw ? JSON.parse(raw) : {};
+        all[identity] = { answer: data.answer, model: data.model || null, ts: Date.now() };
+        var keys = Object.keys(all);
+        if (keys.length > 100) delete all[keys[0]];
+        ls.set(ANSWER_CACHE_KEY, JSON.stringify(all));
+      } catch (_) {}
     }
 
-    /* GET only, and only to the answer service of the original */
-    var lastSyncRequest = null;
-    function fetchSolution(q, meta) {
-      var started = Date.now();
-      if (meta.missing.length) {
-        var why = missingSentence(meta);
-        logAdd('answers', false, why + ' — request not sent');
-        return Promise.reject(new Error(why));
+    function applyAgentAnswer(rawAns, model, isCached) {
+      var q = state.question;
+      if (!q) return;
+
+      if (!isCached && rawAns) {
+        saveAnswerCache(q.identity, { answer: rawAns, model: model });
       }
-      var url = serviceUrl(q, meta);
-      var params = {};
-      try {
-        new URL(url).searchParams.forEach(function (value, key) { params[key] = value; });
-      } catch (_) {}
-      var record = { questionIdentity: q.identity, request: { method: 'GET', url: url, params: params }, response: null };
-      lastSyncRequest = record;
 
-      var controller = typeof AbortController === 'function' ? new AbortController() : null;
-      var timer = null;
-      var timeoutPromise = new Promise(function (_, reject) {
-        timer = win.setTimeout(function () {
-          if (controller) try { controller.abort(); } catch (_) {}
-          reject(new Error('database timed out'));
-        }, 10000);
-      });
+      state.agent = { state: 'ok', answer: rawAns, model: model };
 
-      var fetchPromise = fetch(url, {
-        method: 'GET',
-        headers: { accept: 'application/json' },
-        signal: controller ? controller.signal : undefined
-      }).then(function (r) {
-        if (timer) { win.clearTimeout(timer); timer = null; }
-        r.clone().text().then(function (raw) {
-          var value; try { value = JSON.parse(raw); } catch (e) { value = raw; }
-          record.response = { status: r.status, json: value };
-          debugTraffic(record);
-        }, function () { record.response = { status: r.status, error: 'unreadable response' }; });
-        var ms = Date.now() - started;
-        if (r.status === 400) {
-          return r.text().then(function (body) {
-            logAdd('answers', false, 'database 400 · check page data', { ms: ms });
-            throw new Error('answer database: 400 — ' + String(body || '').slice(0, 120));
+      var ansParts = [];
+      if (Array.isArray(rawAns)) {
+        ansParts = rawAns.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+      } else if (typeof rawAns === 'string') {
+        if (rawAns.indexOf('|') >= 0) ansParts = rawAns.split('|').map(function (x) { return x.trim(); }).filter(Boolean);
+        else if (rawAns.indexOf('\n') >= 0) ansParts = rawAns.split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+        else ansParts = [rawAns.trim()];
+      }
+      if (ansParts.length === 1 && (q.type === 'multichoiceset' || (q.answers && q.answers.some(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; })))) {
+        var spl = ansParts[0].split(/\s*,\s*|\s*;\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
+        if (spl.length > 1) ansParts = spl;
+      }
+
+      state.agentPicks = ansParts;
+      state.tappedPicks = state.tappedPicks || {};
+
+      var currentRows = (state.rows || []).slice();
+      if (!currentRows.length && q.answers && q.answers.length) {
+        currentRows = q.answers.map(function (answer) { return { label: answer.text, correctness: 0 }; });
+      } else if (!currentRows.length && q.controls && q.controls.some(function (c) { return c.kind === 'select'; })) {
+        q.controls.filter(function (c) { return c.kind === 'select'; }).forEach(function (c, index) {
+          Array.prototype.forEach.call(c.node.options, function (o) {
+            if (o.value && !o.disabled) currentRows.push({ label: o.textContent.trim(), selectIndex: index, correctness: 0 });
+          });
+        });
+      }
+
+      ansParts.forEach(function (part) {
+        var hit = currentRows.find(function (r) { return norm(r.label) === norm(part); });
+        if (!hit) {
+          var pTrim = String(part || '').trim();
+          hit = currentRows.find(function (r, idx) {
+            return (r.letter && r.letter.toLowerCase() === pTrim.toLowerCase()) || String(idx + 1) === pTrim;
           });
         }
-        if (!r.ok) {
-          logAdd('answers', false, 'answer database: ' + r.status, { ms: ms });
-          throw new Error('answer database: ' + r.status);
+        if (hit) {
+          hit.agent = true;
+          hit.agentPick = true;
+        } else {
+          currentRows.unshift({ label: part, correctness: 0, count: 0, agent: true, agentPick: true });
         }
-        return r.json().then(function (json) {
-          logAdd('answers', true, 'answer database: ' + (Array.isArray(json) ? json.length : 0) + ' records', { ms: ms });
-          return json;
-        });
-      }, function (e) {
-        if (timer) { win.clearTimeout(timer); timer = null; }
-        var isTimeout = e && (e.name === 'AbortError' || e.message === 'database timed out');
-        var errText = isTimeout ? 'database timed out' : 'no connection to the answer database';
-        record.response = { error: isTimeout ? 'timeout' : ((e && e.name) || 'network') };
-        debugTraffic(record);
-        logAdd('answers', false, isTimeout ? 'database timed out' : ('database offline: ' + ((e && e.message) || 'network')), { ms: Date.now() - started });
-        throw new Error(errText);
       });
-
-      return Promise.race([fetchPromise, timeoutPromise]).catch(function (e) {
-        if (timer) { win.clearTimeout(timer); timer = null; }
-        var isTimeout = e && (e.name === 'AbortError' || e.message === 'database timed out');
-        if (isTimeout) throw new Error('database timed out');
-        throw e;
-      });
-    }
-    function nameOfParam(k) {
-      return {
-        courseId: 'course',
-        quizId: 'quiz',
-        attemptId: 'attempt',
-        moodleId: 'user id'
-      }[k] || k;
-    }
-    /* a readable sentence: «page data missing: user id» — and, for the id, what was tried */
-    function missingSentence(meta) {
-      var names = meta.missing.map(nameOfParam).join(', ');
-      return 'page data missing: ' + names;
-    }
-
-    /* their answer, turned into rows of ours */
-    function toRows(json) {
-      var rows = [];
-      var groups = Array.isArray(json) ? json : [json];
-      groups.forEach(function (g) {
-        if (!g || typeof g !== 'object') return;
-        var pool = (g.suggestions || []).concat(g.submissions || []);
-        pool.forEach(function (s) {
-          if (!s || s.label == null) return;
-          var label = String(s.label).trim();
-          if (!label) return;
-          var hit = rows.filter(function (r) { return r.label.toLowerCase() === label.toLowerCase(); })[0];
-          var correctness = typeof s.correctness === 'number' ? s.correctness : 0;
-          var count = typeof s.count === 'number' ? s.count : 0;
-          var confidence = typeof s.confidence === 'number' ? s.confidence : null;
-          if (!hit) rows.push({ label: label, correctness: correctness, count: count, confidence: confidence });
-          else {
-            hit.count = Math.max(hit.count, count);
-            hit.correctness = Math.max(hit.correctness, correctness);
-            if (confidence != null) hit.confidence = Math.max(hit.confidence || 0, confidence);
-          }
-        });
-      });
-      var total = rows.reduce(function (a, r) { return a + (r.count || 0); }, 0);
-      rows.forEach(function (r) { r.share = total ? Math.round(((r.count || 0) / total) * 100) : null; });
-      rows.sort(function (a, b) {
-        if (b.correctness !== a.correctness) return b.correctness - a.correctness;
-        return (b.count || 0) - (a.count || 0);
-      });
-      return rows.filter(function (r) { return r.correctness > -1; });
+      state.rows = currentRows;
+      setBadge(ansParts.length || 1);
     }
 
     /* ---------------------------------------------------------------- applying an answer */
@@ -1328,25 +1277,10 @@
         if (aiAllowed()) appendAi(q);
         return;
       }
-      if (state.loading) {
-        body.appendChild(N(el('div', 'spin')));
-        body.appendChild(N(el('div', 'empty', 'asking the database…')));
-        return;
-      }
       if (state.error) {
         body.appendChild(N(el('div', 'empty', state.error)));
-        var missingId = state.meta && state.meta.missing && state.meta.missing.indexOf('moodleId') >= 0;
-        var again = press(el('button', 'btn', missingId ? 'take the id from /my/' : 'retry'), function () {
-          if (missingId) {
-            learnFromCabinet().then(function (r) {
-              if (r.ok) { toast('ID: ' + r.id); }
-              else toast(r.message);
-              state.error = null;
-              cabinetTried = false;
-              load();
-            });
-            return;
-          }
+        var again = press(el('button', 'btn', 'retry'), function () {
+          state.error = null;
           load();
         });
         body.appendChild(N(again, 1));
@@ -1401,6 +1335,7 @@
                 } else {
                   setBadge(0);
                 }
+                closePop();
               } else {
                 state.error = 'not in the form';
                 render();
@@ -1651,49 +1586,12 @@
             state.gatewayModel = res.model.trim();
             ls.set('mse.gateway.lastModel', res.model.trim());
           }
-          state.agent = { state: 'ok', answer: res.answer };
-
-          var rawAns = res.answer;
-          var ansParts = [];
-          if (Array.isArray(rawAns)) {
-            ansParts = rawAns.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
-          } else if (typeof rawAns === 'string') {
-            if (rawAns.indexOf('|') >= 0) ansParts = rawAns.split('|').map(function (x) { return x.trim(); }).filter(Boolean);
-            else if (rawAns.indexOf('\n') >= 0) ansParts = rawAns.split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
-            else ansParts = [rawAns.trim()];
-          }
-          if (ansParts.length === 1 && (q.type === 'multichoiceset' || (q.answers && q.answers.some(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; })))) {
-            var spl = ansParts[0].split(/\s*,\s*|\s*;\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
-            if (spl.length > 1) ansParts = spl;
-          }
-
-          state.agentPicks = ansParts;
-          state.tappedPicks = state.tappedPicks || {};
-
-          var currentRows = (state.rows || []).slice();
-          if (!currentRows.length && q.answers && q.answers.length) {
-            currentRows = q.answers.map(function (answer) { return { label: answer.text, correctness: 0 }; });
-          }
-
-          ansParts.forEach(function (part) {
-            var hit = currentRows.find(function (r) { return norm(r.label) === norm(part); });
-            if (!hit) {
-              var pTrim = String(part || '').trim();
-              hit = currentRows.find(function (r, idx) {
-                return (r.letter && r.letter.toLowerCase() === pTrim.toLowerCase()) || String(idx + 1) === pTrim;
-              });
-            }
-            if (hit) {
-              hit.agent = true;
-              hit.agentPick = true;
-            } else {
-              currentRows.unshift({ label: part, correctness: 0, count: 0, agent: true, agentPick: true });
-            }
-          });
-          state.rows = currentRows;
+          applyAgentAnswer(res.answer, res.model, false);
           render();
+          debugTraffic({ event: 'agent_response', ok: true, answer: res.answer, model: res.model });
           return;
         }
+        debugTraffic({ event: 'agent_response', ok: false, status: res.status, code: res.code, message: res.message });
         var is429 = res.code === 'rate_limited' || res.status === 429;
         if (is429) {
           logAdd('agent', false, 'HTTP 429: rate limit hit · something went wrong', { ms: ms });
@@ -1774,43 +1672,44 @@
     function load() {
       var q = state.question;
       if (!q) { render(); return; }
-      state.loading = true;
+      state.loading = false;
       state.ai = null;
-      state.agent = null;
-      render();
-      /* who we are for the gateway comes first: a base user must not see a single request towards it */
-      var tier = refreshTier();
-      if (!q.supported) {
-        /* their base cannot read this type at all: nothing to ask it, the AI row (owner only) is the answer */
-        state.loading = false;
-        state.rows = [];
-        state.error = null;
-        tier.then(function () { render(); });
-        return;
+      state.error = null;
+
+      var initialRows = [];
+      if (q.answers && q.answers.length) {
+        initialRows = q.answers.map(function (answer) { return { label: answer.text, correctness: 0 }; });
+      } else if (q.controls && q.controls.some(function (c) { return c.kind === 'select'; })) {
+        q.controls.filter(function (c) { return c.kind === 'select'; }).forEach(function (c, index) {
+          Array.prototype.forEach.call(c.node.options, function (o) {
+            if (o.value && !o.disabled) initialRows.push({ label: o.textContent.trim(), selectIndex: index, correctness: 0 });
+          });
+        });
       }
-      /* the id may be missing on a theme where only the cabinet knows it: one fetch, and the questions follow */
-      var ready = state.meta && state.meta.moodleId ? Promise.resolve(state.meta) : withIdentity();
-      ready.then(function (meta) {
-        state.meta = meta;
-        return fetchSolution(q, meta);
-      }).then(function (json) {
-        state.rows = toRows(json);
-        state.loading = false;
-        state.error = null;
-        setBadge(state.rows.length);
-        return tier.then(function () {
-          /* their base came back empty: for an owner the model answers in a row of its own, by itself */
-          if (!state.rows.length && aiAllowed() && (!state.agent || state.agent.state === 'idle')) runAgent(true);
+      state.rows = initialRows;
+
+      var cached = getAnswerCache(q.identity);
+      if (cached && cached.answer) {
+        applyAgentAnswer(cached.answer, cached.model, true);
+      } else {
+        state.agent = null;
+      }
+      render();
+
+      var startAgentIfActive = function () {
+        if (aiAllowed() && (!state.agent || state.agent.state !== 'ok')) {
+          runAgent(true);
+        }
+      };
+
+      if (aiAllowed()) {
+        startAgentIfActive();
+      } else {
+        refreshTier().then(function () {
+          startAgentIfActive();
           render();
         });
-      }, function (e) {
-        state.loading = false;
-        state.error = e.message;
-        return tier.then(function () {
-          if (aiAllowed() && (!state.agent || state.agent.state === 'idle')) runAgent(true);
-          render();
-        });
-      });
+      }
     }
 
     /* the identity, completed from the personal cabinet when the page has none */
@@ -2256,23 +2155,66 @@
         question: q ? { html: block.outerHTML, text: q.text, type: q.type, identity: q.identity,
           identityCalculation: questionIdentity.toString(), images: images, backgrounds: backgrounds, inputs: inputs } : null,
         protocol: protocolView,
-        requests: { syncshare: lastSyncRequest, agent: win.MSEBridge && win.MSEBridge.snifAgent ? win.MSEBridge.snifAgent() : null }
+        requests: { agent: win.MSEBridge && win.MSEBridge.snifAgent ? win.MSEBridge.snifAgent() : null },
+        agentResult: state.agent || null
       };
     }
+    var pendingDebugEvent = null;
     function debugTraffic(event) {
       if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
       var allQues = readQuestions();
       if (!allQues.length && (!event || !event.force)) return;
-      var dump = snifDump(); dump.traffic = event;
+      if (state.agent && state.agent.state === 'running' && event && event.event !== 'agent_response') {
+        pendingDebugEvent = event;
+        return;
+      }
+      var dump = snifDump();
+      dump.traffic = event;
+      if (pendingDebugEvent) {
+        dump.previousTraffic = pendingDebugEvent;
+        pendingDebugEvent = null;
+      }
       win.MSEBridge.sendDump('debug', dump);
     }
     function reportCurrent(button) {
-      if (!win.MSEBridge) { button.textContent = 'gateway offline'; return; }
-      button.disabled = true; button.textContent = 'sending…';
-      var dump = snifDump(); dump.error = state.error || (state.agent && state.agent.text) || null;
-      win.MSEBridge.sendDump('report', dump).then(function (result) {
-        button.disabled = false; button.textContent = result.ok ? 'sent' : (result.message || 'failed');
-      });
+      if (!win.MSEBridge || !win.MSEBridge.url()) {
+        button.disabled = false;
+        button.textContent = 'gateway offline';
+        win.setTimeout(function () { try { button.textContent = 'Report'; } catch (_) {} }, 3000);
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'sending…';
+      var dump = snifDump();
+      dump.error = state.error || (state.agent && state.agent.text) || null;
+
+      var doneCalled = false;
+      function done(ok, msg) {
+        if (doneCalled) return;
+        doneCalled = true;
+        button.disabled = false;
+        button.textContent = ok ? 'sent' : (msg || 'report failed');
+        win.setTimeout(function () {
+          try { button.textContent = 'Report'; } catch (_) {}
+        }, 3000);
+      }
+
+      var timer = win.setTimeout(function () {
+        done(false, 'report failed');
+      }, 15000);
+
+      try {
+        win.MSEBridge.sendDump('report', dump).then(function (result) {
+          win.clearTimeout(timer);
+          done(result && result.ok, result && result.message);
+        }, function () {
+          win.clearTimeout(timer);
+          done(false, 'report failed');
+        });
+      } catch (_) {
+        win.clearTimeout(timer);
+        done(false, 'report failed');
+      }
     }
     var snifText = '';
     function viewSnif() {
@@ -2297,13 +2239,12 @@
       if (!pop) return;
       rise = 0;
       pop.innerHTML = '';
-      /* head: the question number on the main view, the name of the view on the others */
+      /* head: the view name on settings views, brand only on main answers view */
       var sub = null;
       var title = CONFIG.brand;
       var leading = 'info';
-      if (state.route === 'answers' && state.question) {
-        var qid = state.question.questionId;
-        sub = qid ? ('question #' + qid) : 'question';
+      if (state.route === 'answers') {
+        sub = null;
       } else if (state.route === 'account') { sub = 'account'; }
       else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
       else if (state.route === 'net') { sub = 'network'; leading = 'back'; }

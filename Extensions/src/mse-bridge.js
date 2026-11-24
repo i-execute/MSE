@@ -46,7 +46,7 @@
     { where: 'stay', key: CONFIG.urlMirrorKey },
     { where: 'stay', key: 'mse:L:' + CONFIG.urlKey }
   ];
-  var LEGACY_URLS = ['https://syncshare.ru/api/', 'https://mse-gateway.example-tailnet.ts.net'];
+  var LEGACY_URLS = ['https://mse-gateway.example-tailnet.ts.net'];
 
   /* ------------------------------------------------------------ storage: twice, so nothing is lost */
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -499,6 +499,7 @@
   }
 
   var gatewayQueue = Promise.resolve();
+  var dumpQueue = Promise.resolve();
   var gatewayInFlight = 0;
 
   function isLoadFailed(err) {
@@ -509,14 +510,23 @@
   }
 
   function gatewayFetch(url, options, retryCount) {
+    var opts = options || {};
+    var isDump = !!opts.isDump || opts.priority === 'dump' || /\/mse\/v1\/dump/i.test(url);
     var attempt = retryCount || 0;
     var run = function () {
       gatewayInFlight++;
-      return tracedFetch(url, options).then(function (res) {
+      return tracedFetch(url, opts).then(function (res) {
         gatewayInFlight--;
         return res;
       }, function (err) {
         gatewayInFlight--;
+        if (isDump) {
+          var dumpErr = new TypeError('dump request failed');
+          dumpErr.originalError = err;
+          dumpErr.url = String(url);
+          dumpErr.transport = (err && err.transport) || lastTransport;
+          throw dumpErr;
+        }
         if (attempt === 0 && isLoadFailed(err)) {
           if (window.__mse && window.__mse.onDebugTraffic) {
             window.__mse.onDebugTraffic({
@@ -532,7 +542,7 @@
             setTimeout(resolve, 500);
           }).then(function () {
             gatewayInFlight++;
-            return tracedFetch(url, options).then(function (res2) {
+            return tracedFetch(url, opts).then(function (res2) {
               gatewayInFlight--;
               return res2;
             }, function (err2) {
@@ -556,6 +566,11 @@
         throw wrapped2;
       });
     };
+    if (isDump) {
+      var nextDump = dumpQueue.then(run, run);
+      dumpQueue = nextDump.catch(function () {});
+      return nextDump;
+    }
     var next = gatewayQueue.then(run, run);
     gatewayQueue = next.catch(function () {});
     return next;
@@ -971,6 +986,10 @@
           return { ok: false, code: 'rate_limited', ms: ms, retryAfter: j.retry_after || res.retryAfter || 5, message: 'agent is busy, at the limit' };
         }
         if (!j.ok) return { ok: false, code: j.code || 'agent_error', ms: ms, message: j.message || ('the gateway answered ' + res.status) };
+        if (record && record.response) {
+          record.response.answer = j.answer || null;
+          record.response.model = j.model || null;
+        }
         return { ok: true, code: 'ok', ms: ms, answer: j.answer || null, confidence: j.confidence == null ? null : j.confidence, model: j.model || null, reasoning: j.reasoning ? String(j.reasoning).slice(0, 400) : null };
       }, function (e) {
         clearTimeout(timer);
@@ -994,11 +1013,23 @@
       var json = JSON.stringify(safe);
       if (json.length > 2000000) safe = {clientTruncated:true, preview:json.slice(0,160000)};
       return gatewayFetch(url + '/mse/v1/dump', {
-        method:'POST', headers:{'content-type':'application/json', authorization:'Bearer '+key},
-        body:JSON.stringify({type:type, dump:safe})
-      }).then(function (r) { return r.json().then(function (j) {
-        return r.ok && j.ok ? j : {ok:false,message:(j.error && j.error.message) || 'dump failed'};
-      }); }, function () { return {ok:false,message:'gateway offline'}; });
+        method:'POST',
+        headers:{'content-type':'application/json', authorization:'Bearer '+key},
+        body:JSON.stringify({type:type, dump:safe}),
+        isDump: true,
+        priority: 'dump',
+        timeout: 15000
+      }).then(function (r) {
+        return r.json().then(function (j) {
+          if (r.ok && j && j.ok) return { ok: true, id: j.id, truncated: j.truncated };
+          return { ok: false, message: (j && j.error && j.error.message) || 'report failed' };
+        }, function () {
+          return { ok: r.ok, message: r.ok ? 'sent' : 'report failed' };
+        });
+      }, function (err) {
+        var isTimeout = (err && (err.name === 'TimeoutError' || err.name === 'AbortError')) || (err && String(err.message).indexOf('timed out') >= 0);
+        return { ok: false, message: isTimeout ? 'report failed' : 'gateway offline' };
+      });
     },
     snifAgent: function () { return lastAgentRequest; },
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MSE
 // @namespace    https://github.com/mse
-// @version      2.14.1
+// @version      2.15.0
 // @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @description Answers and hints for Moodle quizzes: the MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @author       MSE
@@ -1859,7 +1859,7 @@ var __ssW=window,__msePageWindow=window;
     { where: 'stay', key: CONFIG.urlMirrorKey },
     { where: 'stay', key: 'mse:L:' + CONFIG.urlKey }
   ];
-  var LEGACY_URLS = ['https:/\/syncshare.ru/api/', 'https:/\/mse-gateway.example-tailnet.ts.net'];
+  var LEGACY_URLS = ['https:/\/mse-gateway.example-tailnet.ts.net'];
 
    
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -2311,6 +2311,7 @@ var __ssW=window,__msePageWindow=window;
   }
 
   var gatewayQueue = Promise.resolve();
+  var dumpQueue = Promise.resolve();
   var gatewayInFlight = 0;
 
   function isLoadFailed(err) {
@@ -2321,14 +2322,23 @@ var __ssW=window,__msePageWindow=window;
   }
 
   function gatewayFetch(url, options, retryCount) {
+    var opts = options || {};
+    var isDump = !!opts.isDump || opts.priority === 'dump' || /\x2Fmse\x2Fv1\x2Fdump/i.test(url);
     var attempt = retryCount || 0;
     var run = function () {
       gatewayInFlight++;
-      return tracedFetch(url, options).then(function (res) {
+      return tracedFetch(url, opts).then(function (res) {
         gatewayInFlight--;
         return res;
       }, function (err) {
         gatewayInFlight--;
+        if (isDump) {
+          var dumpErr = new TypeError('dump request failed');
+          dumpErr.originalError = err;
+          dumpErr.url = String(url);
+          dumpErr.transport = (err && err.transport) || lastTransport;
+          throw dumpErr;
+        }
         if (attempt === 0 && isLoadFailed(err)) {
           if (__ssW.__mse && __ssW.__mse.onDebugTraffic) {
             __ssW.__mse.onDebugTraffic({
@@ -2344,7 +2354,7 @@ var __ssW=window,__msePageWindow=window;
             setTimeout(resolve, 500);
           }).then(function () {
             gatewayInFlight++;
-            return tracedFetch(url, options).then(function (res2) {
+            return tracedFetch(url, opts).then(function (res2) {
               gatewayInFlight--;
               return res2;
             }, function (err2) {
@@ -2368,6 +2378,11 @@ var __ssW=window,__msePageWindow=window;
         throw wrapped2;
       });
     };
+    if (isDump) {
+      var nextDump = dumpQueue.then(run, run);
+      dumpQueue = nextDump.catch(function () {});
+      return nextDump;
+    }
     var next = gatewayQueue.then(run, run);
     gatewayQueue = next.catch(function () {});
     return next;
@@ -2783,6 +2798,10 @@ var __ssW=window,__msePageWindow=window;
           return { ok: false, code: 'rate_limited', ms: ms, retryAfter: j.retry_after || res.retryAfter || 5, message: 'agent is busy, at the limit' };
         }
         if (!j.ok) return { ok: false, code: j.code || 'agent_error', ms: ms, message: j.message || ('the gateway answered ' + res.status) };
+        if (record && record.response) {
+          record.response.answer = j.answer || null;
+          record.response.model = j.model || null;
+        }
         return { ok: true, code: 'ok', ms: ms, answer: j.answer || null, confidence: j.confidence == null ? null : j.confidence, model: j.model || null, reasoning: j.reasoning ? String(j.reasoning).slice(0, 400) : null };
       }, function (e) {
         clearTimeout(timer);
@@ -2806,11 +2825,23 @@ var __ssW=window,__msePageWindow=window;
       var json = JSON.stringify(safe);
       if (json.length > 2000000) safe = {clientTruncated:true, preview:json.slice(0,160000)};
       return gatewayFetch(url + '/mse/v1/dump', {
-        method:'POST', headers:{'content-type':'application/json', authorization:'Bearer '+key},
-        body:JSON.stringify({type:type, dump:safe})
-      }).then(function (r) { return r.json().then(function (j) {
-        return r.ok && j.ok ? j : {ok:false,message:(j.error && j.error.message) || 'dump failed'};
-      }); }, function () { return {ok:false,message:'gateway offline'}; });
+        method:'POST',
+        headers:{'content-type':'application/json', authorization:'Bearer '+key},
+        body:JSON.stringify({type:type, dump:safe}),
+        isDump: true,
+        priority: 'dump',
+        timeout: 15000
+      }).then(function (r) {
+        return r.json().then(function (j) {
+          if (r.ok && j && j.ok) return { ok: true, id: j.id, truncated: j.truncated };
+          return { ok: false, message: (j && j.error && j.error.message) || 'report failed' };
+        }, function () {
+          return { ok: r.ok, message: r.ok ? 'sent' : 'report failed' };
+        });
+      }, function (err) {
+        var isTimeout = (err && (err.name === 'TimeoutError' || err.name === 'AbortError')) || (err && String(err.message).indexOf('timed out') >= 0);
+        return { ok: false, message: isTimeout ? 'report failed' : 'gateway offline' };
+      });
     },
     snifAgent: function () { return lastAgentRequest; },
 
@@ -4102,9 +4133,8 @@ var __ssW=window,__msePageWindow=window;
 
   var CONFIG = Object.assign({
     brand: 'MSE',
-    version: '0.3.0',
-    apiBase: 'https:/\/syncshare.ru/api/',
-    client: '2.22.0',
+    version: '2.15.0',
+    client: '2.15.0',
     posKey: 'mse.pos',
     logKey: 'mse.log',
     width: 300,
@@ -4113,7 +4143,7 @@ var __ssW=window,__msePageWindow=window;
   }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
 
    
-  var CSS = ":host,*{box-sizing:border-box}\n/\* MSE theme: black and white, nothing else.\n   The panel is a sheet of dark glass over a page we do not own: one paper, one rule, one ink, one accent.\n   The accent is white — a border that lights up — inspired by the Hotaru design system. *\/\n.mse{\n  --paper:#0a0a0b;--paper-2:#121214;--paper-3:#18181b;\n  --ink:#f4f4f5;--ink-2:#d4d4d8;--muted:#71717a;\n  --rule:#27272a;--rule-2:#3f3f46;--rule-3:#52525b;\n  --accent:#ffffff;--accent-soft:rgba(255,255,255,.14);--accent-line:rgba(255,255,255,.6);\n  --r:10px;--r-panel:14px;--pill:999px;\n  --ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);\n  --dur-short:.22s;--dur-glow:.76s;\n  --sp-1:4px;--sp-2:8px;--sp-3:12px;\n  --glow-xs:0 0 10px rgba(255,255,255,.09);\n  --glow-sm:0 0 16px rgba(255,255,255,.14);\n  --glow-md:0 0 26px rgba(255,255,255,.2),0 0 6px rgba(255,255,255,.12);\n  --glow-lg:0 0 44px rgba(255,255,255,.26),0 0 10px rgba(255,255,255,.16);\n  --glow-edge:inset 0 1px 0 rgba(255,255,255,.12);\n  --aura-control:0 0 0 1px rgba(255,255,255,.11),0 0 9px 0 rgba(255,255,255,.15);\n  --aura-control-lit:0 0 0 1px rgba(255,255,255,.22),0 0 14px 1px rgba(255,255,255,.24);\n  font:13px/1.4 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif;\n  color:var(--ink);-webkit-font-smoothing:antialiased;\n}\n\n/\* ---------- the pill: tiny, quiet; only the letters carry any light ---------- *\/\n.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;\n  height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);\n  background:var(--paper-2);border:1px solid var(--rule-2);color:var(--ink);\n  font:700 10.5px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.16em;text-indent:.16em;\n  text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);\n  cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;\n  transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}\n.pill.dragging{opacity:.9}\n.pill:active{transform:scale(.97)}\n.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;\n  background:var(--accent);color:#000;font:700 9px/14px -apple-system,sans-serif;text-align:center;text-indent:0;text-shadow:none}\n.pill.lit{animation:pill-press .9s linear}\n@keyframes pill-press{\n  0%,100%{text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);border-color:var(--rule-2)}\n  8%{text-shadow:0 0 12px rgba(255,255,255,.95),0 0 26px rgba(255,255,255,.5);border-color:var(--accent-line)}\n  40%{text-shadow:0 0 10px rgba(255,255,255,.62),0 0 20px rgba(255,255,255,.3);border-color:var(--rule-2)}}\n\n/\* ---------- the press: a white edge that flashes and goes down slowly, no colour, no fill ---------- *\/\n.press{position:relative;isolation:isolate}\n.press::before,.press::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;\n  opacity:0;transition:opacity .2s var(--ease-out)}\n.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 12px 1px rgba(255,255,255,.6),0 0 34px 6px rgba(255,255,255,.3),0 0 84px 20px rgba(255,255,255,.12)}\n.press::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.08);box-shadow:inset 0 0 12px 1px rgba(255,255,255,.28),inset 0 0 22px 2px rgba(255,255,255,.18)}\n.press.hot{animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}\n  4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}\n  18%{--press:.52;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.3}74%{--press:.15}to{--press:0}}\n@keyframes press-ink{\n  0%{text-shadow:0 0 12px rgba(255,255,255,0),0 0 26px rgba(255,255,255,0)}\n  4%{text-shadow:0 0 13px rgba(255,255,255,.75),0 0 30px rgba(255,255,255,.45)}\n  18%{text-shadow:0 0 11px rgba(255,255,255,.4),0 0 26px rgba(255,255,255,.22)}\n  46%{text-shadow:0 0 9px rgba(255,255,255,.22),0 0 22px rgba(255,255,255,.12)}\n  74%{text-shadow:0 0 8px rgba(255,255,255,.1),0 0 18px rgba(255,255,255,.06)}\n  to{text-shadow:0 0 6px rgba(255,255,255,0),0 0 14px rgba(255,255,255,0)}}\n.press.hot::before{opacity:var(--press)}\n.press.hot::after{opacity:calc(var(--press) * .9)}\n/\* the chosen row: a hairline that stays, no glow, no colour *\/\n.press.lit{border-color:var(--accent-line)!important;box-shadow:var(--glow-sm)}\n.press.lit::before{opacity:.5}\n.press.lit::after{opacity:.2}\n.press:active{transform:scale(.99)}\n\n/\* ---------- the panel ---------- *\/\n.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:290px;max-width:calc(100vw - 16px);\n  background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r-panel);\n  box-shadow:0 18px 48px rgba(0,0,0,.7),var(--glow-edge);overflow:hidden;\n  transform-origin:var(--ox,100%) var(--oy,100%);\n  opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);\n  transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}\n.pop.in{opacity:1;transform:none;filter:none;animation:sheet-in .32s var(--ease) forwards}\n@keyframes sheet-in{\n  0%{opacity:0;transform:translateY(-10px) scale(.88)}\n  55%{opacity:1}\n  78%{transform:translateY(1px) scale(1.012)}\n  to{opacity:1;transform:translateY(0) scale(1)}}\n.pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}\n.pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}\n@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}\n\n/\* the head: the name, the view, buttons, mini status bar — compact, no empty margins *\/\n.ph{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--rule)}\n.ph .t{flex:1 1 auto;min-width:0;font:700 11px/1 -apple-system,sans-serif;letter-spacing:.14em;\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:none}\n.ph .t em{font:400 10px/1 -apple-system,sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none;display:block;margin-top:3px}\n.ph .model-chip{flex:0 1 auto;min-width:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n  padding:3px 6px;border:1px solid rgba(255,255,255,.17);border-radius:7px;color:var(--ink-2);\n  font:500 9px/1.15 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.01em;\n  text-shadow:0 0 5px rgba(255,255,255,.55),0 0 11px rgba(255,255,255,.24);box-shadow:0 0 7px rgba(255,255,255,.08)}\n.mini-status{display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:6px;\n  background:transparent;border:1px solid transparent;cursor:pointer;\n  font:500 9.5px/1 -apple-system,sans-serif;color:var(--muted);\n  transition:border-color .18s var(--ease),color .18s var(--ease);flex:0 0 auto}\n.mini-status:hover{border-color:var(--rule-2);color:var(--ink)}\n.mini-status .dot{width:5px;height:5px;border-radius:50%;background:var(--rule-3)}\n.mini-status .dot.ok{background:var(--accent);box-shadow:0 0 5px rgba(255,255,255,.6)}\n.mini-status .dot.warn,.mini-status .dot.bad{background:var(--muted)}\n.ib{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;\n  border-radius:8px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);\n  font:600 12.5px/1 Georgia,serif;cursor:pointer;transition:border-color .18s var(--ease),color .18s var(--ease)}\n.ib:hover{border-color:var(--rule-3);color:var(--ink)}\n.ib.x{font:400 14px/1 -apple-system,sans-serif}\n.ib.back{font:400 13px/1 -apple-system,sans-serif}\n\n/\* the body: compact and tight, sized to content *\/\n.pb{max-height:min(50vh,320px);overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 10px}\n.pb::-webkit-scrollbar{width:0}\n.sec{font:700 9px/1 -apple-system,sans-serif;letter-spacing:.16em;color:var(--muted);margin:8px 0 4px}\n.sec:first-child{margin-top:0}\n.group{display:flex;flex-direction:column;gap:8px}\n.group + .sec{margin-top:8px}\n\n/\* ---------- answers: one row a tap wide, a box on the left, a letter, the text, the share ---------- *\/\n.ans{display:flex;align-items:center;gap:9px;width:100%;min-height:36px;margin:0;padding:10px 11px;\n  border-radius:var(--r);border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:400 12.5px/1.3 inherit;text-align:left;cursor:pointer;position:relative;isolation:isolate;\n  transition:border-color .18s var(--ease),background .18s var(--ease),box-shadow .18s var(--ease),transform .12s var(--ease)}\n.ans:hover{border-color:var(--rule-3);box-shadow:var(--glow-xs)}\n.ans:active{transform:scale(.985)}\n.ans::before,.ans::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .2s var(--ease-out)}\n.ans::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 12px 1px rgba(255,255,255,.6),0 0 34px 6px rgba(255,255,255,.3),0 0 84px 20px rgba(255,255,255,.12)}\n.ans::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.08);box-shadow:inset 0 0 12px 1px rgba(255,255,255,.28),inset 0 0 22px 2px rgba(255,255,255,.18)}\n.ans.lit,.ans.applied,.ans[data-lit]{border-color:#fff!important;box-shadow:var(--glow-md),var(--glow-edge),var(--aura-control-lit)!important;\n  animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n.ans.lit::before,.ans.applied::before{opacity:var(--press,.7)}\n.ans.lit::after,.ans.applied::after{opacity:calc(var(--press,.5) * .9)}\n.ans .mark{flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:1px solid var(--rule-3);\n  display:flex;align-items:center;justify-content:center;font:700 9px/1 inherit;color:#000;\n  transition:border-color .2s,box-shadow .2s}\n.ans.best .mark{border-color:var(--accent-line)}\n.ans.agent .mark,.mark.agent{background:var(--paper-3);border:1px solid rgba(255,255,255,.45)!important;\n  box-shadow:0 0 3px rgba(255,255,255,.2);transition:border-color .2s,box-shadow .2s}\n.ans.agent .mark::after,.mark.agent::after{content:\"\";display:block;width:6px;height:6px;border-radius:50%;\n  background:rgba(255,255,255,.65);box-shadow:0 0 3px rgba(255,255,255,.3);transition:background .2s,box-shadow .2s,transform .2s}\n.ans.lit .mark,.ans.applied .mark,.ans.agent.lit .mark,.ans.agent.applied .mark{border-color:#fff!important;\n  box-shadow:0 0 8px rgba(255,255,255,.95),0 0 16px rgba(255,255,255,.6)!important}\n.ans.lit .mark::after,.ans.applied .mark::after,.ans.agent.lit .mark::after,.ans.agent.applied .mark::after{background:#fff!important;\n  box-shadow:0 0 6px #fff,0 0 14px rgba(255,255,255,1)!important;transform:scale(1.15)}\n.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}\n.ans .pct{flex:0 0 auto;font:600 10px/1 -apple-system,sans-serif;color:var(--muted)}\n.ans.agent{border-style:dashed}\n.ans.ai{position:relative;isolation:isolate;overflow:hidden;border:1px solid rgba(255,255,255,.14);box-shadow:var(--aura-control),var(--glow-sm)}\n.ans.ai::before{content:\"\";position:absolute;top:0;left:-100%;width:200%;height:100%;\n  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.14) 50%,transparent 100%);\n  animation:auraFlow 3.5s ease-in-out infinite;pointer-events:none;z-index:0}\n.ans.ai > *{position:relative;z-index:1}\n.ans.ai.busy .lbl{color:var(--muted)}\n.tag{font:600 9px/1 -apple-system,sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:5px}\n.ans .tag.agent,.tag.agent{color:var(--ink);font-weight:700;letter-spacing:.14em;\n  text-shadow:0 0 6px rgba(255,255,255,.6),0 0 12px rgba(255,255,255,.25);opacity:1}\n\n/\* ---------- one status line, never a paragraph ---------- *\/\n.row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink-2);\n  font:400 11px/1.3 inherit;text-align:left;cursor:pointer;margin:5px 0 3px}\n.pb > .row:last-child{margin-bottom:0}\n.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--rule-3)}\n.row .dot.ok{background:var(--accent)}\n.row .dot.warn,.row .dot.bad{background:var(--muted)}\n.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.row .more{flex:0 0 auto;font-size:10px;color:var(--muted)}\n\n/\* ---------- controls and buttons (unified UI kit with Hotaru glow) ---------- *\/\n.frow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}\n.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:1 1 auto;min-width:0;height:28px;padding:0 10px;\n  border-radius:8px;border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:600 11px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.02em;\n  cursor:pointer;white-space:nowrap;user-select:none;-webkit-user-select:none;position:relative;isolation:isolate;\n  transition:border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease),transform .12s var(--ease)}\n.btn::before,.btn::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .2s var(--ease-out)}\n.btn::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 10px 1px rgba(255,255,255,.5),0 0 28px 4px rgba(255,255,255,.22)}\n.btn::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.07);box-shadow:inset 0 0 8px 1px rgba(255,255,255,.24)}\n.btn:hover{border-color:var(--accent-line);box-shadow:var(--glow-sm),var(--glow-edge),var(--aura-control-lit);color:#fff}\n.btn:active,.btn.press:active{transform:scale(.97)}\n.btn.solid,.btn.primary{background:transparent;color:#fff;border-color:var(--accent-line);box-shadow:0 0 6px rgba(255,255,255,.15)}\n.btn.solid:hover,.btn.primary:hover{border-color:#fff;box-shadow:var(--glow-md),var(--aura-control-lit)}\n.btn.sm{height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;flex:0 0 auto}\n.btn.lit,.btn[data-lit]{border-color:#fff!important;box-shadow:var(--glow-md),var(--aura-control-lit)!important;\n  animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n.btn.lit::before,.btn[data-lit]::before{opacity:var(--press,.7)}\n.btn.lit::after,.btn[data-lit]::after{opacity:calc(var(--press,.5) * .9)}\n.actions-row{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:4px 0 1px}\n.err-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;margin:4px 0 2px}\n.inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 10px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:12px/1 -apple-system,sans-serif;outline:none;margin:0 0 8px}\n.inp:focus{border-color:var(--accent-line)}\n\n/\* debug toggle: unified button style with immediate status light *\/\n.dbg-toggle{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 10px;margin:0;border-radius:8px;\n  border:1px solid var(--rule-2);background:var(--paper-2);cursor:pointer;position:relative;\n  font:600 11px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--ink);\n  transition:border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease)}\n.dbg-toggle:hover{border-color:var(--accent-line);box-shadow:0 0 8px rgba(255,255,255,.18);color:#fff}\n.dbg-toggle.on{border-color:var(--accent-line);box-shadow:0 0 6px rgba(255,255,255,.15)}\n.dbg-native{position:absolute;opacity:0;width:0;height:0;pointer-events:none}\n.dbg-light{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:var(--rule-2);border:1px solid var(--rule-3);\n  transition:background .12s,box-shadow .12s,border-color .12s}\n.dbg-light.on{background:var(--accent);border-color:#fff;\n  box-shadow:0 0 6px rgba(255,255,255,.9),0 0 12px rgba(255,255,255,.45)}\n.dbg-text{display:inline-flex;align-items:center}\n.dbg-title{font:600 11px/1 inherit;color:var(--ink)}\n\n/\* monochrome icons for settings and logs *\/\n.gear-icon,.log-icon{flex:0 0 auto;display:inline-block;vertical-align:middle;stroke:currentColor;fill:none}\n.row .gear-icon,.row .log-icon{width:14px;height:14px;color:var(--muted);transition:color .18s,filter .18s}\n.row:hover .gear-icon,.row:hover .log-icon{color:#fff;filter:drop-shadow(0 0 4px rgba(255,255,255,.5))}\n\n/\* agent status strip: flowing light aura, no harsh outline *\/\n.agent-status-strip{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;margin:4px 0;\n  border-radius:var(--r);border:1px solid rgba(255,255,255,.08);background:var(--paper-2);color:var(--ink);\n  font:400 11px/1.3 inherit;position:relative;isolation:isolate;overflow:hidden;box-shadow:0 0 10px rgba(255,255,255,.06)}\n.agent-status-strip::before{content:\"\";position:absolute;top:0;left:-100%;width:200%;height:100%;\n  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.12) 50%,transparent 100%);\n  animation:auraFlow 3.5s ease-in-out infinite;pointer-events:none;z-index:0}\n.agent-status-strip > *{position:relative;z-index:1}\n@keyframes auraFlow{0%{transform:translateX(0)}50%{transform:translateX(50%)}100%{transform:translateX(0)}}\n.agent-status-strip .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--accent);\n  box-shadow:0 0 5px rgba(255,255,255,.9)}\n.agent-status-strip .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n\n/\* shimmering flowing text for thinking / reasoning actions *\/\n.agent-shimmer{background:linear-gradient(90deg,var(--muted) 0%,#ffffff 50%,var(--muted) 100%);\n  background-size:200% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;\n  animation:textShimmer 2.2s linear infinite;font-weight:500;letter-spacing:.02em}\n@keyframes textShimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}\n\n/\* action icons: brain for reasoning, eye for looking at image, pencil for writing answer *\/\n.action-icon{flex:0 0 auto;width:14px;height:14px;display:inline-block;vertical-align:middle;stroke:currentColor;fill:none}\n.action-icon.brain-icon,.action-icon.eye-icon,.action-icon.pencil-icon{color:var(--ink);filter:drop-shadow(0 0 4px rgba(255,255,255,.5))}\n.reconnect-hint{font:400 10px/1.2 -apple-system,sans-serif;color:var(--muted);text-align:center;margin:3px 0 1px;letter-spacing:.02em}\n\n/\* compact status screen *\/\n.status-grid{display:flex;flex-direction:column;gap:5px;margin:3px 0 6px}\n.status-item{display:flex;align-items:center;justify-content:space-between;padding:6px 9px;border-radius:var(--r);\n  background:var(--paper-2);border:1px solid var(--rule);font-size:11px}\n.status-item .k{color:var(--muted);font-weight:500}\n.status-item .v{color:var(--ink);font-weight:600}\n\n/\* the copy value: a row that is a tap target, the key above the value *\/\n.val{display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;margin:0 0 6px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink);\n  font:400 11.5px/1.35 ui-monospace,Menlo,monospace;text-align:left;cursor:pointer}\n.val .k{flex:0 0 46px;font:600 9px/1.3 -apple-system,sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}\n.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}\n.val.human{font:400 11.5px/1.35 -apple-system,sans-serif}\n.val.human .v{overflow-wrap:break-word}\n.val .copy{flex:0 0 auto;font:600 9px/1 -apple-system,sans-serif;color:var(--muted);letter-spacing:.06em}\n.val[disabled]{opacity:.55;cursor:default}\n.models{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 10px}\n.chip{padding:4px 8px;border-radius:999px;border:1px solid var(--rule-2);background:var(--paper-2);\n  font:500 10px/1 ui-monospace,Menlo,monospace;color:var(--ink-2)}\n\n/\* ---------- the journal: lines with air, a mark on the left ---------- *\/\n.log{font:400 10px/1.4 ui-monospace,Menlo,monospace;color:var(--ink-2);display:flex;flex-direction:column;gap:2px}\n.log .ln{display:flex;gap:7px;padding:5px 0;border-bottom:1px solid var(--rule);word-break:break-word}\n.log .ln:last-child{border-bottom:0}\n.log .ln .g{flex:0 0 auto;width:5px;height:5px;margin-top:4px;border-radius:50%;background:var(--rule-3)}\n.log .ln.ok .g{background:var(--accent)}\n.log .ln.warn,.log .ln.bad{color:var(--muted)}\n.log .ln .t{flex:0 0 auto;color:var(--muted)}\n.log .ln .m{flex:1 1 auto;min-width:0}\n.empty{padding:6px 4px;text-align:center;color:var(--muted);font-size:11.5px;line-height:1.4}\n.spin{width:14px;height:14px;margin:8px auto;border-radius:50%;border:1.5px solid var(--rule-2);border-top-color:var(--ink);animation:sp .7s linear infinite}\n@keyframes sp{to{transform:rotate(360deg)}}\n.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:8px 12px;\n  border-radius:999px;background:var(--paper-3);border:1px solid var(--rule-3);color:var(--ink);\n  font:11.5px/1.3 inherit;text-align:center;opacity:0;pointer-events:none;\n  transition:opacity .2s,transform .2s;z-index:2147483647}\n.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}\n@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}\n";
+  var CSS = ":host,*{box-sizing:border-box}\n/\* MSE theme: black and white, nothing else.\n   The panel is a sheet of dark glass over a page we do not own: one paper, one rule, one ink, one accent.\n   The accent is white — a border that lights up — inspired by the Hotaru design system. *\/\n.mse{\n  --paper:#0a0a0b;--paper-2:#121214;--paper-3:#18181b;\n  --ink:#f4f4f5;--ink-2:#d4d4d8;--muted:#71717a;\n  --rule:#27272a;--rule-2:#3f3f46;--rule-3:#52525b;\n  --accent:#ffffff;--accent-soft:rgba(255,255,255,.14);--accent-line:rgba(255,255,255,.6);\n  --r:10px;--r-panel:14px;--pill:999px;\n  --ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);\n  --dur-short:.22s;--dur-glow:.76s;\n  --sp-1:4px;--sp-2:8px;--sp-3:12px;\n  --glow-xs:0 0 10px rgba(255,255,255,.09);\n  --glow-sm:0 0 16px rgba(255,255,255,.14);\n  --glow-md:0 0 26px rgba(255,255,255,.2),0 0 6px rgba(255,255,255,.12);\n  --glow-lg:0 0 44px rgba(255,255,255,.26),0 0 10px rgba(255,255,255,.16);\n  --glow-edge:inset 0 1px 0 rgba(255,255,255,.12);\n  --aura-control:0 0 0 1px rgba(255,255,255,.11),0 0 9px 0 rgba(255,255,255,.15);\n  --aura-control-lit:0 0 0 1px rgba(255,255,255,.22),0 0 14px 1px rgba(255,255,255,.24);\n  font:13px/1.4 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif;\n  color:var(--ink);-webkit-font-smoothing:antialiased;\n}\n\n/\* ---------- the pill: tiny, quiet; only the letters carry any light ---------- *\/\n.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;\n  height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);\n  background:var(--paper-2);border:1px solid var(--rule-2);color:var(--ink);\n  font:700 10.5px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.16em;text-indent:.16em;\n  text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);\n  cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;\n  transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}\n.pill.dragging{opacity:.9}\n.pill:active{transform:scale(.97)}\n.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;\n  background:var(--accent);color:#000;font:700 9px/14px -apple-system,sans-serif;text-align:center;text-indent:0;text-shadow:none}\n.pill.lit{animation:pill-press .9s linear}\n@keyframes pill-press{\n  0%,100%{text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);border-color:var(--rule-2)}\n  8%{text-shadow:0 0 12px rgba(255,255,255,.95),0 0 26px rgba(255,255,255,.5);border-color:var(--accent-line)}\n  40%{text-shadow:0 0 10px rgba(255,255,255,.62),0 0 20px rgba(255,255,255,.3);border-color:var(--rule-2)}}\n\n/\* ---------- the press: a white edge that flashes and goes down slowly, no colour, no fill ---------- *\/\n.press{position:relative;isolation:isolate}\n.press::before,.press::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;\n  opacity:0;transition:opacity .2s var(--ease-out)}\n.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 12px 1px rgba(255,255,255,.6),0 0 34px 6px rgba(255,255,255,.3),0 0 84px 20px rgba(255,255,255,.12)}\n.press::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.08);box-shadow:inset 0 0 12px 1px rgba(255,255,255,.28),inset 0 0 22px 2px rgba(255,255,255,.18)}\n.press.hot{animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}\n  4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}\n  18%{--press:.52;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.3}74%{--press:.15}to{--press:0}}\n@keyframes press-ink{\n  0%{text-shadow:0 0 12px rgba(255,255,255,0),0 0 26px rgba(255,255,255,0)}\n  4%{text-shadow:0 0 13px rgba(255,255,255,.75),0 0 30px rgba(255,255,255,.45)}\n  18%{text-shadow:0 0 11px rgba(255,255,255,.4),0 0 26px rgba(255,255,255,.22)}\n  46%{text-shadow:0 0 9px rgba(255,255,255,.22),0 0 22px rgba(255,255,255,.12)}\n  74%{text-shadow:0 0 8px rgba(255,255,255,.1),0 0 18px rgba(255,255,255,.06)}\n  to{text-shadow:0 0 6px rgba(255,255,255,0),0 0 14px rgba(255,255,255,0)}}\n.press.hot::before{opacity:var(--press)}\n.press.hot::after{opacity:calc(var(--press) * .9)}\n/\* the chosen row: a hairline that stays, no glow, no colour *\/\n.press.lit{border-color:var(--accent-line)!important;box-shadow:var(--glow-sm)}\n.press.lit::before{opacity:.5}\n.press.lit::after{opacity:.2}\n.press:active{transform:scale(.99)}\n\n/\* ---------- the panel ---------- *\/\n.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:290px;max-width:calc(100vw - 16px);\n  background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r-panel);\n  box-shadow:0 18px 48px rgba(0,0,0,.7),var(--glow-edge);overflow:hidden;\n  transform-origin:var(--ox,100%) var(--oy,100%);\n  opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);\n  transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}\n.pop.in{opacity:1;transform:none;filter:none;animation:sheet-in .32s var(--ease) forwards}\n@keyframes sheet-in{\n  0%{opacity:0;transform:translateY(-10px) scale(.88)}\n  55%{opacity:1}\n  78%{transform:translateY(1px) scale(1.012)}\n  to{opacity:1;transform:translateY(0) scale(1)}}\n.pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}\n.pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}\n@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}\n\n/\* the head: the name, the view, buttons, mini status bar — compact, no empty margins *\/\n.ph{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--rule)}\n.ph .t{flex:0 0 auto;min-width:0;font:700 11px/1 -apple-system,sans-serif;letter-spacing:.14em;\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:none}\n.ph .t em{font:400 10px/1 -apple-system,sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none;display:block;margin-top:3px}\n.ph .model-chip{flex:0 1 auto;margin:0 auto;text-align:center;min-width:0;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n  padding:3px 8px;border:1px solid rgba(255,255,255,.2);border-radius:7px;color:var(--ink-2);\n  font:500 10.5px/1.2 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.01em;\n  text-shadow:0 0 5px rgba(255,255,255,.55),0 0 11px rgba(255,255,255,.24);box-shadow:0 0 7px rgba(255,255,255,.08)}\n.mini-status{display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:6px;\n  background:transparent;border:1px solid transparent;cursor:pointer;\n  font:500 9.5px/1 -apple-system,sans-serif;color:var(--muted);\n  transition:border-color .18s var(--ease),color .18s var(--ease);flex:0 0 auto}\n.mini-status:hover{border-color:var(--rule-2);color:var(--ink)}\n.mini-status .dot{width:5px;height:5px;border-radius:50%;background:var(--rule-3)}\n.mini-status .dot.ok{background:var(--accent);box-shadow:0 0 5px rgba(255,255,255,.6)}\n.mini-status .dot.warn,.mini-status .dot.bad{background:var(--muted)}\n.ib{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;\n  border-radius:8px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);\n  font:600 12.5px/1 Georgia,serif;cursor:pointer;transition:border-color .18s var(--ease),color .18s var(--ease)}\n.ib:hover{border-color:var(--rule-3);color:var(--ink)}\n.ib.x{font:400 14px/1 -apple-system,sans-serif}\n.ib.back{font:400 13px/1 -apple-system,sans-serif}\n\n/\* the body: compact and tight, sized to content *\/\n.pb{max-height:min(50vh,320px);overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 10px}\n.pb::-webkit-scrollbar{width:0}\n.sec{font:700 9px/1 -apple-system,sans-serif;letter-spacing:.16em;color:var(--muted);margin:8px 0 4px}\n.sec:first-child{margin-top:0}\n.group{display:flex;flex-direction:column;gap:8px}\n.group + .sec{margin-top:8px}\n\n/\* ---------- answers: one row a tap wide, a box on the left, a letter, the text, the share ---------- *\/\n.ans{display:flex;align-items:center;gap:9px;width:100%;min-height:36px;margin:0;padding:10px 11px;\n  border-radius:var(--r);border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:400 12.5px/1.3 inherit;text-align:left;cursor:pointer;position:relative;isolation:isolate;\n  transition:border-color .18s var(--ease),background .18s var(--ease),box-shadow .18s var(--ease),transform .12s var(--ease)}\n.ans:hover{border-color:var(--rule-3);box-shadow:var(--glow-xs)}\n.ans:active{transform:scale(.985)}\n.ans::before,.ans::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .2s var(--ease-out)}\n.ans::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 12px 1px rgba(255,255,255,.6),0 0 34px 6px rgba(255,255,255,.3),0 0 84px 20px rgba(255,255,255,.12)}\n.ans::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.08);box-shadow:inset 0 0 12px 1px rgba(255,255,255,.28),inset 0 0 22px 2px rgba(255,255,255,.18)}\n.ans.lit,.ans.applied,.ans[data-lit]{border-color:#fff!important;box-shadow:var(--glow-md),var(--glow-edge),var(--aura-control-lit)!important;\n  animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n.ans.lit::before,.ans.applied::before{opacity:var(--press,.7)}\n.ans.lit::after,.ans.applied::after{opacity:calc(var(--press,.5) * .9)}\n.ans .mark{flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:1px solid var(--rule-3);\n  display:flex;align-items:center;justify-content:center;font:700 9px/1 inherit;color:#000;\n  transition:border-color .2s,box-shadow .2s}\n.ans.best .mark{border-color:var(--accent-line)}\n.ans.agent .mark,.mark.agent{background:var(--paper-3);border:1px solid rgba(255,255,255,.45)!important;\n  box-shadow:0 0 3px rgba(255,255,255,.2);transition:border-color .2s,box-shadow .2s}\n.ans.agent .mark::after,.mark.agent::after{content:\"\";display:block;width:6px;height:6px;border-radius:50%;\n  background:rgba(255,255,255,.65);box-shadow:0 0 3px rgba(255,255,255,.3);transition:background .2s,box-shadow .2s,transform .2s}\n.ans.lit .mark,.ans.applied .mark,.ans.agent.lit .mark,.ans.agent.applied .mark{border-color:#fff!important;\n  box-shadow:0 0 8px rgba(255,255,255,.95),0 0 16px rgba(255,255,255,.6)!important}\n.ans.lit .mark::after,.ans.applied .mark::after,.ans.agent.lit .mark::after,.ans.agent.applied .mark::after{background:#fff!important;\n  box-shadow:0 0 6px #fff,0 0 14px rgba(255,255,255,1)!important;transform:scale(1.15)}\n.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}\n.ans .pct{flex:0 0 auto;font:600 10px/1 -apple-system,sans-serif;color:var(--muted)}\n.ans.agent{border-style:dashed}\n.ans.ai{position:relative;isolation:isolate;overflow:hidden;border:1px solid rgba(255,255,255,.14);box-shadow:var(--aura-control),var(--glow-sm)}\n.ans.ai::before{content:\"\";position:absolute;top:0;left:-100%;width:200%;height:100%;\n  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.14) 50%,transparent 100%);\n  animation:auraFlow 3.5s ease-in-out infinite;pointer-events:none;z-index:0}\n.ans.ai > *{position:relative;z-index:1}\n.ans.ai.busy .lbl{color:var(--muted)}\n.tag{font:600 9px/1 -apple-system,sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:5px}\n.ans .tag.agent,.tag.agent{color:var(--ink);font-weight:700;letter-spacing:.14em;\n  text-shadow:0 0 6px rgba(255,255,255,.6),0 0 12px rgba(255,255,255,.25);opacity:1}\n\n/\* ---------- one status line, never a paragraph ---------- *\/\n.row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink-2);\n  font:400 11px/1.3 inherit;text-align:left;cursor:pointer;margin:5px 0 3px}\n.pb > .row:last-child{margin-bottom:0}\n.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--rule-3)}\n.row .dot.ok{background:var(--accent)}\n.row .dot.warn,.row .dot.bad{background:var(--muted)}\n.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.row .more{flex:0 0 auto;font-size:10px;color:var(--muted)}\n\n/\* ---------- controls and buttons (unified UI kit with Hotaru glow) ---------- *\/\n.frow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}\n.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:1 1 auto;min-width:0;height:28px;padding:0 10px;\n  border-radius:8px;border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:600 11px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.02em;\n  cursor:pointer;white-space:nowrap;user-select:none;-webkit-user-select:none;position:relative;isolation:isolate;\n  transition:border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease),transform .12s var(--ease)}\n.btn::before,.btn::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .2s var(--ease-out)}\n.btn::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 10px 1px rgba(255,255,255,.5),0 0 28px 4px rgba(255,255,255,.22)}\n.btn::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.07);box-shadow:inset 0 0 8px 1px rgba(255,255,255,.24)}\n.btn:hover{border-color:var(--accent-line);box-shadow:var(--glow-sm),var(--glow-edge),var(--aura-control-lit);color:#fff}\n.btn:active,.btn.press:active{transform:scale(.97)}\n.btn.solid,.btn.primary{background:transparent;color:#fff;border-color:var(--accent-line);box-shadow:0 0 6px rgba(255,255,255,.15)}\n.btn.solid:hover,.btn.primary:hover{border-color:#fff;box-shadow:var(--glow-md),var(--aura-control-lit)}\n.btn.sm{height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;flex:0 0 auto}\n.btn.lit,.btn[data-lit]{border-color:#fff!important;box-shadow:var(--glow-md),var(--aura-control-lit)!important;\n  animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n.btn.lit::before,.btn[data-lit]::before{opacity:var(--press,.7)}\n.btn.lit::after,.btn[data-lit]::after{opacity:calc(var(--press,.5) * .9)}\n.actions-row{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:4px 0 1px}\n.err-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;margin:4px 0 2px}\n.inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 10px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:12px/1 -apple-system,sans-serif;outline:none;margin:0 0 8px}\n.inp:focus{border-color:var(--accent-line)}\n\n/\* debug toggle: unified button style with immediate status light *\/\n.dbg-toggle{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 10px;margin:0;border-radius:8px;\n  border:1px solid var(--rule-2);background:var(--paper-2);cursor:pointer;position:relative;\n  font:600 11px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--ink);\n  transition:border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease)}\n.dbg-toggle:hover{border-color:var(--accent-line);box-shadow:0 0 8px rgba(255,255,255,.18);color:#fff}\n.dbg-toggle.on{border-color:var(--accent-line);box-shadow:0 0 6px rgba(255,255,255,.15)}\n.dbg-native{position:absolute;opacity:0;width:0;height:0;pointer-events:none}\n.dbg-light{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:var(--rule-2);border:1px solid var(--rule-3);\n  transition:background .12s,box-shadow .12s,border-color .12s}\n.dbg-light.on{background:var(--accent);border-color:#fff;\n  box-shadow:0 0 6px rgba(255,255,255,.9),0 0 12px rgba(255,255,255,.45)}\n.dbg-text{display:inline-flex;align-items:center}\n.dbg-title{font:600 11px/1 inherit;color:var(--ink)}\n\n/\* monochrome icons for settings and logs *\/\n.gear-icon,.log-icon{flex:0 0 auto;display:inline-block;vertical-align:middle;stroke:currentColor;fill:none}\n.row .gear-icon,.row .log-icon{width:14px;height:14px;color:var(--muted);transition:color .18s,filter .18s}\n.row:hover .gear-icon,.row:hover .log-icon{color:#fff;filter:drop-shadow(0 0 4px rgba(255,255,255,.5))}\n\n/\* agent status strip: flowing light aura, no harsh outline *\/\n.agent-status-strip{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;margin:4px 0;\n  border-radius:var(--r);border:1px solid rgba(255,255,255,.08);background:var(--paper-2);color:var(--ink);\n  font:400 11px/1.3 inherit;position:relative;isolation:isolate;overflow:hidden;box-shadow:0 0 10px rgba(255,255,255,.06)}\n.agent-status-strip::before{content:\"\";position:absolute;top:0;left:-100%;width:200%;height:100%;\n  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.12) 50%,transparent 100%);\n  animation:auraFlow 3.5s ease-in-out infinite;pointer-events:none;z-index:0}\n.agent-status-strip > *{position:relative;z-index:1}\n@keyframes auraFlow{0%{transform:translateX(0)}50%{transform:translateX(50%)}100%{transform:translateX(0)}}\n.agent-status-strip .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--accent);\n  box-shadow:0 0 5px rgba(255,255,255,.9)}\n.agent-status-strip .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n\n/\* shimmering flowing text for thinking / reasoning actions *\/\n.agent-shimmer{background:linear-gradient(90deg,var(--muted) 0%,#ffffff 50%,var(--muted) 100%);\n  background-size:200% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;\n  animation:textShimmer 2.2s linear infinite;font-weight:500;letter-spacing:.02em}\n@keyframes textShimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}\n\n/\* action icons: brain for reasoning, eye for looking at image, pencil for writing answer *\/\n.action-icon{flex:0 0 auto;width:14px;height:14px;display:inline-block;vertical-align:middle;stroke:currentColor;fill:none}\n.action-icon.brain-icon,.action-icon.eye-icon,.action-icon.pencil-icon{color:var(--ink);filter:drop-shadow(0 0 4px rgba(255,255,255,.5))}\n.reconnect-hint{font:400 10px/1.2 -apple-system,sans-serif;color:var(--muted);text-align:center;margin:3px 0 1px;letter-spacing:.02em}\n\n/\* compact status screen *\/\n.status-grid{display:flex;flex-direction:column;gap:5px;margin:3px 0 6px}\n.status-item{display:flex;align-items:center;justify-content:space-between;padding:6px 9px;border-radius:var(--r);\n  background:var(--paper-2);border:1px solid var(--rule);font-size:11px}\n.status-item .k{color:var(--muted);font-weight:500}\n.status-item .v{color:var(--ink);font-weight:600}\n\n/\* the copy value: a row that is a tap target, the key above the value *\/\n.val{display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;margin:0 0 6px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink);\n  font:400 11.5px/1.35 ui-monospace,Menlo,monospace;text-align:left;cursor:pointer}\n.val .k{flex:0 0 46px;font:600 9px/1.3 -apple-system,sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}\n.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}\n.val.human{font:400 11.5px/1.35 -apple-system,sans-serif}\n.val.human .v{overflow-wrap:break-word}\n.val .copy{flex:0 0 auto;font:600 9px/1 -apple-system,sans-serif;color:var(--muted);letter-spacing:.06em}\n.val[disabled]{opacity:.55;cursor:default}\n.models{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 10px}\n.chip{padding:4px 8px;border-radius:999px;border:1px solid var(--rule-2);background:var(--paper-2);\n  font:500 10px/1 ui-monospace,Menlo,monospace;color:var(--ink-2)}\n\n/\* ---------- the journal: lines with air, a mark on the left ---------- *\/\n.log{font:400 10px/1.4 ui-monospace,Menlo,monospace;color:var(--ink-2);display:flex;flex-direction:column;gap:2px}\n.log .ln{display:flex;gap:7px;padding:5px 0;border-bottom:1px solid var(--rule);word-break:break-word}\n.log .ln:last-child{border-bottom:0}\n.log .ln .g{flex:0 0 auto;width:5px;height:5px;margin-top:4px;border-radius:50%;background:var(--rule-3)}\n.log .ln.ok .g{background:var(--accent)}\n.log .ln.warn,.log .ln.bad{color:var(--muted)}\n.log .ln .t{flex:0 0 auto;color:var(--muted)}\n.log .ln .m{flex:1 1 auto;min-width:0}\n.empty{padding:6px 4px;text-align:center;color:var(--muted);font-size:11.5px;line-height:1.4}\n.spin{width:14px;height:14px;margin:8px auto;border-radius:50%;border:1.5px solid var(--rule-2);border-top-color:var(--ink);animation:sp .7s linear infinite}\n@keyframes sp{to{transform:rotate(360deg)}}\n.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:8px 12px;\n  border-radius:999px;background:var(--paper-3);border:1px solid var(--rule-3);color:var(--ink);\n  font:11.5px/1.3 inherit;text-align:center;opacity:0;pointer-events:none;\n  transition:opacity .2s,transform .2s;z-index:2147483647}\n.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}\n@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}\n";
 
    
    
@@ -4598,134 +4628,84 @@ var __ssW=window,__msePageWindow=window;
     }
 
      
-    function serviceUrl(q, meta) {
-      var params = [
-        'client=' + encodeURIComponent(CONFIG.client),
-        'host=' + encodeURIComponent(meta.host),
-        'courseId=' + encodeURIComponent(meta.courseId),
-        'quizId=' + encodeURIComponent(meta.quizId),
-        'attemptId=' + encodeURIComponent(meta.attemptId),
-        'moodleId=' + encodeURIComponent(meta.moodleId),
-        'questionIdentity=' + encodeURIComponent(q.identity),
-        'questionType=' + encodeURIComponent(q.type)
-      ];
-      if (q.questionId) params.push('questionId=' + encodeURIComponent(q.questionId));
-      return CONFIG.apiBase.replace(/\x2F$/, '') + '/v2/quiz/solution?' + params.join('&');
+    var ANSWER_CACHE_KEY = 'mse.answers.cache';
+    function getAnswerCache(identity) {
+      if (!identity) return null;
+      try {
+        var raw = ls.get(ANSWER_CACHE_KEY, null);
+        if (!raw) return null;
+        var all = JSON.parse(raw);
+        return all && all[identity] ? all[identity] : null;
+      } catch (_) {
+        return null;
+      }
+    }
+    function saveAnswerCache(identity, data) {
+      if (!identity || !data) return;
+      try {
+        var raw = ls.get(ANSWER_CACHE_KEY, null);
+        var all = raw ? JSON.parse(raw) : {};
+        all[identity] = { answer: data.answer, model: data.model || null, ts: Date.now() };
+        var keys = Object.keys(all);
+        if (keys.length > 100) delete all[keys[0]];
+        ls.set(ANSWER_CACHE_KEY, JSON.stringify(all));
+      } catch (_) {}
     }
 
-     
-    var lastSyncRequest = null;
-    function fetchSolution(q, meta) {
-      var started = Date.now();
-      if (meta.missing.length) {
-        var why = missingSentence(meta);
-        logAdd('answers', false, why + ' — request not sent');
-        return Promise.reject(new Error(why));
+    function applyAgentAnswer(rawAns, model, isCached) {
+      var q = state.question;
+      if (!q) return;
+
+      if (!isCached && rawAns) {
+        saveAnswerCache(q.identity, { answer: rawAns, model: model });
       }
-      var url = serviceUrl(q, meta);
-      var params = {};
-      try {
-        new URL(url).searchParams.forEach(function (value, key) { params[key] = value; });
-      } catch (_) {}
-      var record = { questionIdentity: q.identity, request: { method: 'GET', url: url, params: params }, response: null };
-      lastSyncRequest = record;
 
-      var controller = typeof AbortController === 'function' ? new AbortController() : null;
-      var timer = null;
-      var timeoutPromise = new Promise(function (_, reject) {
-        timer = win.setTimeout(function () {
-          if (controller) try { controller.abort(); } catch (_) {}
-          reject(new Error('database timed out'));
-        }, 10000);
-      });
+      state.agent = { state: 'ok', answer: rawAns, model: model };
 
-      var fetchPromise = fetch(url, {
-        method: 'GET',
-        headers: { accept: 'application/json' },
-        signal: controller ? controller.signal : undefined
-      }).then(function (r) {
-        if (timer) { win.clearTimeout(timer); timer = null; }
-        r.clone().text().then(function (raw) {
-          var value; try { value = JSON.parse(raw); } catch (e) { value = raw; }
-          record.response = { status: r.status, json: value };
-          debugTraffic(record);
-        }, function () { record.response = { status: r.status, error: 'unreadable response' }; });
-        var ms = Date.now() - started;
-        if (r.status === 400) {
-          return r.text().then(function (body) {
-            logAdd('answers', false, 'database 400 · check page data', { ms: ms });
-            throw new Error('answer database: 400 — ' + String(body || '').slice(0, 120));
+      var ansParts = [];
+      if (Array.isArray(rawAns)) {
+        ansParts = rawAns.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+      } else if (typeof rawAns === 'string') {
+        if (rawAns.indexOf('|') >= 0) ansParts = rawAns.split('|').map(function (x) { return x.trim(); }).filter(Boolean);
+        else if (rawAns.indexOf('\n') >= 0) ansParts = rawAns.split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+        else ansParts = [rawAns.trim()];
+      }
+      if (ansParts.length === 1 && (q.type === 'multichoiceset' || (q.answers && q.answers.some(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; })))) {
+        var spl = ansParts[0].split(/\s*,\s*|\s*;\s{0,}/).map(function (x) { return x.trim(); }).filter(Boolean);
+        if (spl.length > 1) ansParts = spl;
+      }
+
+      state.agentPicks = ansParts;
+      state.tappedPicks = state.tappedPicks || {};
+
+      var currentRows = (state.rows || []).slice();
+      if (!currentRows.length && q.answers && q.answers.length) {
+        currentRows = q.answers.map(function (answer) { return { label: answer.text, correctness: 0 }; });
+      } else if (!currentRows.length && q.controls && q.controls.some(function (c) { return c.kind === 'select'; })) {
+        q.controls.filter(function (c) { return c.kind === 'select'; }).forEach(function (c, index) {
+          Array.prototype.forEach.call(c.node.options, function (o) {
+            if (o.value && !o.disabled) currentRows.push({ label: o.textContent.trim(), selectIndex: index, correctness: 0 });
+          });
+        });
+      }
+
+      ansParts.forEach(function (part) {
+        var hit = currentRows.find(function (r) { return norm(r.label) === norm(part); });
+        if (!hit) {
+          var pTrim = String(part || '').trim();
+          hit = currentRows.find(function (r, idx) {
+            return (r.letter && r.letter.toLowerCase() === pTrim.toLowerCase()) || String(idx + 1) === pTrim;
           });
         }
-        if (!r.ok) {
-          logAdd('answers', false, 'answer database: ' + r.status, { ms: ms });
-          throw new Error('answer database: ' + r.status);
+        if (hit) {
+          hit.agent = true;
+          hit.agentPick = true;
+        } else {
+          currentRows.unshift({ label: part, correctness: 0, count: 0, agent: true, agentPick: true });
         }
-        return r.json().then(function (json) {
-          logAdd('answers', true, 'answer database: ' + (Array.isArray(json) ? json.length : 0) + ' records', { ms: ms });
-          return json;
-        });
-      }, function (e) {
-        if (timer) { win.clearTimeout(timer); timer = null; }
-        var isTimeout = e && (e.name === 'AbortError' || e.message === 'database timed out');
-        var errText = isTimeout ? 'database timed out' : 'no connection to the answer database';
-        record.response = { error: isTimeout ? 'timeout' : ((e && e.name) || 'network') };
-        debugTraffic(record);
-        logAdd('answers', false, isTimeout ? 'database timed out' : ('database offline: ' + ((e && e.message) || 'network')), { ms: Date.now() - started });
-        throw new Error(errText);
       });
-
-      return Promise.race([fetchPromise, timeoutPromise]).catch(function (e) {
-        if (timer) { win.clearTimeout(timer); timer = null; }
-        var isTimeout = e && (e.name === 'AbortError' || e.message === 'database timed out');
-        if (isTimeout) throw new Error('database timed out');
-        throw e;
-      });
-    }
-    function nameOfParam(k) {
-      return {
-        courseId: 'course',
-        quizId: 'quiz',
-        attemptId: 'attempt',
-        moodleId: 'user id'
-      }[k] || k;
-    }
-     
-    function missingSentence(meta) {
-      var names = meta.missing.map(nameOfParam).join(', ');
-      return 'page data missing: ' + names;
-    }
-
-     
-    function toRows(json) {
-      var rows = [];
-      var groups = Array.isArray(json) ? json : [json];
-      groups.forEach(function (g) {
-        if (!g || typeof g !== 'object') return;
-        var pool = (g.suggestions || []).concat(g.submissions || []);
-        pool.forEach(function (s) {
-          if (!s || s.label == null) return;
-          var label = String(s.label).trim();
-          if (!label) return;
-          var hit = rows.filter(function (r) { return r.label.toLowerCase() === label.toLowerCase(); })[0];
-          var correctness = typeof s.correctness === 'number' ? s.correctness : 0;
-          var count = typeof s.count === 'number' ? s.count : 0;
-          var confidence = typeof s.confidence === 'number' ? s.confidence : null;
-          if (!hit) rows.push({ label: label, correctness: correctness, count: count, confidence: confidence });
-          else {
-            hit.count = Math.max(hit.count, count);
-            hit.correctness = Math.max(hit.correctness, correctness);
-            if (confidence != null) hit.confidence = Math.max(hit.confidence || 0, confidence);
-          }
-        });
-      });
-      var total = rows.reduce(function (a, r) { return a + (r.count || 0); }, 0);
-      rows.forEach(function (r) { r.share = total ? Math.round(((r.count || 0) / total) * 100) : null; });
-      rows.sort(function (a, b) {
-        if (b.correctness !== a.correctness) return b.correctness - a.correctness;
-        return (b.count || 0) - (a.count || 0);
-      });
-      return rows.filter(function (r) { return r.correctness > -1; });
+      state.rows = currentRows;
+      setBadge(ansParts.length || 1);
     }
 
      
@@ -5392,25 +5372,10 @@ var __ssW=window,__msePageWindow=window;
         if (aiAllowed()) appendAi(q);
         return;
       }
-      if (state.loading) {
-        body.appendChild(N(el('div', 'spin')));
-        body.appendChild(N(el('div', 'empty', 'asking the database…')));
-        return;
-      }
       if (state.error) {
         body.appendChild(N(el('div', 'empty', state.error)));
-        var missingId = state.meta && state.meta.missing && state.meta.missing.indexOf('moodleId') >= 0;
-        var again = press(el('button', 'btn', missingId ? 'take the id from /my/' : 'retry'), function () {
-          if (missingId) {
-            learnFromCabinet().then(function (r) {
-              if (r.ok) { toast('ID: ' + r.id); }
-              else toast(r.message);
-              state.error = null;
-              cabinetTried = false;
-              load();
-            });
-            return;
-          }
+        var again = press(el('button', 'btn', 'retry'), function () {
+          state.error = null;
           load();
         });
         body.appendChild(N(again, 1));
@@ -5465,6 +5430,7 @@ var __ssW=window,__msePageWindow=window;
                 } else {
                   setBadge(0);
                 }
+                closePop();
               } else {
                 state.error = 'not in the form';
                 render();
@@ -5715,49 +5681,12 @@ var __ssW=window,__msePageWindow=window;
             state.gatewayModel = res.model.trim();
             ls.set('mse.gateway.lastModel', res.model.trim());
           }
-          state.agent = { state: 'ok', answer: res.answer };
-
-          var rawAns = res.answer;
-          var ansParts = [];
-          if (Array.isArray(rawAns)) {
-            ansParts = rawAns.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
-          } else if (typeof rawAns === 'string') {
-            if (rawAns.indexOf('|') >= 0) ansParts = rawAns.split('|').map(function (x) { return x.trim(); }).filter(Boolean);
-            else if (rawAns.indexOf('\n') >= 0) ansParts = rawAns.split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
-            else ansParts = [rawAns.trim()];
-          }
-          if (ansParts.length === 1 && (q.type === 'multichoiceset' || (q.answers && q.answers.some(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; })))) {
-            var spl = ansParts[0].split(/\s*,\s*|\s*;\s{0,}/).map(function (x) { return x.trim(); }).filter(Boolean);
-            if (spl.length > 1) ansParts = spl;
-          }
-
-          state.agentPicks = ansParts;
-          state.tappedPicks = state.tappedPicks || {};
-
-          var currentRows = (state.rows || []).slice();
-          if (!currentRows.length && q.answers && q.answers.length) {
-            currentRows = q.answers.map(function (answer) { return { label: answer.text, correctness: 0 }; });
-          }
-
-          ansParts.forEach(function (part) {
-            var hit = currentRows.find(function (r) { return norm(r.label) === norm(part); });
-            if (!hit) {
-              var pTrim = String(part || '').trim();
-              hit = currentRows.find(function (r, idx) {
-                return (r.letter && r.letter.toLowerCase() === pTrim.toLowerCase()) || String(idx + 1) === pTrim;
-              });
-            }
-            if (hit) {
-              hit.agent = true;
-              hit.agentPick = true;
-            } else {
-              currentRows.unshift({ label: part, correctness: 0, count: 0, agent: true, agentPick: true });
-            }
-          });
-          state.rows = currentRows;
+          applyAgentAnswer(res.answer, res.model, false);
           render();
+          debugTraffic({ event: 'agent_response', ok: true, answer: res.answer, model: res.model });
           return;
         }
+        debugTraffic({ event: 'agent_response', ok: false, status: res.status, code: res.code, message: res.message });
         var is429 = res.code === 'rate_limited' || res.status === 429;
         if (is429) {
           logAdd('agent', false, 'HTTP 429: rate limit hit · something went wrong', { ms: ms });
@@ -5838,43 +5767,44 @@ var __ssW=window,__msePageWindow=window;
     function load() {
       var q = state.question;
       if (!q) { render(); return; }
-      state.loading = true;
+      state.loading = false;
       state.ai = null;
-      state.agent = null;
-      render();
-       
-      var tier = refreshTier();
-      if (!q.supported) {
-         
-        state.loading = false;
-        state.rows = [];
-        state.error = null;
-        tier.then(function () { render(); });
-        return;
+      state.error = null;
+
+      var initialRows = [];
+      if (q.answers && q.answers.length) {
+        initialRows = q.answers.map(function (answer) { return { label: answer.text, correctness: 0 }; });
+      } else if (q.controls && q.controls.some(function (c) { return c.kind === 'select'; })) {
+        q.controls.filter(function (c) { return c.kind === 'select'; }).forEach(function (c, index) {
+          Array.prototype.forEach.call(c.node.options, function (o) {
+            if (o.value && !o.disabled) initialRows.push({ label: o.textContent.trim(), selectIndex: index, correctness: 0 });
+          });
+        });
       }
-       
-      var ready = state.meta && state.meta.moodleId ? Promise.resolve(state.meta) : withIdentity();
-      ready.then(function (meta) {
-        state.meta = meta;
-        return fetchSolution(q, meta);
-      }).then(function (json) {
-        state.rows = toRows(json);
-        state.loading = false;
-        state.error = null;
-        setBadge(state.rows.length);
-        return tier.then(function () {
-           
-          if (!state.rows.length && aiAllowed() && (!state.agent || state.agent.state === 'idle')) runAgent(true);
+      state.rows = initialRows;
+
+      var cached = getAnswerCache(q.identity);
+      if (cached && cached.answer) {
+        applyAgentAnswer(cached.answer, cached.model, true);
+      } else {
+        state.agent = null;
+      }
+      render();
+
+      var startAgentIfActive = function () {
+        if (aiAllowed() && (!state.agent || state.agent.state !== 'ok')) {
+          runAgent(true);
+        }
+      };
+
+      if (aiAllowed()) {
+        startAgentIfActive();
+      } else {
+        refreshTier().then(function () {
+          startAgentIfActive();
           render();
         });
-      }, function (e) {
-        state.loading = false;
-        state.error = e.message;
-        return tier.then(function () {
-          if (aiAllowed() && (!state.agent || state.agent.state === 'idle')) runAgent(true);
-          render();
-        });
-      });
+      }
     }
 
      
@@ -6320,23 +6250,66 @@ var __ssW=window,__msePageWindow=window;
         question: q ? { html: block.outerHTML, text: q.text, type: q.type, identity: q.identity,
           identityCalculation: questionIdentity.toString(), images: images, backgrounds: backgrounds, inputs: inputs } : null,
         protocol: protocolView,
-        requests: { syncshare: lastSyncRequest, agent: win.MSEBridge && win.MSEBridge.snifAgent ? win.MSEBridge.snifAgent() : null }
+        requests: { agent: win.MSEBridge && win.MSEBridge.snifAgent ? win.MSEBridge.snifAgent() : null },
+        agentResult: state.agent || null
       };
     }
+    var pendingDebugEvent = null;
     function debugTraffic(event) {
       if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
       var allQues = readQuestions();
       if (!allQues.length && (!event || !event.force)) return;
-      var dump = snifDump(); dump.traffic = event;
+      if (state.agent && state.agent.state === 'running' && event && event.event !== 'agent_response') {
+        pendingDebugEvent = event;
+        return;
+      }
+      var dump = snifDump();
+      dump.traffic = event;
+      if (pendingDebugEvent) {
+        dump.previousTraffic = pendingDebugEvent;
+        pendingDebugEvent = null;
+      }
       win.MSEBridge.sendDump('debug', dump);
     }
     function reportCurrent(button) {
-      if (!win.MSEBridge) { button.textContent = 'gateway offline'; return; }
-      button.disabled = true; button.textContent = 'sending…';
-      var dump = snifDump(); dump.error = state.error || (state.agent && state.agent.text) || null;
-      win.MSEBridge.sendDump('report', dump).then(function (result) {
-        button.disabled = false; button.textContent = result.ok ? 'sent' : (result.message || 'failed');
-      });
+      if (!win.MSEBridge || !win.MSEBridge.url()) {
+        button.disabled = false;
+        button.textContent = 'gateway offline';
+        win.setTimeout(function () { try { button.textContent = 'Report'; } catch (_) {} }, 3000);
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'sending…';
+      var dump = snifDump();
+      dump.error = state.error || (state.agent && state.agent.text) || null;
+
+      var doneCalled = false;
+      function done(ok, msg) {
+        if (doneCalled) return;
+        doneCalled = true;
+        button.disabled = false;
+        button.textContent = ok ? 'sent' : (msg || 'report failed');
+        win.setTimeout(function () {
+          try { button.textContent = 'Report'; } catch (_) {}
+        }, 3000);
+      }
+
+      var timer = win.setTimeout(function () {
+        done(false, 'report failed');
+      }, 15000);
+
+      try {
+        win.MSEBridge.sendDump('report', dump).then(function (result) {
+          win.clearTimeout(timer);
+          done(result && result.ok, result && result.message);
+        }, function () {
+          win.clearTimeout(timer);
+          done(false, 'report failed');
+        });
+      } catch (_) {
+        win.clearTimeout(timer);
+        done(false, 'report failed');
+      }
     }
     var snifText = '';
     function viewSnif() {
@@ -6365,9 +6338,8 @@ var __ssW=window,__msePageWindow=window;
       var sub = null;
       var title = CONFIG.brand;
       var leading = 'info';
-      if (state.route === 'answers' && state.question) {
-        var qid = state.question.questionId;
-        sub = qid ? ('question #' + qid) : 'question';
+      if (state.route === 'answers') {
+        sub = null;
       } else if (state.route === 'account') { sub = 'account'; }
       else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
       else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
