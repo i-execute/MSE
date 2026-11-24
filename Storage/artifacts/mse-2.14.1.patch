@@ -1,5 +1,18 @@
+diff --git a/Extensions/src/debug.js b/Extensions/src/debug.js
+index 809f6c8..edda644 100644
+--- a/Extensions/src/debug.js
++++ b/Extensions/src/debug.js
+@@ -256,7 +256,7 @@
+         var s = String(v);
+         if (!s || s.length > 160) return;
+         var isId = ID_KEYS.test(k);
+-        var isName = NAME_KEYS.test(k) || (typeof v === 'string' && /[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+/.test(s) && /name/i.test(k));
++        var isName = NAME_KEYS.test(k) || (typeof v === 'string' && /[\u0410-\u044f\u0401\u0451]{2,}\s+[\u0410-\u044f\u0401\u0451]{2,}/.test(s) && /name/i.test(k));
+         if (isId || isName) out.push({ where: p, key: k, value: s, kind: isId ? 'id' : 'name' });
+       });
+       return out;
 diff --git a/Extensions/src/mse-bridge.js b/Extensions/src/mse-bridge.js
-index f15bc4e..ec51da7 100644
+index f15bc4e..d547dea 100644
 --- a/Extensions/src/mse-bridge.js
 +++ b/Extensions/src/mse-bridge.js
 @@ -32,7 +32,8 @@
@@ -7,12 +20,12 @@ index f15bc4e..ec51da7 100644
      keyMirrorKey: 'mse:local:gatewayKey',
      metaKey: 'mse.gateway.meta',
 -    timeoutMs: 8000
-+    timeoutMs: 8000,
++    timeoutMs: 30000,
 +    agentTimeoutMs: 120000
    }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
  
    /* every place the address can hide: the site localStorage, the Stay storage (`ss:L:` area, the same keys the
-@@ -200,6 +201,54 @@
+@@ -200,22 +201,365 @@
      return 'mse_' + s;
    }
  
@@ -64,10 +77,258 @@ index f15bc4e..ec51da7 100644
 +    return result;
 +  }
 +
++  function getGmXhr() {
++    try {
++      if (typeof GM_xmlhttpRequest === 'function') return GM_xmlhttpRequest;
++    } catch (_) {}
++    try {
++      if (typeof window !== 'undefined' && typeof window.GM_xmlhttpRequest === 'function') return window.GM_xmlhttpRequest;
++    } catch (_) {}
++    try {
++      if (typeof globalThis !== 'undefined' && typeof globalThis.GM_xmlhttpRequest === 'function') return globalThis.GM_xmlhttpRequest;
++    } catch (_) {}
++    try {
++      if (typeof GM !== 'undefined' && GM && typeof GM.xmlHttpRequest === 'function') {
++        return function (opts) { return GM.xmlHttpRequest(opts); };
++      }
++    } catch (_) {}
++    try {
++      if (typeof window !== 'undefined' && window.GM && typeof window.GM.xmlHttpRequest === 'function') {
++        return function (opts) { return window.GM.xmlHttpRequest(opts); };
++      }
++    } catch (_) {}
++    try {
++      if (typeof __mseGm !== 'undefined' && __mseGm && typeof __mseGm.xhr === 'function') return __mseGm.xhr;
++    } catch (_) {}
++    try {
++      if (typeof window !== 'undefined' && window.__mseGm && typeof window.__mseGm.xhr === 'function') return window.__mseGm.xhr;
++    } catch (_) {}
++    try {
++      if (typeof globalThis !== 'undefined' && globalThis.__mseGm && typeof globalThis.__mseGm.xhr === 'function') return globalThis.__mseGm.xhr;
++    } catch (_) {}
++    return null;
++  }
++
++  function gmFetch(url, opts) {
++    var gm = getGmXhr();
++    if (!gm) return Promise.reject(new Error('GM_xmlhttpRequest not available'));
++
++    return new Promise(function (resolve, reject) {
++      var options = opts || {};
++      var method = (options.method || 'GET').toUpperCase();
++      var timeout = options.timeout || (/agent|\/chat\/completions/i.test(url) ? (CONFIG.agentTimeoutMs || 120000) : (CONFIG.timeoutMs || 30000));
++      var signal = options.signal;
++      var completed = false;
++      var abortHandler = null;
++
++      if (signal && signal.aborted) {
++        var ab = new Error('The operation was aborted');
++        ab.name = 'AbortError';
++        ab.transport = 'gm';
++        return reject(ab);
++      }
++
++      var reqHeaders = {};
++      if (options.headers) {
++        if (typeof options.headers.forEach === 'function') {
++          options.headers.forEach(function (v, k) { reqHeaders[k] = v; });
++        } else {
++          for (var hk in options.headers) {
++            if (Object.prototype.hasOwnProperty.call(options.headers, hk)) {
++              reqHeaders[hk] = options.headers[hk];
++            }
++          }
++        }
++      }
++
++      function cleanup() {
++        if (signal && abortHandler && signal.removeEventListener) {
++          try { signal.removeEventListener('abort', abortHandler); } catch (_) {}
++        }
++      }
++
++      var gmDetails = {
++        method: method,
++        url: String(url),
++        headers: reqHeaders,
++        data: options.body || null,
++        timeout: timeout,
++        onload: function (resp) {
++          if (completed) return;
++          completed = true;
++          cleanup();
++          var rawHeaders = resp.responseHeaders || '';
++          var parsedHeaders = {};
++          if (rawHeaders) {
++            var lines = String(rawHeaders).split(/\r?\n/);
++            for (var i = 0; i < lines.length; i++) {
++              var idx = lines[i].indexOf(':');
++              if (idx > 0) {
++                var k = lines[i].slice(0, idx).trim().toLowerCase();
++                var v = lines[i].slice(idx + 1).trim();
++                parsedHeaders[k] = v;
++              }
++            }
++          }
++          var headersObj = {
++            get: function (name) {
++              if (!name) return null;
++              var key = String(name).toLowerCase();
++              return Object.prototype.hasOwnProperty.call(parsedHeaders, key) ? parsedHeaders[key] : null;
++            },
++            has: function (name) {
++              if (!name) return false;
++              return Object.prototype.hasOwnProperty.call(parsedHeaders, String(name).toLowerCase());
++            }
++          };
++          var status = Number(resp.status) || 200;
++          var resObj = {
++            ok: status >= 200 && status < 300,
++            status: status,
++            statusText: resp.statusText || (status >= 200 && status < 300 ? 'OK' : 'Error'),
++            headers: headersObj,
++            transport: 'gm',
++            url: resp.finalUrl || String(url),
++            text: function () {
++              return Promise.resolve(String(resp.responseText != null ? resp.responseText : ''));
++            },
++            json: function () {
++              try {
++                return Promise.resolve(JSON.parse(resp.responseText || 'null'));
++              } catch (e) {
++                return Promise.reject(e);
++              }
++            },
++            clone: function () {
++              return this;
++            }
++          };
++          resolve(resObj);
++        },
++        onerror: function (errResp) {
++          if (completed) return;
++          completed = true;
++          cleanup();
++          var netErr = new TypeError('Load failed');
++          netErr.transport = 'gm';
++          netErr.status = (errResp && errResp.status) || 0;
++          netErr.details = (errResp && (errResp.error || errResp.responseText)) || 'GM_xmlhttpRequest failed';
++          reject(netErr);
++        },
++        ontimeout: function () {
++          if (completed) return;
++          completed = true;
++          cleanup();
++          var timeErr = new Error('The operation timed out');
++          timeErr.name = 'TimeoutError';
++          timeErr.transport = 'gm';
++          reject(timeErr);
++        },
++        onabort: function () {
++          if (completed) return;
++          completed = true;
++          cleanup();
++          var abErr = new Error('The operation was aborted');
++          abErr.name = 'AbortError';
++          abErr.transport = 'gm';
++          reject(abErr);
++        }
++      };
++
++      var reqHandle = null;
++      try {
++        reqHandle = gm(gmDetails);
++      } catch (callErr) {
++        completed = true;
++        cleanup();
++        return reject(callErr);
++      }
++
++      if (signal && signal.addEventListener) {
++        abortHandler = function () {
++          if (completed) return;
++          completed = true;
++          cleanup();
++          if (reqHandle && typeof reqHandle.abort === 'function') {
++            try { reqHandle.abort(); } catch (_) {}
++          }
++          var abErr = new Error('The operation was aborted');
++          abErr.name = 'AbortError';
++          abErr.transport = 'gm';
++          reject(abErr);
++        };
++        signal.addEventListener('abort', abortHandler);
++      }
++    });
++  }
++
++  var lastTransport = 'none';
++
    function tracedFetch(url, options) {
      var opts = options || {};
-     var request = {method: opts.method || 'GET', url: String(url), body: opts.body || null};
-@@ -216,6 +265,72 @@
+-    var request = {method: opts.method || 'GET', url: String(url), body: opts.body || null};
+-    return window.fetch(url, opts).then(function (response) {
++    var request = { method: opts.method || 'GET', url: String(url), body: opts.body || null };
++    var gm = getGmXhr();
++    var fetchPromise;
++    var currentTransport = 'fetch';
++
++    if (gm) {
++      currentTransport = 'gm';
++      lastTransport = 'gm';
++      try {
++        fetchPromise = gmFetch(url, opts);
++      } catch (err) {
++        if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
++          currentTransport = 'fetch';
++          lastTransport = 'fetch';
++          fetchPromise = window.fetch(url, opts);
++        } else {
++          return Promise.reject(err);
++        }
++      }
++    } else if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
++      currentTransport = 'fetch';
++      lastTransport = 'fetch';
++      fetchPromise = window.fetch(url, opts);
++    } else {
++      return Promise.reject(new Error('No HTTP transport available (neither GM_xmlhttpRequest nor fetch)'));
++    }
++
++    return fetchPromise.then(function (response) {
++      if (response && !response.transport) {
++        response.transport = currentTransport;
++      }
+       if (window.__mse && window.__mse.onDebugTraffic && window.MSEBridge && window.MSEBridge.debugEnabled()) {
+-        response.clone().text().then(function (raw) {
+-          var parsed; try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
+-          window.__mse.onDebugTraffic({request:request, response:{status:response.status, body:parsed}});
+-        }, function () {});
++        try {
++          var cloneP = (response && response.clone) ? response.clone() : response;
++          cloneP.text().then(function (raw) {
++            var parsed; try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
++            window.__mse.onDebugTraffic({
++              request: request,
++              transport: currentTransport,
++              response: { status: response.status, body: parsed }
++            });
++          }, function () {});
++        } catch (_) {}
+       }
+       return response;
+     }, function (error) {
+-      if (window.__mse && window.__mse.onDebugTraffic && window.MSEBridge && window.MSEBridge.debugEnabled()) window.__mse.onDebugTraffic({request:request, error:String(error && error.message || 'network')});
++      if (window.__mse && window.__mse.onDebugTraffic && window.MSEBridge && window.MSEBridge.debugEnabled()) {
++        window.__mse.onDebugTraffic({
++          request: request,
++          transport: currentTransport,
++          error: String(error && error.message || 'network')
++        });
++      }
++      if (error && !error.transport) {
++        error.transport = currentTransport;
++      }
        throw error;
      });
    }
@@ -98,7 +359,8 @@ index f15bc4e..ec51da7 100644
 +              url: String(url),
 +              attempt: 1,
 +              delay: 500,
-+              diag: 'gateway unreachable from this network (VPN or DNS/TLS drop), retrying...'
++              transport: lastTransport,
++              diag: 'gateway unreachable, retrying once...'
 +            });
 +          }
 +          return new Promise(function (resolve) {
@@ -110,27 +372,23 @@ index f15bc4e..ec51da7 100644
 +              return res2;
 +            }, function (err2) {
 +              gatewayInFlight--;
-+              if (isLoadFailed(err2)) {
-+                var wrapped = new TypeError('gateway unreachable from this network');
-+                wrapped.originalError = err2;
-+                wrapped.attempt = 2;
-+                wrapped.url = String(url);
-+                wrapped.diagnostic = 'gateway unreachable from this network (VPN or network drop): URL=' + url + ', attempt=2, DNS/TCP/TLS connection blocked by network or VPN';
-+                throw wrapped;
-+              }
-+              throw err2;
++              var wrapped = new TypeError('gateway unreachable');
++              wrapped.originalError = err2;
++              wrapped.attempt = 2;
++              wrapped.url = String(url);
++              wrapped.transport = (err2 && err2.transport) || lastTransport;
++              wrapped.diagnostic = 'gateway unreachable: URL=' + url + ', attempt=2, transport=' + wrapped.transport;
++              throw wrapped;
 +            });
 +          });
 +        }
-+        if (isLoadFailed(err)) {
-+          var wrapped2 = new TypeError('gateway unreachable from this network');
-+          wrapped2.originalError = err;
-+          wrapped2.attempt = attempt + 1;
-+          wrapped2.url = String(url);
-+          wrapped2.diagnostic = 'gateway unreachable from this network (VPN or network drop): URL=' + url + ', attempt=' + (attempt + 1);
-+          throw wrapped2;
-+        }
-+        throw err;
++        var wrapped2 = new TypeError('gateway unreachable');
++        wrapped2.originalError = err;
++        wrapped2.attempt = attempt + 1;
++        wrapped2.url = String(url);
++        wrapped2.transport = (err && err.transport) || lastTransport;
++        wrapped2.diagnostic = 'gateway unreachable: URL=' + url + ', attempt=' + (attempt + 1) + ', transport=' + wrapped2.transport;
++        throw wrapped2;
 +      });
 +    };
 +    var next = gatewayQueue.then(run, run);
@@ -140,7 +398,7 @@ index f15bc4e..ec51da7 100644
    function redactDump(value, key, depth, secrets) {
      if (depth > 30) return '[depth limit]';
      if (typeof value === 'string') {
-@@ -241,6 +356,8 @@
+@@ -241,6 +585,8 @@
    }
    var lastAgentRequest = null;
    var MSEBridge = {
@@ -149,14 +407,27 @@ index f15bc4e..ec51da7 100644
      /* ---------------- the address ---------------- */
      url: function () {
        var fromLs = lsGet(CONFIG.urlKey) || lsGet(CONFIG.urlMirrorKey);
-@@ -319,14 +436,14 @@
+@@ -318,15 +664,25 @@
+       if (!url) return Promise.reject(new Error('address is not set'));
        var started = Date.now();
        var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-       var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
+-      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
 -      return tracedFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
-+      return gatewayFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
++      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs || 30000);
++      return gatewayFetch(url + '/health', {
++        method: 'GET',
++        cache: 'no-store',
++        headers: { accept: 'application/json' },
++        signal: ctrl ? ctrl.signal : undefined,
++        timeout: CONFIG.timeoutMs || 30000
++      })
          .then(function (r) {
-           return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });
+-          return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });
++          return r.json().then(function (j) {
++            return { ok: r.ok, status: r.status, json: j, transport: r.transport || lastTransport };
++          }, function () {
++            return { ok: r.ok, status: r.status, json: null, transport: r.transport || lastTransport };
++          });
          })
          .then(function (res) {
            clearTimeout(timer);
@@ -166,7 +437,7 @@ index f15bc4e..ec51da7 100644
            return {
              ok: !!res.ok && mine,
              reachable: true,
-@@ -334,7 +451,7 @@
+@@ -334,16 +690,31 @@
              status: res.status,
              ms: Date.now() - started,
              version: j.version || null,
@@ -174,14 +445,18 @@ index f15bc4e..ec51da7 100644
 +            model: (j && (j.model || (Array.isArray(j.models) && j.models[0]))) || null,
              quota: j.quota || null,
              upstream: j.upstream || null,
++            transport: res.transport || lastTransport,
              message: !res.ok ? 'the address answered ' + res.status
-@@ -343,7 +460,19 @@
+-              :!mine ? 'something answers at this address, but it is not an MSE gateway'
++              : !mine ? 'something answers at this address, but it is not an MSE gateway'
+               : 'AI gateway is up'
            };
          }, function (e) {
            clearTimeout(timer);
 -          return { ok: false, reachable: false, mine: false, ms: Date.now() - started, message: 'address offline: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network') };
 +          var isNet = isLoadFailed(e);
-+          var msg = isNet ? 'gateway unreachable from this network' : ('address offline: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network'));
++          var tr = (e && e.transport) || lastTransport;
++          var msg = isNet ? 'gateway unreachable' : ('address offline: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network'));
 +          return {
 +            ok: false,
 +            reachable: false,
@@ -190,13 +465,14 @@ index f15bc4e..ec51da7 100644
 +            message: msg,
 +            netError: isNet,
 +            url: url,
-+            attempt: e && e.attempt || 1,
-+            diag: isNet ? ('URL: ' + url + ' · attempt #' + (e && e.attempt || 1) + ' · problem with network or VPN (DNS/TCP/TLS drop)') : (e && e.message)
++            transport: tr,
++            attempt: (e && e.attempt) || 1,
++            diag: 'transport: ' + tr + ' · attempt #' + ((e && e.attempt) || 1) + ' · URL: ' + url + ' · ' + ((e && e.message) || 'network error')
 +          };
          });
      },
  
-@@ -357,6 +486,12 @@
+@@ -357,6 +728,12 @@
        return k;
      },
      ensureKey: function () { return this.key(); },
@@ -209,7 +485,7 @@ index f15bc4e..ec51da7 100644
      maskedKey: function () {
        var k = this.key();
        return k ? k.slice(0, 8) + '…' + k.slice(-4) : null;
-@@ -383,7 +518,7 @@
+@@ -383,7 +760,7 @@
        identity = identity || {};
        var body = { key: key, moodleId: String(identity.id || ''), name: String(identity.name || ''), site: String(identity.site || ''), deviceName: String((window.navigator && window.navigator.userAgent) || '').slice(0, 120) };
        if (!body.moodleId) return Promise.reject(new Error('user ID missing · open profile'));
@@ -218,7 +494,7 @@ index f15bc4e..ec51da7 100644
          method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key }, body: JSON.stringify(body)
        }).then(function (r) {
          return r.json().then(function (j) {
-@@ -412,42 +547,88 @@
+@@ -412,42 +789,91 @@
      },
  
      /* ---------------- is this key live? ---------------- */
@@ -267,6 +543,7 @@ index f15bc4e..ec51da7 100644
 +              resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta, ms: ms, model: model };
              }
 -            return { state: 'active', message: 'key accepted', device: d, meta: meta };
++            resObj.transport = r.transport || lastTransport;
 +            try {
 +              lsSet('mse.cache.gw_check', JSON.stringify({ key: key, check: resObj, t: Date.now() }));
 +            } catch (_) {}
@@ -276,15 +553,17 @@ index f15bc4e..ec51da7 100644
 -          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };
 +          var ms = Date.now() - started;
 +          var isNet = isLoadFailed(e);
-+          var msg = isNet ? 'gateway unreachable from this network' : ('the gateway does not answer: ' + (e && e.message ? e.message : 'network'));
++          var tr = (e && e.transport) || lastTransport;
++          var msg = isNet ? 'gateway unreachable' : ('the gateway does not answer: ' + (e && e.message ? e.message : 'network'));
 +          return {
 +            state: 'unreachable',
 +            message: msg,
 +            ms: ms,
 +            netError: isNet,
 +            url: url,
-+            attempt: e && e.attempt || 1,
-+            diag: isNet ? ('URL: ' + url + ' · attempt #' + (e && e.attempt || 1) + ' · problem with network or VPN (DNS/TCP/TLS drop)') : (e && e.message)
++            transport: tr,
++            attempt: (e && e.attempt) || 1,
++            diag: 'transport: ' + tr + ' · attempt #' + ((e && e.attempt) || 1) + ' · URL: ' + url + ' · ' + ((e && e.message) || 'network error')
 +          };
          });
      },
@@ -327,7 +606,7 @@ index f15bc4e..ec51da7 100644
      },
  
      /* ---------------- the agent: the question goes out, the chosen answer comes back ---------------- */
-@@ -465,15 +646,19 @@
+@@ -465,23 +891,33 @@
          selects: Array.isArray(payload.selects) ? payload.selects : [],
          textCount: Number(payload.textCount) || 0,
          image: payload.image || null,
@@ -344,14 +623,21 @@ index f15bc4e..ec51da7 100644
 -      return tracedFetch(url + '/mse/v1/agent', {
 +      var reqHeaders = { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() };
 +      if (payload.moodleId) reqHeaders['x-moodle-id'] = String(payload.moodleId);
++      var sig = payload.signal || (ctrl ? ctrl.signal : undefined);
++      if (payload.signal && payload.signal.addEventListener && ctrl) {
++        payload.signal.addEventListener('abort', function () { ctrl.abort(); });
++      }
 +      return gatewayFetch(url + '/mse/v1/agent', {
          method: 'POST',
 -        headers: { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() },
 +        headers: reqHeaders,
          body: JSON.stringify(body),
-         signal: ctrl ? ctrl.signal : undefined
+-        signal: ctrl ? ctrl.signal : undefined
++        signal: sig,
++        timeout: timeoutMs
        }).then(function (r) {
-@@ -482,6 +667,7 @@
+         if (/text\/event-stream/i.test(String(r.headers.get('content-type') || '')) && r.body && r.body.getReader) {
+           var reader = r.body.getReader(), decoder = new TextDecoder(), pending = '', result = null;
            function handle(block) {
              var name = '', data = [];
              block.split(/\r?\n/).forEach(function (line) {
@@ -359,7 +645,33 @@ index f15bc4e..ec51da7 100644
                if (line.indexOf('event:') === 0) name = line.slice(6).trim();
                if (line.indexOf('data:') === 0) data.push(line.slice(5).trim());
              });
-@@ -522,7 +708,7 @@
+@@ -503,7 +939,24 @@
+         }
+         return r.text().then(function (raw) {
+           var j = null;
+-          try { j = JSON.parse(raw); } catch (e) {}
++          if (/text\/event-stream/i.test(String(r.headers.get('content-type') || '')) || /^(event|data):/m.test(raw)) {
++            var result = null;
++            raw.split(/\r?\n\r?\n/).forEach(function (block) {
++              var name = '', data = [];
++              block.split(/\r?\n/).forEach(function (line) {
++                if (line.indexOf(':') === 0) return;
++                if (line.indexOf('event:') === 0) name = line.slice(6).trim();
++                if (line.indexOf('data:') === 0) data.push(line.slice(5).trim());
++              });
++              var value; try { value = JSON.parse(data.join('\n')); } catch (_) { return; }
++              if (name === 'stage' && typeof onStage === 'function') onStage(value.stage);
++              if (name === 'result') result = value;
++            });
++            if (result) j = result;
++          }
++          if (!j) {
++            try { j = JSON.parse(raw); } catch (e) {}
++          }
+           record.response = { status: r.status, json: j, body: j === null ? raw : undefined };
+           return { status: r.status, j: j, retryAfter: Number(r.headers.get('retry-after') || 0) };
+         });
+@@ -522,7 +975,7 @@
        }, function (e) {
          clearTimeout(timer);
          record.response = { error: (e && e.name) || 'network' };
@@ -368,7 +680,7 @@ index f15bc4e..ec51da7 100644
        });
      },
      debugEnabled: function () { return lsGet('mse.debug.enabled') === '1'; },
-@@ -540,7 +726,7 @@
+@@ -540,7 +993,7 @@
        var safe = redactDump(dump, key, 0, secrets);
        var json = JSON.stringify(safe);
        if (json.length > 2000000) safe = {clientTruncated:true, preview:json.slice(0,160000)};
@@ -377,7 +689,7 @@ index f15bc4e..ec51da7 100644
          method:'POST', headers:{'content-type':'application/json', authorization:'Bearer '+key},
          body:JSON.stringify({type:type, dump:safe})
        }).then(function (r) { return r.json().then(function (j) {
-@@ -556,7 +742,7 @@
+@@ -556,37 +1009,53 @@
        if (!url) return Promise.reject(new Error('gateway address is not set'));
        /* no model name here: the router decides which model the backend serves, the client never names one */
        var body = { stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
@@ -385,8 +697,76 @@ index f15bc4e..ec51da7 100644
 +      return gatewayFetch(url + '/v1/chat/completions', {
          method: 'POST',
          headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
-         body: JSON.stringify(body)
-@@ -608,7 +794,8 @@
+-        body: JSON.stringify(body)
++        body: JSON.stringify(body),
++        timeout: CONFIG.agentTimeoutMs || 120000
+       }).then(function (r) {
+         if (!r.ok) return r.json().then(function (j) { throw new Error((j && j.error && j.error.message) || ('the gateway answered ' + r.status)); });
+         if (!onChunk) return r.json();
+         /* SSE: one line at a time, the delta of each chunk goes to the caller */
+-        var reader = r.body.getReader();
+-        var dec = new TextDecoder();
+-        var buf = '';
+-        function pump() {
+-          return reader.read().then(function (step) {
+-            if (step.done) return true;
+-            buf += dec.decode(step.value, { stream: true });
+-            var lines = buf.split('\n');
+-            buf = lines.pop();
+-            lines.forEach(function (line) {
+-              var m = /^data: (.*)$/.exec(line.trim());
+-              if (!m) return;
+-              if (m[1] === '[DONE]') return;
+-              try {
+-                var j = JSON.parse(m[1]);
+-                var d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+-                if (d) onChunk(d);
+-              } catch (e) {}
++        if (r.body && r.body.getReader) {
++          var reader = r.body.getReader();
++          var dec = new TextDecoder();
++          var buf = '';
++          function pump() {
++            return reader.read().then(function (step) {
++              if (step.done) return true;
++              buf += dec.decode(step.value, { stream: true });
++              var lines = buf.split('\n');
++              buf = lines.pop();
++              lines.forEach(function (line) {
++                var m = /^data: (.*)$/.exec(line.trim());
++                if (!m) return;
++                if (m[1] === '[DONE]') return;
++                try {
++                  var j = JSON.parse(m[1]);
++                  var d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
++                  if (d) onChunk(d);
++                } catch (e) {}
++              });
++              return pump();
+             });
+-            return pump();
+-          });
++          }
++          return pump();
+         }
+-        return pump();
++        return r.text().then(function (raw) {
++          raw.split('\n').forEach(function (line) {
++            var m = /^data: (.*)$/.exec(line.trim());
++            if (!m) return;
++            if (m[1] === '[DONE]') return;
++            try {
++              var j = JSON.parse(m[1]);
++              var d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
++              if (d) onChunk(d);
++            } catch (e) {}
++          });
++          return true;
++        });
+       });
+     },
+ 
+@@ -608,7 +1077,8 @@
          registered: !!this.meta(),
          meta: this.meta()
        };
@@ -397,7 +777,7 @@ index f15bc4e..ec51da7 100644
  
    function legacyCopy(text) {
 diff --git a/Extensions/src/mse-ui.js b/Extensions/src/mse-ui.js
-index ebf8183..e751c63 100644
+index ebf8183..c8cd63e 100644
 --- a/Extensions/src/mse-ui.js
 +++ b/Extensions/src/mse-ui.js
 @@ -44,25 +44,48 @@
@@ -463,17 +843,18 @@ index ebf8183..e751c63 100644
      }
  
      /* ---------------------------------------------------------------- the network log */
-@@ -89,6 +114,9 @@
+@@ -89,6 +114,10 @@
      function logAdd(kind, ok, text, extra) {
        var line = { t: Date.now(), kind: kind, ok: ok, text: String(text || '') };
        if (extra && extra.ms != null) line.ms = extra.ms;
 +      if (extra && extra.diag) line.diag = String(extra.diag);
 +      if (extra && extra.url) line.url = String(extra.url);
 +      if (extra && extra.attempt) line.attempt = Number(extra.attempt);
++      if (extra && extra.transport) line.transport = String(extra.transport);
        log.push(line);
        if (log.length > 120) log.splice(0, log.length - 120);
        ls.set(CONFIG.logKey, JSON.stringify(log));
-@@ -122,19 +150,17 @@
+@@ -122,19 +151,17 @@
        return s;
      }
      function learnedKey() { return 'mse.id.' + String(win.location.host); }
@@ -495,7 +876,7 @@ index ebf8183..e751c63 100644
        }
        /* 1. the global config of Moodle — the most reliable place, and the first thing to try */
        var candidates = [];
-@@ -194,11 +220,7 @@
+@@ -194,11 +221,7 @@
          var kept = ls.get(learnedKey() + '.name', null);
          if (kept) { out.name = kept; out.nameSource = 'remembered'; }
        }
@@ -508,7 +889,7 @@ index ebf8183..e751c63 100644
        return out;
      }
  
-@@ -334,14 +356,16 @@
+@@ -334,14 +357,16 @@
          if (m) return m[1];
        }
        var m2 = /^question-(\d+)-/.exec(block.id || '');
@@ -528,7 +909,7 @@ index ebf8183..e751c63 100644
          if (x.parentNode) x.parentNode.removeChild(x);
        });
        var text = textOf(clone);
-@@ -364,7 +388,7 @@
+@@ -364,7 +389,7 @@
        var inputs = block.querySelectorAll('input[type=radio], input[type=checkbox]');
        for (var i = 0; i < inputs.length; i++) {
          var inp = inputs[i];
@@ -537,7 +918,7 @@ index ebf8183..e751c63 100644
          if (String(inp.getAttribute('value')) === '-1') continue; /* the hidden "clear my choice" */
          if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;
          var caption = answerText(inp);
-@@ -373,27 +397,59 @@
+@@ -373,27 +398,59 @@
            var image = holder && holder.querySelector('img');
            if (image) caption = image.getAttribute('alt') || ('image ' + (q.answers.length + 1));
          }
@@ -614,7 +995,7 @@ index ebf8183..e751c63 100644
        return q;
      }
  
-@@ -426,7 +482,7 @@
+@@ -426,7 +483,7 @@
      function attemptMeta() {
        var meta = { host: String(win.location.host), courseId: null, quizId: null, attemptId: null, moodleId: null, missing: [] };
        var id = identity();
@@ -623,7 +1004,7 @@ index ebf8183..e751c63 100644
        if (id.id) meta.moodleId = id.id;
        var bodyCls = (doc.body && doc.body.className) || '';
        var bodyId = (doc.body && doc.body.id) || '';
-@@ -509,7 +565,7 @@
+@@ -509,7 +566,7 @@
        var timeoutPromise = new Promise(function (_, reject) {
          timer = win.setTimeout(function () {
            if (controller) try { controller.abort(); } catch (_) {}
@@ -632,7 +1013,7 @@ index ebf8183..e751c63 100644
          }, 10000);
        });
  
-@@ -541,18 +597,18 @@
+@@ -541,18 +598,18 @@
          });
        }, function (e) {
          if (timer) { win.clearTimeout(timer); timer = null; }
@@ -656,7 +1037,7 @@ index ebf8183..e751c63 100644
          throw e;
        });
      }
-@@ -604,46 +660,274 @@
+@@ -604,46 +661,274 @@
  
      /* ---------------------------------------------------------------- applying an answer */
      function applyAnswer(q, row) {
@@ -956,7 +1337,7 @@ index ebf8183..e751c63 100644
        return {ok:false, how:null};
      }
  
-@@ -818,10 +1102,20 @@
+@@ -818,10 +1103,20 @@
        var all = readQuestions();
        state.question = currentQuestion(all);
        state.meta = attemptMeta();
@@ -978,7 +1359,7 @@ index ebf8183..e751c63 100644
      }
  
      var rise = 0;
-@@ -860,20 +1154,30 @@
+@@ -860,20 +1155,30 @@
  
      function head(titleText, sub, leading) {
        var h = el('div', 'ph');
@@ -1018,7 +1399,7 @@ index ebf8183..e751c63 100644
          h.appendChild(chip);
        }
        var mini = el('button', 'mini-status');
-@@ -969,10 +1273,20 @@
+@@ -969,10 +1274,20 @@
        /* no address, or a device that never even applied: base, and the gateway is not called at all — a user
           who has not registered a key produces not one byte of traffic towards it */
        if (!br || !br.url() || !br.meta()) { state.tier = 'base'; return Promise.resolve('base'); }
@@ -1040,7 +1421,7 @@ index ebf8183..e751c63 100644
          return state.tier;
        }, function () { state.tier = 'base'; return 'base'; });
      }
-@@ -1056,43 +1370,134 @@
+@@ -1056,43 +1371,134 @@
            var mark = el('span', 'mark' + (r.agent ? ' agent' : ''));
            a.appendChild(mark);
            a.appendChild(el('span', 'lbl', r.label));
@@ -1185,7 +1566,7 @@ index ebf8183..e751c63 100644
          body.appendChild(N(errRow, 1));
          return;
        }
-@@ -1158,18 +1563,24 @@
+@@ -1158,18 +1564,24 @@
      }
  
      function questionImages(q) {
@@ -1213,7 +1594,7 @@ index ebf8183..e751c63 100644
              return new Promise(function (resolve, reject) {
                var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); };
                reader.onerror = function () { reject(new Error('image unreadable')); }; reader.readAsDataURL(blob);
-@@ -1179,9 +1590,9 @@
+@@ -1179,9 +1591,9 @@
          return source.then(function (rawUrl) {
            return downscaleDataUrl(rawUrl, 1024);
          }).then(function (data) {
@@ -1225,7 +1606,7 @@ index ebf8183..e751c63 100644
            return {data:data, label:related ? 'option: ' + related.text : 'question image ' + (index+1)};
          });
        })).then(function (all) {
-@@ -1190,24 +1601,40 @@
+@@ -1190,24 +1602,40 @@
        });
      }
  
@@ -1269,7 +1650,7 @@ index ebf8183..e751c63 100644
          textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
          image: images.length ? images : null
        }, function (stage) {
-@@ -1218,52 +1645,130 @@
+@@ -1218,52 +1646,130 @@
          var ms = Date.now() - t0;
          if (res.ok && res.answer) {
            logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
@@ -1423,7 +1804,7 @@ index ebf8183..e751c63 100644
  
      function load() {
        var q = state.question;
-@@ -1345,22 +1850,34 @@
+@@ -1345,22 +1851,34 @@
        var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
        body.appendChild(N(el('div', 'sec', 'account')));
        body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
@@ -1465,7 +1846,7 @@ index ebf8183..e751c63 100644
        net.appendChild(el('span', 'txt', 'network log'));
        net.appendChild(el('span', 'more', 'open'));
        body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
-@@ -1368,14 +1885,24 @@
+@@ -1368,49 +1886,95 @@
  
      function refreshHeaderModel() {
        var br = win.MSEBridge, url = br && br.url();
@@ -1496,7 +1877,10 @@ index ebf8183..e751c63 100644
      }
  
      function checkGateway(raw) {
-@@ -1385,32 +1912,65 @@
+       var gw = state.gw;
+       var br = win.MSEBridge;
+       if (!br || !raw) return Promise.resolve(null);
++      if (gw.busy === 'check') return Promise.resolve(null);
        var epoch = ++state.modelEpoch;
        gw.busy = 'check';
        gw.probe = null;
@@ -1511,7 +1895,7 @@ index ebf8183..e751c63 100644
 +          if (epoch === state.modelEpoch && raw === br.url()) state.gatewayModel = null;
 +          gw.busy = null;
 +          var msg = r.message || 'the gateway does not answer';
-+          var extra = { ms: r.ms, url: r.url || raw, attempt: r.attempt || 1 };
++          var extra = { ms: r.ms, url: r.url || raw, attempt: r.attempt || 1, transport: r.transport };
 +          if (r.diag) extra.diag = r.diag;
 +          logAdd('gateway', false, msg, extra);
 +          render();
@@ -1556,7 +1940,7 @@ index ebf8183..e751c63 100644
 +          }
 +          var ms = (res && res.ms != null) ? res.ms : (r && r.ms ? r.ms : 0);
 +          var statusText = (res.state === 'active' ? 'key accepted' : (res.message || res.state)) + (ms ? ' · ' + ms + ' ms' : '');
-+          var extra = { ms: ms, url: res.url || raw, attempt: res.attempt || 1 };
++          var extra = { ms: ms, url: res.url || raw, attempt: res.attempt || 1, transport: res.transport || r.transport };
 +          if (res.diag) extra.diag = res.diag;
 +          logAdd('gateway', res.state === 'active', statusText, extra);
            render();
@@ -1566,19 +1950,21 @@ index ebf8183..e751c63 100644
          gw.busy = null;
 -        gw.probe = { ok: false, message: (e && e.message) || 'error' };
 +        var isNet = (win.MSEBridge && win.MSEBridge.isLoadFailed) ? win.MSEBridge.isLoadFailed(e) : (e && e.name === 'TypeError');
-+        var msg = isNet ? 'gateway unreachable from this network' : ((e && e.message) || 'error');
-+        gw.probe = { ok: false, message: msg, netError: isNet };
++        var tr = (e && e.transport) || 'unknown';
++        var msg = isNet ? 'gateway unreachable' : ((e && e.message) || 'error');
++        gw.probe = { ok: false, message: msg, netError: isNet, transport: tr };
 +        var extra = {
 +          ms: null,
 +          url: raw,
 +          attempt: (e && e.attempt) || 1,
-+          diag: isNet ? ('URL: ' + raw + ' · attempt #' + ((e && e.attempt) || 1) + ' · problem with network or VPN (DNS/TCP/TLS blocked)') : ((e && e.message) || 'network')
++          transport: tr,
++          diag: 'transport: ' + tr + ' · attempt #' + ((e && e.attempt) || 1) + ' · URL: ' + raw + ' · ' + ((e && e.message) || 'network error')
 +        };
 +        logAdd('gateway', false, msg, extra);
          render();
          return null;
        });
-@@ -1430,7 +1990,6 @@
+@@ -1430,7 +1994,6 @@
        input.spellcheck = false;
        input.placeholder = 'https://…';
        input.value = br.url() || '';
@@ -1586,7 +1972,7 @@ index ebf8183..e751c63 100644
        input.addEventListener('input', function () {
          var typed = String(input.value || '').trim().replace(/\/+$/, '');
          var saved = br.url() || '';
-@@ -1440,79 +1999,108 @@
+@@ -1440,79 +2003,104 @@
        body.appendChild(N(el('div', 'sec', 'connection'), 0));
        var frow = el('div', 'frow');
        body.appendChild(N(frow, 0));
@@ -1695,7 +2081,6 @@ index ebf8183..e751c63 100644
 +      frow.appendChild(toggle);
 +
 +      var statusRow = null;
-+      var statusHint = null;
 +      if (gw.check) {
 +        statusRow = el('div', 'row');
 +        var isActive = gw.check.state === 'active';
@@ -1703,23 +2088,20 @@ index ebf8183..e751c63 100644
 +        statusRow.appendChild(el('span', 'dot ' + (isActive ? 'ok' : (isUnreach ? 'bad' : 'warn'))));
 +        var msVal = gw.check.ms != null ? gw.check.ms : (gw.probe && gw.probe.ms != null ? gw.probe.ms : null);
 +        var msPart = msVal != null ? ' · ' + msVal + ' ms' : '';
-+        var statusText = isActive ? 'key accepted' + msPart : (gw.check.message || 'key not accepted') + msPart;
++        var trVal = gw.check.transport || (gw.probe && gw.probe.transport) || '';
++        var trPart = trVal ? ' (' + trVal + ')' : '';
++        var statusText = isActive ? 'key accepted' + msPart + trPart : (gw.check.message || 'key not accepted') + msPart + trPart;
 +        statusRow.appendChild(el('span', 'txt', statusText));
-+        if (isUnreach) {
-+          statusHint = el('div', 'hint', 'problem with network or VPN: disable VPN or use Cloudflare tunnel');
-+        }
 +      } else if (gw.probe) {
 +        statusRow = el('div', 'row');
 +        statusRow.appendChild(el('span', 'dot ' + (gw.probe.ok ? 'ok' : 'bad')));
-+        statusRow.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered · ' + gw.probe.ms + ' ms' : gw.probe.message));
-+        if (!gw.probe.ok && (gw.probe.netError || /unreachable|offline/i.test(gw.probe.message))) {
-+          statusHint = el('div', 'hint', 'problem with network or VPN: disable VPN or use Cloudflare tunnel');
-+        }
++        var prMs = gw.probe.ms != null ? ' · ' + gw.probe.ms + ' ms' : '';
++        var prTr = gw.probe.transport ? ' (' + gw.probe.transport + ')' : '';
++        statusRow.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered' + prMs + prTr : (gw.probe.message || 'the address did not answer') + prMs + prTr));
 +      }
 +      if (statusRow) {
 +        body.appendChild(N(el('div', 'sec', 'status'), 0));
 +        body.appendChild(N(statusRow, 1));
-+        if (statusHint) body.appendChild(N(statusHint, 1));
 +      }
 +
 +      if (gw.check && gw.check.state === 'active') {
@@ -1760,7 +2142,7 @@ index ebf8183..e751c63 100644
      }
  
      /* ---------------- the network log ---------------- */
-@@ -1524,27 +2112,35 @@
+@@ -1524,27 +2112,36 @@
          var ln = el('div', 'ln ' + (l.ok ? 'ok' : 'warn'));
          ln.appendChild(el('span', 'g'));
          ln.appendChild(el('span', 't', ago(l.t)));
@@ -1777,6 +2159,7 @@ index ebf8183..e751c63 100644
          var lines = log.map(function (l) {
 -          return new Date(l.t).toISOString() + ' [' + l.kind + '] ' + (l.ok ? 'OK' : 'FAIL') + ': ' + l.text + (l.ms != null ? ' (' + l.ms + ' ms)' : '');
 +          var lineStr = new Date(l.t).toISOString() + ' [' + l.kind + '] ' + (l.ok ? 'OK' : 'FAIL') + ': ' + l.text + (l.ms != null ? ' (' + l.ms + ' ms)' : '');
++          if (l.transport) lineStr += ' | transport: ' + l.transport;
 +          if (l.diag) lineStr += ' | diag: ' + l.diag;
 +          if (l.url) lineStr += ' | url: ' + l.url;
 +          if (l.attempt) lineStr += ' | attempt #' + l.attempt;
@@ -1804,7 +2187,7 @@ index ebf8183..e751c63 100644
        frow.appendChild(clear);
        body.appendChild(N(frow, 1));
      }
-@@ -1598,6 +2194,34 @@
+@@ -1598,6 +2195,34 @@
          method: formEl.getAttribute('method') || 'POST',
          elementsCount: formEl.elements ? formEl.elements.length : 0
        } : null;
@@ -1839,7 +2222,7 @@ index ebf8183..e751c63 100644
        var protocolView = q ? {
          page: null,
          question: q.text,
-@@ -1612,11 +2236,16 @@
+@@ -1612,11 +2237,16 @@
          text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) { return c.node.value || ''; }),
          images: images.map(function (im) { return im.src; }),
          question_image: images.length ? images[0].src : null,
@@ -1857,7 +2240,7 @@ index ebf8183..e751c63 100644
          warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
          page: { location: String(win.location.href), title: doc.title, headings: Array.prototype.map.call(doc.querySelectorAll('h1,h2,h3'), function (n) { return n.textContent.trim(); }),
            httpHeaders: 'unavailable to page JavaScript', cookieNamesVisibleToJavaScript: cookies, inlineMoodleScripts: scripts },
-@@ -1631,6 +2260,8 @@
+@@ -1631,6 +2261,8 @@
      }
      function debugTraffic(event) {
        if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
@@ -1866,7 +2249,7 @@ index ebf8183..e751c63 100644
        var dump = snifDump(); dump.traffic = event;
        win.MSEBridge.sendDump('debug', dump);
      }
-@@ -1644,6 +2275,7 @@
+@@ -1644,6 +2276,7 @@
      }
      var snifText = '';
      function viewSnif() {
@@ -1874,7 +2257,7 @@ index ebf8183..e751c63 100644
        body.appendChild(N(el('div', 'sec', 'Snif · local only')));
        body.appendChild(N(el('div', 'empty', 'May contain session keys and personal data. Review before sharing.')));
        var copy = el('button', 'btn solid', 'Copy');
-@@ -1669,8 +2301,8 @@
+@@ -1669,8 +2302,8 @@
        var title = CONFIG.brand;
        var leading = 'info';
        if (state.route === 'answers' && state.question) {
@@ -1885,7 +2268,7 @@ index ebf8183..e751c63 100644
        } else if (state.route === 'account') { sub = 'account'; }
        else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
        else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
-@@ -1733,6 +2365,7 @@
+@@ -1733,6 +2366,7 @@
          if (!q) return false;
          return applyAnswer(q, { label: label });
        },
@@ -1893,7 +2276,7 @@ index ebf8183..e751c63 100644
        agent: function () { return state.agent; },
        runAgent: function () { runAgent(false); return true; },
        log: function () { return log.slice(-40); },
-@@ -1779,6 +2412,7 @@
+@@ -1779,6 +2413,7 @@
              : state.agent && state.agent.state === 'error' ? { state: 'error', text: state.agent.text }
              : state.agent && state.agent.state === 'running' ? { state: 'running', text: '' }
              : null,
@@ -1901,7 +2284,7 @@ index ebf8183..e751c63 100644
            tier: state.tier,
            meta: state.meta,
            identity: identity(),
-@@ -1791,7 +2425,8 @@
+@@ -1791,7 +2426,8 @@
              supported: state.question.supported,
              identity: state.question.identity,
              questionId: state.question.questionId,
@@ -2141,7 +2524,7 @@ index 4e8c3b8..ae8ebdc 100644
  /* compact status screen */
  .status-grid{display:flex;flex-direction:column;gap:5px;margin:3px 0 6px}
 diff --git a/Extensions/tools/build-mse.js b/Extensions/tools/build-mse.js
-index c9d9c7c..f5286fa 100644
+index c9d9c7c..1ea46a7 100644
 --- a/Extensions/tools/build-mse.js
 +++ b/Extensions/tools/build-mse.js
 @@ -29,7 +29,7 @@ const VENDOR = LAYOUT.VENDOR;
@@ -2149,10 +2532,30 @@ index c9d9c7c..f5286fa 100644
  const SRC = LAYOUT.SRC;
  const BRAND = 'MSE';
 -const VERSION = '2.8.0';
-+const VERSION = '2.14.0';
++const VERSION = '2.14.1';
  
  const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
  const read = (p) => fs.readFileSync(path.join(VENDOR, p), 'utf8');
+@@ -301,7 +301,6 @@ const MATCHES = [
+ const header = [
+   '// ==UserScript==',
+   `// @name         ${BRAND}`,
+-  `// @name:ru      ${BRAND} — Moodle Solver Extension`,
+   '// @namespace    https://github.com/mse',
+   `// @version      ${VERSION}`,
+   '// @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.',
+diff --git a/Extensions/tools/repack-artifact.js b/Extensions/tools/repack-artifact.js
+index 3a67a0c..138ad4d 100644
+--- a/Extensions/tools/repack-artifact.js
++++ b/Extensions/tools/repack-artifact.js
+@@ -46,6 +46,7 @@ for(const [index,name] of [[3,'mse-ui'],[0,'mse-bridge']]) {
+  report.pageScripts[name]={bytes:clean.code.length,sha256:sha(clean.code),sanitizer:clean.stats};
+ }
+ script=script.replace(/^(\/\/ @version\s+)\S+/m,'$1'+version);
++script=script.replace(/^\/\/\s*@name:ru\s+.*\n/m, '');
+ if(!script.includes('*://*/course/view.php*')){
+  script=script.replace('// @match        *://*/my/index.php*\n','// @match        *://*/my/index.php*\n// @match        *://*/course/view.php*\n// @match        *://*/course/index.php*\n');
+ }
 diff --git a/README.md b/README.md
 index 5016a11..59d2b58 100644
 --- a/README.md
@@ -2573,7 +2976,7 @@ index 3ef8e8e..a750c49 100644
              await self.render(OWNER_ID, 0, rich)
          except Exception as exc:  # noqa: BLE001
 diff --git a/Server/bot/screens.py b/Server/bot/screens.py
-index 35ad6de..a81718c 100644
+index 35ad6de..5b362e9 100644
 --- a/Server/bot/screens.py
 +++ b/Server/bot/screens.py
 @@ -81,7 +81,7 @@ def home(snap: dict[str, Any], notice: str = "") -> Rich:
@@ -2581,7 +2984,7 @@ index 35ad6de..a81718c 100644
      if not router_ok:
          subtitle = status_chip(False, "router is not answering") + " " + muted(SEP + " everything below may be stale")
 -    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.8.0"), icon="bot")
-+    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.14.0"), icon="bot")
++    return screen("MSE", subtitle, blocks, buttons, footer=muted("version 2.14.1"), icon="bot")
  
  
  def _pending_list(devices: list[dict[str, Any]]) -> str:
@@ -2655,7 +3058,7 @@ index 35ad6de..a81718c 100644
          input_row("api hash", "api_hash", icon="lock"),
          input_row("tailscale key", "tailscale_key", icon="key"),
 diff --git a/Server/mse-router.js b/Server/mse-router.js
-index 941517b..7172d97 100644
+index 941517b..3415c70 100644
 --- a/Server/mse-router.js
 +++ b/Server/mse-router.js
 @@ -32,6 +32,7 @@ const fs = require('fs');
@@ -2671,7 +3074,7 @@ index 941517b..7172d97 100644
  const PORT = Number(process.env.MSE_PORT);
  const HOST = process.env.MSE_HOST || '127.0.0.1';
 -const VERSION = '2.8.0';
-+const VERSION = '2.14.0';
++const VERSION = '2.14.1';
  const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
  const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
  const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
@@ -3880,7 +4283,7 @@ index 9c2e604..1408205 100644
  
  # ------------------------------------------------------------------ tunnel
 diff --git a/Server/stack/mse-tunnel.sh b/Server/stack/mse-tunnel.sh
-index ac36ced..edc914e 100644
+index ac36ced..aaa40a8 100644
 --- a/Server/stack/mse-tunnel.sh
 +++ b/Server/stack/mse-tunnel.sh
 @@ -17,6 +17,11 @@
@@ -4145,7 +4548,17 @@ index ac36ced..edc914e 100644
    [ -n "${saved_url:-}" ] && url="$saved_url"
    local stage days
    stage="$(python3 - "$expiry" <<'PY'
-@@ -306,10 +506,344 @@ cmd_wait() {
+@@ -272,7 +472,8 @@ cmd_wait() {
+   while [ "$waited" -lt "$timeout" ]; do
+     if have curl; then
+       # -k: the certificate of a fresh node can still be in flight; the check is "it answers", not "it is trusted"
+-      if body="$(curl -fsSk --max-time 8 "$url/health" 2>"$TMP_REASON")"; then
++      # -4: bypass broken host IPv6 routing
++      if body="$(curl -4 -fsSk --max-time 8 "$url/health" 2>"$TMP_REASON")"; then
+         case "$body" in
+           *'"name"'*|*'"ok"'*|*'gateway'*)
+             say "$url"
+@@ -306,10 +507,344 @@ cmd_wait() {
    return 1
  }
  
@@ -4201,7 +4614,7 @@ index ac36ced..edc914e 100644
 +    fi
 +    local health_code=0
 +    if have curl; then
-+      health_code="$(curl -k -fsS -o /dev/null -w "%{http_code}" --max-time 8 "$url/health" 2>/dev/null || echo 0)"
++      health_code="$(curl -4 -k -fsS -o /dev/null -w "%{http_code}" --max-time 8 "$url/health" 2>/dev/null || echo 0)"
 +    fi
 +    local now_ts
 +    now_ts="$(python3 -c 'import datetime; print(datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00","Z"))' 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -4490,7 +4903,7 @@ index ac36ced..edc914e 100644
      up) cmd_up "$@" ;;
      funnel) cmd_funnel "${1:-$GATEWAY_PORT}" ;;
      serve) cmd_serve "${1:-$GATEWAY_PORT}" ;;
-@@ -318,7 +852,7 @@ main() {
+@@ -318,7 +853,7 @@ main() {
      status|state) cmd_status "$@" ;;
      wait) cmd_wait "$@" ;;
      dns) dns_name ;;
@@ -4837,13 +5250,13 @@ index b237293..16a9fb0 100644
      args = list(sys.argv[1:] if argv is None else argv)
      allowed = {"--status", "--version", "--help", "-h"}
 diff --git a/Storage/artifacts/build-report.json b/Storage/artifacts/build-report.json
-index 40706a0..58e9a0a 100644
+index 40706a0..c9941f5 100644
 --- a/Storage/artifacts/build-report.json
 +++ b/Storage/artifacts/build-report.json
 @@ -1,5 +1,5 @@
  {
 -  "version": "2.8.0",
-+  "version": "2.14.0",
++  "version": "2.14.1",
    "brand": "MSE",
    "base": "2.22.0",
    "bundles": {
@@ -4853,8 +5266,8 @@ index 40706a0..58e9a0a 100644
      "mse-ui": {
 -      "bytes": 90587,
 -      "sha256": "9448cd3f07b904e927946a1c2a571015e99b66a2262a570761c665909daad279",
-+      "bytes": 130616,
-+      "sha256": "99a7190dc29a47ea8a23d1743899b02ad987e42f3347eef2a29d744054080240",
++      "bytes": 130821,
++      "sha256": "991a1a23500c5b4d7c2c4480a6be52a1b7d2a9c7b89b7cae614c1c070b50153c",
        "sanitizer": {
 -        "comments": 80,
 -        "strings": 3,
@@ -4872,16 +5285,17 @@ index 40706a0..58e9a0a 100644
      "mse-bridge": {
 -      "bytes": 27664,
 -      "sha256": "557dd575a3e09e32b57dbc59174015311b95f65a40f7b288e275954d64ac5cc7",
-+      "bytes": 36047,
-+      "sha256": "52dd1c2560c25cd4f733dc6fbdfd93edfb1b88afbbd4cb7913485b22a0d805e7",
++      "bytes": 46033,
++      "sha256": "52965d84d0eed7afbc9e8c7add70fce47496f8b5d509352fb491170adaa2f544",
        "sanitizer": {
 -        "comments": 28,
 +        "comments": 27,
          "strings": 3,
          "templates": 0,
-         "regexps": 9,
+-        "regexps": 9,
 -        "windowRefs": 21,
-+        "windowRefs": 23,
++        "regexps": 11,
++        "windowRefs": 34,
          "windowProps": 0
        }
      },
@@ -4890,41 +5304,42 @@ index 40706a0..58e9a0a 100644
      "headers": 1,
      "requires": 0,
 -    "bytes": 1646595
-+    "bytes": 1695008
++    "bytes": 1705152
    },
    "userscript": {
      "file": "Storage/artifacts/mse.user.js",
 -    "bytes": 1650793,
 -    "sha256": "9623fc6dd11d1d327415683479da407af45ba4c58ad56ce1405b3fcc82ac4c08"
-+    "bytes": 1699101,
-+    "sha256": "403314fe8fcb241bbd2eec44c3b26ccc3996293998048889f7bfcadb51651072"
++    "bytes": 1709246,
++    "sha256": "590de18fe0c162434c33e15726891dcdb192890754703b3006f1af9110b2fc8c"
    },
    "sanitizer": {
      "comments": 68,
 diff --git a/Storage/artifacts/mse.user.js b/Storage/artifacts/mse.user.js
-index 2f684ea..4f30538 100644
+index 2f684ea..a7dd8b8 100644
 --- a/Storage/artifacts/mse.user.js
 +++ b/Storage/artifacts/mse.user.js
-@@ -2,7 +2,7 @@
+@@ -1,8 +1,7 @@
+ // ==UserScript==
  // @name         MSE
- // @name:ru      MSE — Moodle Solver Extension
+-// @name:ru      MSE — Moodle Solver Extension
  // @namespace    https://github.com/mse
 -// @version      2.8.0
-+// @version      2.14.0
++// @version      2.14.1
  // @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.
  // @description Answers and hints for Moodle quizzes: the MSE button, a built-in traffic sniffer and the id of the signed-in user.
  // @author       MSE
-@@ -1846,7 +1846,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -1846,7 +1845,8 @@ var __ssW=window,__msePageWindow=window;
      keyKey: 'mse.gateway.key',
      keyMirrorKey: 'mse:local:gatewayKey',
      metaKey: 'mse.gateway.meta',
 -    timeoutMs: 8000
-+    timeoutMs: 8000,
++    timeoutMs: 30000,
 +    agentTimeoutMs: 120000
    }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
  
    
-@@ -2013,6 +2014,54 @@ var __ssW=window,__msePageWindow=window;
+@@ -2013,22 +2013,365 @@ var __ssW=window,__msePageWindow=window;
      return 'mse_' + s;
    }
  
@@ -4976,10 +5391,258 @@ index 2f684ea..4f30538 100644
 +    return result;
 +  }
 +
++  function getGmXhr() {
++    try {
++      if (typeof GM_xmlhttpRequest === 'function') return GM_xmlhttpRequest;
++    } catch (_) {}
++    try {
++      if (typeof window !== 'undefined' && typeof __ssW.GM_xmlhttpRequest === 'function') return __ssW.GM_xmlhttpRequest;
++    } catch (_) {}
++    try {
++      if (typeof globalThis !== 'undefined' && typeof globalThis.GM_xmlhttpRequest === 'function') return globalThis.GM_xmlhttpRequest;
++    } catch (_) {}
++    try {
++      if (typeof GM !== 'undefined' && GM && typeof GM.xmlHttpRequest === 'function') {
++        return function (opts) { return GM.xmlHttpRequest(opts); };
++      }
++    } catch (_) {}
++    try {
++      if (typeof window !== 'undefined' && __ssW.GM && typeof __ssW.GM.xmlHttpRequest === 'function') {
++        return function (opts) { return __ssW.GM.xmlHttpRequest(opts); };
++      }
++    } catch (_) {}
++    try {
++      if (typeof __mseGm !== 'undefined' && __mseGm && typeof __mseGm.xhr === 'function') return __mseGm.xhr;
++    } catch (_) {}
++    try {
++      if (typeof window !== 'undefined' && __ssW.__mseGm && typeof __ssW.__mseGm.xhr === 'function') return __ssW.__mseGm.xhr;
++    } catch (_) {}
++    try {
++      if (typeof globalThis !== 'undefined' && globalThis.__mseGm && typeof globalThis.__mseGm.xhr === 'function') return globalThis.__mseGm.xhr;
++    } catch (_) {}
++    return null;
++  }
++
++  function gmFetch(url, opts) {
++    var gm = getGmXhr();
++    if (!gm) return Promise.reject(new Error('GM_xmlhttpRequest not available'));
++
++    return new Promise(function (resolve, reject) {
++      var options = opts || {};
++      var method = (options.method || 'GET').toUpperCase();
++      var timeout = options.timeout || (/agent|\x2Fchat\x2Fcompletions/i.test(url) ? (CONFIG.agentTimeoutMs || 120000) : (CONFIG.timeoutMs || 30000));
++      var signal = options.signal;
++      var completed = false;
++      var abortHandler = null;
++
++      if (signal && signal.aborted) {
++        var ab = new Error('The operation was aborted');
++        ab.name = 'AbortError';
++        ab.transport = 'gm';
++        return reject(ab);
++      }
++
++      var reqHeaders = {};
++      if (options.headers) {
++        if (typeof options.headers.forEach === 'function') {
++          options.headers.forEach(function (v, k) { reqHeaders[k] = v; });
++        } else {
++          for (var hk in options.headers) {
++            if (Object.prototype.hasOwnProperty.call(options.headers, hk)) {
++              reqHeaders[hk] = options.headers[hk];
++            }
++          }
++        }
++      }
++
++      function cleanup() {
++        if (signal && abortHandler && signal.removeEventListener) {
++          try { signal.removeEventListener('abort', abortHandler); } catch (_) {}
++        }
++      }
++
++      var gmDetails = {
++        method: method,
++        url: String(url),
++        headers: reqHeaders,
++        data: options.body || null,
++        timeout: timeout,
++        onload: function (resp) {
++          if (completed) return;
++          completed = true;
++          cleanup();
++          var rawHeaders = resp.responseHeaders || '';
++          var parsedHeaders = {};
++          if (rawHeaders) {
++            var lines = String(rawHeaders).split(/\r?\n/);
++            for (var i = 0; i < lines.length; i++) {
++              var idx = lines[i].indexOf(':');
++              if (idx > 0) {
++                var k = lines[i].slice(0, idx).trim().toLowerCase();
++                var v = lines[i].slice(idx + 1).trim();
++                parsedHeaders[k] = v;
++              }
++            }
++          }
++          var headersObj = {
++            get: function (name) {
++              if (!name) return null;
++              var key = String(name).toLowerCase();
++              return Object.prototype.hasOwnProperty.call(parsedHeaders, key) ? parsedHeaders[key] : null;
++            },
++            has: function (name) {
++              if (!name) return false;
++              return Object.prototype.hasOwnProperty.call(parsedHeaders, String(name).toLowerCase());
++            }
++          };
++          var status = Number(resp.status) || 200;
++          var resObj = {
++            ok: status >= 200 && status < 300,
++            status: status,
++            statusText: resp.statusText || (status >= 200 && status < 300 ? 'OK' : 'Error'),
++            headers: headersObj,
++            transport: 'gm',
++            url: resp.finalUrl || String(url),
++            text: function () {
++              return Promise.resolve(String(resp.responseText != null ? resp.responseText : ''));
++            },
++            json: function () {
++              try {
++                return Promise.resolve(JSON.parse(resp.responseText || 'null'));
++              } catch (e) {
++                return Promise.reject(e);
++              }
++            },
++            clone: function () {
++              return this;
++            }
++          };
++          resolve(resObj);
++        },
++        onerror: function (errResp) {
++          if (completed) return;
++          completed = true;
++          cleanup();
++          var netErr = new TypeError('Load failed');
++          netErr.transport = 'gm';
++          netErr.status = (errResp && errResp.status) || 0;
++          netErr.details = (errResp && (errResp.error || errResp.responseText)) || 'GM_xmlhttpRequest failed';
++          reject(netErr);
++        },
++        ontimeout: function () {
++          if (completed) return;
++          completed = true;
++          cleanup();
++          var timeErr = new Error('The operation timed out');
++          timeErr.name = 'TimeoutError';
++          timeErr.transport = 'gm';
++          reject(timeErr);
++        },
++        onabort: function () {
++          if (completed) return;
++          completed = true;
++          cleanup();
++          var abErr = new Error('The operation was aborted');
++          abErr.name = 'AbortError';
++          abErr.transport = 'gm';
++          reject(abErr);
++        }
++      };
++
++      var reqHandle = null;
++      try {
++        reqHandle = gm(gmDetails);
++      } catch (callErr) {
++        completed = true;
++        cleanup();
++        return reject(callErr);
++      }
++
++      if (signal && signal.addEventListener) {
++        abortHandler = function () {
++          if (completed) return;
++          completed = true;
++          cleanup();
++          if (reqHandle && typeof reqHandle.abort === 'function') {
++            try { reqHandle.abort(); } catch (_) {}
++          }
++          var abErr = new Error('The operation was aborted');
++          abErr.name = 'AbortError';
++          abErr.transport = 'gm';
++          reject(abErr);
++        };
++        signal.addEventListener('abort', abortHandler);
++      }
++    });
++  }
++
++  var lastTransport = 'none';
++
    function tracedFetch(url, options) {
      var opts = options || {};
-     var request = {method: opts.method || 'GET', url: String(url), body: opts.body || null};
-@@ -2029,6 +2078,72 @@ var __ssW=window,__msePageWindow=window;
+-    var request = {method: opts.method || 'GET', url: String(url), body: opts.body || null};
+-    return __ssW.fetch(url, opts).then(function (response) {
++    var request = { method: opts.method || 'GET', url: String(url), body: opts.body || null };
++    var gm = getGmXhr();
++    var fetchPromise;
++    var currentTransport = 'fetch';
++
++    if (gm) {
++      currentTransport = 'gm';
++      lastTransport = 'gm';
++      try {
++        fetchPromise = gmFetch(url, opts);
++      } catch (err) {
++        if (typeof window !== 'undefined' && typeof __ssW.fetch === 'function') {
++          currentTransport = 'fetch';
++          lastTransport = 'fetch';
++          fetchPromise = __ssW.fetch(url, opts);
++        } else {
++          return Promise.reject(err);
++        }
++      }
++    } else if (typeof window !== 'undefined' && typeof __ssW.fetch === 'function') {
++      currentTransport = 'fetch';
++      lastTransport = 'fetch';
++      fetchPromise = __ssW.fetch(url, opts);
++    } else {
++      return Promise.reject(new Error('No HTTP transport available (neither GM_xmlhttpRequest nor fetch)'));
++    }
++
++    return fetchPromise.then(function (response) {
++      if (response && !response.transport) {
++        response.transport = currentTransport;
++      }
+       if (__ssW.__mse && __ssW.__mse.onDebugTraffic && __ssW.MSEBridge && __ssW.MSEBridge.debugEnabled()) {
+-        response.clone().text().then(function (raw) {
+-          var parsed; try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
+-          __ssW.__mse.onDebugTraffic({request:request, response:{status:response.status, body:parsed}});
+-        }, function () {});
++        try {
++          var cloneP = (response && response.clone) ? response.clone() : response;
++          cloneP.text().then(function (raw) {
++            var parsed; try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
++            __ssW.__mse.onDebugTraffic({
++              request: request,
++              transport: currentTransport,
++              response: { status: response.status, body: parsed }
++            });
++          }, function () {});
++        } catch (_) {}
+       }
+       return response;
+     }, function (error) {
+-      if (__ssW.__mse && __ssW.__mse.onDebugTraffic && __ssW.MSEBridge && __ssW.MSEBridge.debugEnabled()) __ssW.__mse.onDebugTraffic({request:request, error:String(error && error.message || 'network')});
++      if (__ssW.__mse && __ssW.__mse.onDebugTraffic && __ssW.MSEBridge && __ssW.MSEBridge.debugEnabled()) {
++        __ssW.__mse.onDebugTraffic({
++          request: request,
++          transport: currentTransport,
++          error: String(error && error.message || 'network')
++        });
++      }
++      if (error && !error.transport) {
++        error.transport = currentTransport;
++      }
        throw error;
      });
    }
@@ -5010,7 +5673,8 @@ index 2f684ea..4f30538 100644
 +              url: String(url),
 +              attempt: 1,
 +              delay: 500,
-+              diag: 'gateway unreachable from this network (VPN or DNS/TLS drop), retrying...'
++              transport: lastTransport,
++              diag: 'gateway unreachable, retrying once...'
 +            });
 +          }
 +          return new Promise(function (resolve) {
@@ -5022,27 +5686,23 @@ index 2f684ea..4f30538 100644
 +              return res2;
 +            }, function (err2) {
 +              gatewayInFlight--;
-+              if (isLoadFailed(err2)) {
-+                var wrapped = new TypeError('gateway unreachable from this network');
-+                wrapped.originalError = err2;
-+                wrapped.attempt = 2;
-+                wrapped.url = String(url);
-+                wrapped.diagnostic = 'gateway unreachable from this network (VPN or network drop): URL=' + url + ', attempt=2, DNS/TCP/TLS connection blocked by network or VPN';
-+                throw wrapped;
-+              }
-+              throw err2;
++              var wrapped = new TypeError('gateway unreachable');
++              wrapped.originalError = err2;
++              wrapped.attempt = 2;
++              wrapped.url = String(url);
++              wrapped.transport = (err2 && err2.transport) || lastTransport;
++              wrapped.diagnostic = 'gateway unreachable: URL=' + url + ', attempt=2, transport=' + wrapped.transport;
++              throw wrapped;
 +            });
 +          });
 +        }
-+        if (isLoadFailed(err)) {
-+          var wrapped2 = new TypeError('gateway unreachable from this network');
-+          wrapped2.originalError = err;
-+          wrapped2.attempt = attempt + 1;
-+          wrapped2.url = String(url);
-+          wrapped2.diagnostic = 'gateway unreachable from this network (VPN or network drop): URL=' + url + ', attempt=' + (attempt + 1);
-+          throw wrapped2;
-+        }
-+        throw err;
++        var wrapped2 = new TypeError('gateway unreachable');
++        wrapped2.originalError = err;
++        wrapped2.attempt = attempt + 1;
++        wrapped2.url = String(url);
++        wrapped2.transport = (err && err.transport) || lastTransport;
++        wrapped2.diagnostic = 'gateway unreachable: URL=' + url + ', attempt=' + (attempt + 1) + ', transport=' + wrapped2.transport;
++        throw wrapped2;
 +      });
 +    };
 +    var next = gatewayQueue.then(run, run);
@@ -5052,7 +5712,7 @@ index 2f684ea..4f30538 100644
    function redactDump(value, key, depth, secrets) {
      if (depth > 30) return '[depth limit]';
      if (typeof value === 'string') {
-@@ -2054,6 +2169,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -2054,6 +2397,8 @@ var __ssW=window,__msePageWindow=window;
    }
    var lastAgentRequest = null;
    var MSEBridge = {
@@ -5061,14 +5721,27 @@ index 2f684ea..4f30538 100644
       
      url: function () {
        var fromLs = lsGet(CONFIG.urlKey) || lsGet(CONFIG.urlMirrorKey);
-@@ -2132,14 +2249,14 @@ var __ssW=window,__msePageWindow=window;
+@@ -2131,15 +2476,25 @@ var __ssW=window,__msePageWindow=window;
+       if (!url) return Promise.reject(new Error('address is not set'));
        var started = Date.now();
        var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-       var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
+-      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
 -      return tracedFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
-+      return gatewayFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
++      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs || 30000);
++      return gatewayFetch(url + '/health', {
++        method: 'GET',
++        cache: 'no-store',
++        headers: { accept: 'application/json' },
++        signal: ctrl ? ctrl.signal : undefined,
++        timeout: CONFIG.timeoutMs || 30000
++      })
          .then(function (r) {
-           return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });
+-          return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });
++          return r.json().then(function (j) {
++            return { ok: r.ok, status: r.status, json: j, transport: r.transport || lastTransport };
++          }, function () {
++            return { ok: r.ok, status: r.status, json: null, transport: r.transport || lastTransport };
++          });
          })
          .then(function (res) {
            clearTimeout(timer);
@@ -5078,7 +5751,7 @@ index 2f684ea..4f30538 100644
            return {
              ok: !!res.ok && mine,
              reachable: true,
-@@ -2147,7 +2264,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -2147,16 +2502,31 @@ var __ssW=window,__msePageWindow=window;
              status: res.status,
              ms: Date.now() - started,
              version: j.version || null,
@@ -5086,14 +5759,18 @@ index 2f684ea..4f30538 100644
 +            model: (j && (j.model || (Array.isArray(j.models) && j.models[0]))) || null,
              quota: j.quota || null,
              upstream: j.upstream || null,
++            transport: res.transport || lastTransport,
              message: !res.ok ? 'the address answered ' + res.status
-@@ -2156,7 +2273,19 @@ var __ssW=window,__msePageWindow=window;
+-              :!mine ? 'something answers at this address, but it is not an MSE gateway'
++              : !mine ? 'something answers at this address, but it is not an MSE gateway'
+               : 'AI gateway is up'
            };
          }, function (e) {
            clearTimeout(timer);
 -          return { ok: false, reachable: false, mine: false, ms: Date.now() - started, message: 'address offline: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network') };
 +          var isNet = isLoadFailed(e);
-+          var msg = isNet ? 'gateway unreachable from this network' : ('address offline: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network'));
++          var tr = (e && e.transport) || lastTransport;
++          var msg = isNet ? 'gateway unreachable' : ('address offline: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network'));
 +          return {
 +            ok: false,
 +            reachable: false,
@@ -5102,13 +5779,14 @@ index 2f684ea..4f30538 100644
 +            message: msg,
 +            netError: isNet,
 +            url: url,
-+            attempt: e && e.attempt || 1,
-+            diag: isNet ? ('URL: ' + url + ' · attempt #' + (e && e.attempt || 1) + ' · problem with network or VPN (DNS/TCP/TLS drop)') : (e && e.message)
++            transport: tr,
++            attempt: (e && e.attempt) || 1,
++            diag: 'transport: ' + tr + ' · attempt #' + ((e && e.attempt) || 1) + ' · URL: ' + url + ' · ' + ((e && e.message) || 'network error')
 +          };
          });
      },
  
-@@ -2170,6 +2299,12 @@ var __ssW=window,__msePageWindow=window;
+@@ -2170,6 +2540,12 @@ var __ssW=window,__msePageWindow=window;
        return k;
      },
      ensureKey: function () { return this.key(); },
@@ -5121,7 +5799,7 @@ index 2f684ea..4f30538 100644
      maskedKey: function () {
        var k = this.key();
        return k ? k.slice(0, 8) + '…' + k.slice(-4) : null;
-@@ -2196,7 +2331,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -2196,7 +2572,7 @@ var __ssW=window,__msePageWindow=window;
        identity = identity || {};
        var body = { key: key, moodleId: String(identity.id || ''), name: String(identity.name || ''), site: String(identity.site || ''), deviceName: String((__ssW.navigator && __ssW.navigator.userAgent) || '').slice(0, 120) };
        if (!body.moodleId) return Promise.reject(new Error('user ID missing · open profile'));
@@ -5130,7 +5808,7 @@ index 2f684ea..4f30538 100644
          method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key }, body: JSON.stringify(body)
        }).then(function (r) {
          return r.json().then(function (j) {
-@@ -2225,42 +2360,88 @@ var __ssW=window,__msePageWindow=window;
+@@ -2225,42 +2601,91 @@ var __ssW=window,__msePageWindow=window;
      },
  
       
@@ -5179,6 +5857,7 @@ index 2f684ea..4f30538 100644
 +              resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta, ms: ms, model: model };
              }
 -            return { state: 'active', message: 'key accepted', device: d, meta: meta };
++            resObj.transport = r.transport || lastTransport;
 +            try {
 +              lsSet('mse.cache.gw_check', JSON.stringify({ key: key, check: resObj, t: Date.now() }));
 +            } catch (_) {}
@@ -5188,15 +5867,17 @@ index 2f684ea..4f30538 100644
 -          return { state: 'unreachable', message: 'the gateway does not answer: ' + (e && e.message ? e.message : 'network') };
 +          var ms = Date.now() - started;
 +          var isNet = isLoadFailed(e);
-+          var msg = isNet ? 'gateway unreachable from this network' : ('the gateway does not answer: ' + (e && e.message ? e.message : 'network'));
++          var tr = (e && e.transport) || lastTransport;
++          var msg = isNet ? 'gateway unreachable' : ('the gateway does not answer: ' + (e && e.message ? e.message : 'network'));
 +          return {
 +            state: 'unreachable',
 +            message: msg,
 +            ms: ms,
 +            netError: isNet,
 +            url: url,
-+            attempt: e && e.attempt || 1,
-+            diag: isNet ? ('URL: ' + url + ' · attempt #' + (e && e.attempt || 1) + ' · problem with network or VPN (DNS/TCP/TLS drop)') : (e && e.message)
++            transport: tr,
++            attempt: (e && e.attempt) || 1,
++            diag: 'transport: ' + tr + ' · attempt #' + ((e && e.attempt) || 1) + ' · URL: ' + url + ' · ' + ((e && e.message) || 'network error')
 +          };
          });
      },
@@ -5239,7 +5920,7 @@ index 2f684ea..4f30538 100644
      },
  
       
-@@ -2278,15 +2459,19 @@ var __ssW=window,__msePageWindow=window;
+@@ -2278,23 +2703,33 @@ var __ssW=window,__msePageWindow=window;
          selects: Array.isArray(payload.selects) ? payload.selects : [],
          textCount: Number(payload.textCount) || 0,
          image: payload.image || null,
@@ -5256,14 +5937,21 @@ index 2f684ea..4f30538 100644
 -      return tracedFetch(url + '/mse/v1/agent', {
 +      var reqHeaders = { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() };
 +      if (payload.moodleId) reqHeaders['x-moodle-id'] = String(payload.moodleId);
++      var sig = payload.signal || (ctrl ? ctrl.signal : undefined);
++      if (payload.signal && payload.signal.addEventListener && ctrl) {
++        payload.signal.addEventListener('abort', function () { ctrl.abort(); });
++      }
 +      return gatewayFetch(url + '/mse/v1/agent', {
          method: 'POST',
 -        headers: { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() },
 +        headers: reqHeaders,
          body: JSON.stringify(body),
-         signal: ctrl ? ctrl.signal : undefined
+-        signal: ctrl ? ctrl.signal : undefined
++        signal: sig,
++        timeout: timeoutMs
        }).then(function (r) {
-@@ -2295,6 +2480,7 @@ var __ssW=window,__msePageWindow=window;
+         if (/text\x2Fevent-stream/i.test(String(r.headers.get('content-type') || '')) && r.body && r.body.getReader) {
+           var reader = r.body.getReader(), decoder = new TextDecoder(), pending = '', result = null;
            function handle(block) {
              var name = '', data = [];
              block.split(/\r?\n/).forEach(function (line) {
@@ -5271,7 +5959,33 @@ index 2f684ea..4f30538 100644
                if (line.indexOf('event:') === 0) name = line.slice(6).trim();
                if (line.indexOf('data:') === 0) data.push(line.slice(5).trim());
              });
-@@ -2335,7 +2521,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -2316,7 +2751,24 @@ var __ssW=window,__msePageWindow=window;
+         }
+         return r.text().then(function (raw) {
+           var j = null;
+-          try { j = JSON.parse(raw); } catch (e) {}
++          if (/text\x2Fevent-stream/i.test(String(r.headers.get('content-type') || '')) || /^(event|data):/m.test(raw)) {
++            var result = null;
++            raw.split(/\r?\n\r?\n/).forEach(function (block) {
++              var name = '', data = [];
++              block.split(/\r?\n/).forEach(function (line) {
++                if (line.indexOf(':') === 0) return;
++                if (line.indexOf('event:') === 0) name = line.slice(6).trim();
++                if (line.indexOf('data:') === 0) data.push(line.slice(5).trim());
++              });
++              var value; try { value = JSON.parse(data.join('\n')); } catch (_) { return; }
++              if (name === 'stage' && typeof onStage === 'function') onStage(value.stage);
++              if (name === 'result') result = value;
++            });
++            if (result) j = result;
++          }
++          if (!j) {
++            try { j = JSON.parse(raw); } catch (e) {}
++          }
+           record.response = { status: r.status, json: j, body: j === null ? raw : undefined };
+           return { status: r.status, j: j, retryAfter: Number(r.headers.get('retry-after') || 0) };
+         });
+@@ -2335,7 +2787,7 @@ var __ssW=window,__msePageWindow=window;
        }, function (e) {
          clearTimeout(timer);
          record.response = { error: (e && e.name) || 'network' };
@@ -5280,7 +5994,7 @@ index 2f684ea..4f30538 100644
        });
      },
      debugEnabled: function () { return lsGet('mse.debug.enabled') === '1'; },
-@@ -2353,7 +2539,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -2353,7 +2805,7 @@ var __ssW=window,__msePageWindow=window;
        var safe = redactDump(dump, key, 0, secrets);
        var json = JSON.stringify(safe);
        if (json.length > 2000000) safe = {clientTruncated:true, preview:json.slice(0,160000)};
@@ -5289,7 +6003,7 @@ index 2f684ea..4f30538 100644
          method:'POST', headers:{'content-type':'application/json', authorization:'Bearer '+key},
          body:JSON.stringify({type:type, dump:safe})
        }).then(function (r) { return r.json().then(function (j) {
-@@ -2369,7 +2555,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -2369,37 +2821,53 @@ var __ssW=window,__msePageWindow=window;
        if (!url) return Promise.reject(new Error('gateway address is not set'));
         
        var body = { stream: !!onChunk, messages: [{ role: 'user', content: String(text || 'ping') }] };
@@ -5297,8 +6011,76 @@ index 2f684ea..4f30538 100644
 +      return gatewayFetch(url + '/v1/chat/completions', {
          method: 'POST',
          headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
-         body: JSON.stringify(body)
-@@ -2421,7 +2607,8 @@ var __ssW=window,__msePageWindow=window;
+-        body: JSON.stringify(body)
++        body: JSON.stringify(body),
++        timeout: CONFIG.agentTimeoutMs || 120000
+       }).then(function (r) {
+         if (!r.ok) return r.json().then(function (j) { throw new Error((j && j.error && j.error.message) || ('the gateway answered ' + r.status)); });
+         if (!onChunk) return r.json();
+          
+-        var reader = r.body.getReader();
+-        var dec = new TextDecoder();
+-        var buf = '';
+-        function pump() {
+-          return reader.read().then(function (step) {
+-            if (step.done) return true;
+-            buf += dec.decode(step.value, { stream: true });
+-            var lines = buf.split('\n');
+-            buf = lines.pop();
+-            lines.forEach(function (line) {
+-              var m = /^data: (.*)$/.exec(line.trim());
+-              if (!m) return;
+-              if (m[1] === '[DONE]') return;
+-              try {
+-                var j = JSON.parse(m[1]);
+-                var d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+-                if (d) onChunk(d);
+-              } catch (e) {}
++        if (r.body && r.body.getReader) {
++          var reader = r.body.getReader();
++          var dec = new TextDecoder();
++          var buf = '';
++          function pump() {
++            return reader.read().then(function (step) {
++              if (step.done) return true;
++              buf += dec.decode(step.value, { stream: true });
++              var lines = buf.split('\n');
++              buf = lines.pop();
++              lines.forEach(function (line) {
++                var m = /^data: (.*)$/.exec(line.trim());
++                if (!m) return;
++                if (m[1] === '[DONE]') return;
++                try {
++                  var j = JSON.parse(m[1]);
++                  var d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
++                  if (d) onChunk(d);
++                } catch (e) {}
++              });
++              return pump();
+             });
+-            return pump();
+-          });
++          }
++          return pump();
+         }
+-        return pump();
++        return r.text().then(function (raw) {
++          raw.split('\n').forEach(function (line) {
++            var m = /^data: (.*)$/.exec(line.trim());
++            if (!m) return;
++            if (m[1] === '[DONE]') return;
++            try {
++              var j = JSON.parse(m[1]);
++              var d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
++              if (d) onChunk(d);
++            } catch (e) {}
++          });
++          return true;
++        });
+       });
+     },
+ 
+@@ -2421,7 +2889,8 @@ var __ssW=window,__msePageWindow=window;
          registered: !!this.meta(),
          meta: this.meta()
        };
@@ -5308,7 +6090,7 @@ index 2f684ea..4f30538 100644
    };
  
    function legacyCopy(text) {
-@@ -3644,7 +3831,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -3644,7 +4113,7 @@ var __ssW=window,__msePageWindow=window;
    }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
  
     
@@ -5317,7 +6099,7 @@ index 2f684ea..4f30538 100644
  
     
     
-@@ -3655,25 +3842,48 @@ var __ssW=window,__msePageWindow=window;
+@@ -3655,25 +4124,48 @@ var __ssW=window,__msePageWindow=window;
      shortanswer: { label: 'short answer', kind: 'text' },
      numerical: { label: 'number', kind: 'text' },
      match: { label: 'matching', kind: 'select' },
@@ -5369,7 +6151,7 @@ index 2f684ea..4f30538 100644
    function boot() {
      var win = window;
      var doc = document;
-@@ -3691,7 +3901,9 @@ var __ssW=window,__msePageWindow=window;
+@@ -3691,7 +4183,9 @@ var __ssW=window,__msePageWindow=window;
      }
      function norm(s) {
        return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase()
@@ -5380,17 +6162,18 @@ index 2f684ea..4f30538 100644
      }
  
       
-@@ -3700,6 +3912,9 @@ var __ssW=window,__msePageWindow=window;
+@@ -3700,6 +4194,10 @@ var __ssW=window,__msePageWindow=window;
      function logAdd(kind, ok, text, extra) {
        var line = { t: Date.now(), kind: kind, ok: ok, text: String(text || '') };
        if (extra && extra.ms != null) line.ms = extra.ms;
 +      if (extra && extra.diag) line.diag = String(extra.diag);
 +      if (extra && extra.url) line.url = String(extra.url);
 +      if (extra && extra.attempt) line.attempt = Number(extra.attempt);
++      if (extra && extra.transport) line.transport = String(extra.transport);
        log.push(line);
        if (log.length > 120) log.splice(0, log.length - 120);
        ls.set(CONFIG.logKey, JSON.stringify(log));
-@@ -3729,19 +3944,17 @@ var __ssW=window,__msePageWindow=window;
+@@ -3729,19 +4227,17 @@ var __ssW=window,__msePageWindow=window;
        return s;
      }
      function learnedKey() { return 'mse.id.' + String(win.location.host); }
@@ -5412,7 +6195,7 @@ index 2f684ea..4f30538 100644
        }
         
        var candidates = [];
-@@ -3801,11 +4014,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -3801,11 +4297,7 @@ var __ssW=window,__msePageWindow=window;
          var kept = ls.get(learnedKey() + '.name', null);
          if (kept) { out.name = kept; out.nameSource = 'remembered'; }
        }
@@ -5425,7 +6208,7 @@ index 2f684ea..4f30538 100644
        return out;
      }
  
-@@ -3934,14 +4143,16 @@ var __ssW=window,__msePageWindow=window;
+@@ -3934,14 +4426,16 @@ var __ssW=window,__msePageWindow=window;
          if (m) return m[1];
        }
        var m2 = /^question-(\d+)-/.exec(block.id || '');
@@ -5445,7 +6228,7 @@ index 2f684ea..4f30538 100644
          if (x.parentNode) x.parentNode.removeChild(x);
        });
        var text = textOf(clone);
-@@ -3964,7 +4175,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -3964,7 +4458,7 @@ var __ssW=window,__msePageWindow=window;
        var inputs = block.querySelectorAll('input[type=radio], input[type=checkbox]');
        for (var i = 0; i < inputs.length; i++) {
          var inp = inputs[i];
@@ -5454,7 +6237,7 @@ index 2f684ea..4f30538 100644
          if (String(inp.getAttribute('value')) === '-1') continue;  
          if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;
          var caption = answerText(inp);
-@@ -3973,27 +4184,59 @@ var __ssW=window,__msePageWindow=window;
+@@ -3973,27 +4467,59 @@ var __ssW=window,__msePageWindow=window;
            var image = holder && holder.querySelector('img');
            if (image) caption = image.getAttribute('alt') || ('image ' + (q.answers.length + 1));
          }
@@ -5529,7 +6312,7 @@ index 2f684ea..4f30538 100644
        return q;
      }
  
-@@ -4026,7 +4269,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -4026,7 +4552,7 @@ var __ssW=window,__msePageWindow=window;
      function attemptMeta() {
        var meta = { host: String(win.location.host), courseId: null, quizId: null, attemptId: null, moodleId: null, missing: [] };
        var id = identity();
@@ -5538,7 +6321,7 @@ index 2f684ea..4f30538 100644
        if (id.id) meta.moodleId = id.id;
        var bodyCls = (doc.body && doc.body.className) || '';
        var bodyId = (doc.body && doc.body.id) || '';
-@@ -4109,7 +4352,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -4109,7 +4635,7 @@ var __ssW=window,__msePageWindow=window;
        var timeoutPromise = new Promise(function (_, reject) {
          timer = win.setTimeout(function () {
            if (controller) try { controller.abort(); } catch (_) {}
@@ -5547,7 +6330,7 @@ index 2f684ea..4f30538 100644
          }, 10000);
        });
  
-@@ -4141,18 +4384,18 @@ var __ssW=window,__msePageWindow=window;
+@@ -4141,18 +4667,18 @@ var __ssW=window,__msePageWindow=window;
          });
        }, function (e) {
          if (timer) { win.clearTimeout(timer); timer = null; }
@@ -5571,7 +6354,7 @@ index 2f684ea..4f30538 100644
          throw e;
        });
      }
-@@ -4204,46 +4447,274 @@ var __ssW=window,__msePageWindow=window;
+@@ -4204,46 +4730,274 @@ var __ssW=window,__msePageWindow=window;
  
       
      function applyAnswer(q, row) {
@@ -5871,7 +6654,7 @@ index 2f684ea..4f30538 100644
        return {ok:false, how:null};
      }
  
-@@ -4418,10 +4889,20 @@ var __ssW=window,__msePageWindow=window;
+@@ -4418,10 +5172,20 @@ var __ssW=window,__msePageWindow=window;
        var all = readQuestions();
        state.question = currentQuestion(all);
        state.meta = attemptMeta();
@@ -5893,7 +6676,7 @@ index 2f684ea..4f30538 100644
      }
  
      var rise = 0;
-@@ -4460,20 +4941,30 @@ var __ssW=window,__msePageWindow=window;
+@@ -4460,20 +5224,30 @@ var __ssW=window,__msePageWindow=window;
  
      function head(titleText, sub, leading) {
        var h = el('div', 'ph');
@@ -5933,7 +6716,7 @@ index 2f684ea..4f30538 100644
          h.appendChild(chip);
        }
        var mini = el('button', 'mini-status');
-@@ -4564,10 +5055,20 @@ var __ssW=window,__msePageWindow=window;
+@@ -4564,10 +5338,20 @@ var __ssW=window,__msePageWindow=window;
        
  
        if (!br || !br.url() || !br.meta()) { state.tier = 'base'; return Promise.resolve('base'); }
@@ -5955,7 +6738,7 @@ index 2f684ea..4f30538 100644
          return state.tier;
        }, function () { state.tier = 'base'; return 'base'; });
      }
-@@ -4651,43 +5152,134 @@ var __ssW=window,__msePageWindow=window;
+@@ -4651,43 +5435,134 @@ var __ssW=window,__msePageWindow=window;
            var mark = el('span', 'mark' + (r.agent ? ' agent' : ''));
            a.appendChild(mark);
            a.appendChild(el('span', 'lbl', r.label));
@@ -6100,7 +6883,7 @@ index 2f684ea..4f30538 100644
          body.appendChild(N(errRow, 1));
          return;
        }
-@@ -4753,18 +5345,24 @@ var __ssW=window,__msePageWindow=window;
+@@ -4753,18 +5628,24 @@ var __ssW=window,__msePageWindow=window;
      }
  
      function questionImages(q) {
@@ -6128,7 +6911,7 @@ index 2f684ea..4f30538 100644
              return new Promise(function (resolve, reject) {
                var reader = new FileReader(); reader.onload = function () { resolve(String(reader.result || '')); };
                reader.onerror = function () { reject(new Error('image unreadable')); }; reader.readAsDataURL(blob);
-@@ -4774,9 +5372,9 @@ var __ssW=window,__msePageWindow=window;
+@@ -4774,9 +5655,9 @@ var __ssW=window,__msePageWindow=window;
          return source.then(function (rawUrl) {
            return downscaleDataUrl(rawUrl, 1024);
          }).then(function (data) {
@@ -6140,7 +6923,7 @@ index 2f684ea..4f30538 100644
            return {data:data, label:related ? 'option: ' + related.text : 'question image ' + (index+1)};
          });
        })).then(function (all) {
-@@ -4785,24 +5383,40 @@ var __ssW=window,__msePageWindow=window;
+@@ -4785,24 +5666,40 @@ var __ssW=window,__msePageWindow=window;
        });
      }
  
@@ -6184,7 +6967,7 @@ index 2f684ea..4f30538 100644
          textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
          image: images.length ? images : null
        }, function (stage) {
-@@ -4813,52 +5427,130 @@ var __ssW=window,__msePageWindow=window;
+@@ -4813,52 +5710,130 @@ var __ssW=window,__msePageWindow=window;
          var ms = Date.now() - t0;
          if (res.ok && res.answer) {
            logAdd('agent', true, 'agent: ' + String(res.answer).slice(0, 40), { ms: ms });
@@ -6214,7 +6997,7 @@ index 2f684ea..4f30538 100644
 +          if (ansParts.length === 1 && (q.type === 'multichoiceset' || (q.answers && q.answers.some(function (a) { return a.kind === 'choice' && a.input && a.input.type === 'checkbox'; })))) {
 +            var spl = ansParts[0].split(/\s*,\s*|\s*;\s{0,}/).map(function (x) { return x.trim(); }).filter(Boolean);
 +            if (spl.length > 1) ansParts = spl;
-+          }
+           }
 +
 +          state.agentPicks = ansParts;
 +          state.tappedPicks = state.tappedPicks || {};
@@ -6222,7 +7005,7 @@ index 2f684ea..4f30538 100644
 +          var currentRows = (state.rows || []).slice();
 +          if (!currentRows.length && q.answers && q.answers.length) {
 +            currentRows = q.answers.map(function (answer) { return { label: answer.text, correctness: 0 }; });
-           }
++          }
 +
 +          ansParts.forEach(function (part) {
 +            var hit = currentRows.find(function (r) { return norm(r.label) === norm(part); });
@@ -6338,7 +7121,7 @@ index 2f684ea..4f30538 100644
  
      function load() {
        var q = state.question;
-@@ -4940,22 +5632,34 @@ var __ssW=window,__msePageWindow=window;
+@@ -4940,22 +5915,34 @@ var __ssW=window,__msePageWindow=window;
        var meta = win.MSEBridge ? win.MSEBridge.meta() : null;
        body.appendChild(N(el('div', 'sec', 'account')));
        body.appendChild(N(valueRow('ID', id.id, !!id.id), 1));
@@ -6380,7 +7163,7 @@ index 2f684ea..4f30538 100644
        net.appendChild(el('span', 'txt', 'network log'));
        net.appendChild(el('span', 'more', 'open'));
        body.appendChild(N(press(net, function () { state.route = 'net'; render(); }), 1));
-@@ -4963,14 +5667,24 @@ var __ssW=window,__msePageWindow=window;
+@@ -4963,49 +5950,95 @@ var __ssW=window,__msePageWindow=window;
  
      function refreshHeaderModel() {
        var br = win.MSEBridge, url = br && br.url();
@@ -6411,7 +7194,10 @@ index 2f684ea..4f30538 100644
      }
  
      function checkGateway(raw) {
-@@ -4980,32 +5694,65 @@ var __ssW=window,__msePageWindow=window;
+       var gw = state.gw;
+       var br = win.MSEBridge;
+       if (!br || !raw) return Promise.resolve(null);
++      if (gw.busy === 'check') return Promise.resolve(null);
        var epoch = ++state.modelEpoch;
        gw.busy = 'check';
        gw.probe = null;
@@ -6426,7 +7212,7 @@ index 2f684ea..4f30538 100644
 +          if (epoch === state.modelEpoch && raw === br.url()) state.gatewayModel = null;
 +          gw.busy = null;
 +          var msg = r.message || 'the gateway does not answer';
-+          var extra = { ms: r.ms, url: r.url || raw, attempt: r.attempt || 1 };
++          var extra = { ms: r.ms, url: r.url || raw, attempt: r.attempt || 1, transport: r.transport };
 +          if (r.diag) extra.diag = r.diag;
 +          logAdd('gateway', false, msg, extra);
 +          render();
@@ -6471,7 +7257,7 @@ index 2f684ea..4f30538 100644
 +          }
 +          var ms = (res && res.ms != null) ? res.ms : (r && r.ms ? r.ms : 0);
 +          var statusText = (res.state === 'active' ? 'key accepted' : (res.message || res.state)) + (ms ? ' · ' + ms + ' ms' : '');
-+          var extra = { ms: ms, url: res.url || raw, attempt: res.attempt || 1 };
++          var extra = { ms: ms, url: res.url || raw, attempt: res.attempt || 1, transport: res.transport || r.transport };
 +          if (res.diag) extra.diag = res.diag;
 +          logAdd('gateway', res.state === 'active', statusText, extra);
            render();
@@ -6481,19 +7267,21 @@ index 2f684ea..4f30538 100644
          gw.busy = null;
 -        gw.probe = { ok: false, message: (e && e.message) || 'error' };
 +        var isNet = (win.MSEBridge && win.MSEBridge.isLoadFailed) ? win.MSEBridge.isLoadFailed(e) : (e && e.name === 'TypeError');
-+        var msg = isNet ? 'gateway unreachable from this network' : ((e && e.message) || 'error');
-+        gw.probe = { ok: false, message: msg, netError: isNet };
++        var tr = (e && e.transport) || 'unknown';
++        var msg = isNet ? 'gateway unreachable' : ((e && e.message) || 'error');
++        gw.probe = { ok: false, message: msg, netError: isNet, transport: tr };
 +        var extra = {
 +          ms: null,
 +          url: raw,
 +          attempt: (e && e.attempt) || 1,
-+          diag: isNet ? ('URL: ' + raw + ' · attempt #' + ((e && e.attempt) || 1) + ' · problem with network or VPN (DNS/TCP/TLS blocked)') : ((e && e.message) || 'network')
++          transport: tr,
++          diag: 'transport: ' + tr + ' · attempt #' + ((e && e.attempt) || 1) + ' · URL: ' + raw + ' · ' + ((e && e.message) || 'network error')
 +        };
 +        logAdd('gateway', false, msg, extra);
          render();
          return null;
        });
-@@ -5025,7 +5772,6 @@ var __ssW=window,__msePageWindow=window;
+@@ -5025,7 +6058,6 @@ var __ssW=window,__msePageWindow=window;
        input.spellcheck = false;
        input.placeholder = 'https:/\/…';
        input.value = br.url() || '';
@@ -6501,7 +7289,7 @@ index 2f684ea..4f30538 100644
        input.addEventListener('input', function () {
          var typed = String(input.value || '').trim().replace(/\x2F+$/, '');
          var saved = br.url() || '';
-@@ -5035,79 +5781,108 @@ var __ssW=window,__msePageWindow=window;
+@@ -5035,79 +6067,104 @@ var __ssW=window,__msePageWindow=window;
        body.appendChild(N(el('div', 'sec', 'connection'), 0));
        var frow = el('div', 'frow');
        body.appendChild(N(frow, 0));
@@ -6610,7 +7398,6 @@ index 2f684ea..4f30538 100644
 +      frow.appendChild(toggle);
 +
 +      var statusRow = null;
-+      var statusHint = null;
 +      if (gw.check) {
 +        statusRow = el('div', 'row');
 +        var isActive = gw.check.state === 'active';
@@ -6618,23 +7405,20 @@ index 2f684ea..4f30538 100644
 +        statusRow.appendChild(el('span', 'dot ' + (isActive ? 'ok' : (isUnreach ? 'bad' : 'warn'))));
 +        var msVal = gw.check.ms != null ? gw.check.ms : (gw.probe && gw.probe.ms != null ? gw.probe.ms : null);
 +        var msPart = msVal != null ? ' · ' + msVal + ' ms' : '';
-+        var statusText = isActive ? 'key accepted' + msPart : (gw.check.message || 'key not accepted') + msPart;
++        var trVal = gw.check.transport || (gw.probe && gw.probe.transport) || '';
++        var trPart = trVal ? ' (' + trVal + ')' : '';
++        var statusText = isActive ? 'key accepted' + msPart + trPart : (gw.check.message || 'key not accepted') + msPart + trPart;
 +        statusRow.appendChild(el('span', 'txt', statusText));
-+        if (isUnreach) {
-+          statusHint = el('div', 'hint', 'problem with network or VPN: disable VPN or use Cloudflare tunnel');
-+        }
 +      } else if (gw.probe) {
 +        statusRow = el('div', 'row');
 +        statusRow.appendChild(el('span', 'dot ' + (gw.probe.ok ? 'ok' : 'bad')));
-+        statusRow.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered · ' + gw.probe.ms + ' ms' : gw.probe.message));
-+        if (!gw.probe.ok && (gw.probe.netError || /unreachable|offline/i.test(gw.probe.message))) {
-+          statusHint = el('div', 'hint', 'problem with network or VPN: disable VPN or use Cloudflare tunnel');
-+        }
++        var prMs = gw.probe.ms != null ? ' · ' + gw.probe.ms + ' ms' : '';
++        var prTr = gw.probe.transport ? ' (' + gw.probe.transport + ')' : '';
++        statusRow.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered' + prMs + prTr : (gw.probe.message || 'the address did not answer') + prMs + prTr));
 +      }
 +      if (statusRow) {
 +        body.appendChild(N(el('div', 'sec', 'status'), 0));
 +        body.appendChild(N(statusRow, 1));
-+        if (statusHint) body.appendChild(N(statusHint, 1));
 +      }
 +
 +      if (gw.check && gw.check.state === 'active') {
@@ -6675,7 +7459,7 @@ index 2f684ea..4f30538 100644
      }
  
       
-@@ -5119,27 +5894,35 @@ var __ssW=window,__msePageWindow=window;
+@@ -5119,27 +6176,36 @@ var __ssW=window,__msePageWindow=window;
          var ln = el('div', 'ln ' + (l.ok ? 'ok' : 'warn'));
          ln.appendChild(el('span', 'g'));
          ln.appendChild(el('span', 't', ago(l.t)));
@@ -6692,6 +7476,7 @@ index 2f684ea..4f30538 100644
          var lines = log.map(function (l) {
 -          return new Date(l.t).toISOString() + ' [' + l.kind + '] ' + (l.ok ? 'OK' : 'FAIL') + ': ' + l.text + (l.ms != null ? ' (' + l.ms + ' ms)' : '');
 +          var lineStr = new Date(l.t).toISOString() + ' [' + l.kind + '] ' + (l.ok ? 'OK' : 'FAIL') + ': ' + l.text + (l.ms != null ? ' (' + l.ms + ' ms)' : '');
++          if (l.transport) lineStr += ' | transport: ' + l.transport;
 +          if (l.diag) lineStr += ' | diag: ' + l.diag;
 +          if (l.url) lineStr += ' | url: ' + l.url;
 +          if (l.attempt) lineStr += ' | attempt #' + l.attempt;
@@ -6719,7 +7504,7 @@ index 2f684ea..4f30538 100644
        frow.appendChild(clear);
        body.appendChild(N(frow, 1));
      }
-@@ -5193,6 +5976,34 @@ var __ssW=window,__msePageWindow=window;
+@@ -5193,6 +6259,34 @@ var __ssW=window,__msePageWindow=window;
          method: formEl.getAttribute('method') || 'POST',
          elementsCount: formEl.elements ? formEl.elements.length : 0
        } : null;
@@ -6754,7 +7539,7 @@ index 2f684ea..4f30538 100644
        var protocolView = q ? {
          page: null,
          question: q.text,
-@@ -5207,11 +6018,16 @@ var __ssW=window,__msePageWindow=window;
+@@ -5207,11 +6301,16 @@ var __ssW=window,__msePageWindow=window;
          text_inputs: q.controls.filter(function (c) { return c.kind === 'text'; }).map(function (c) { return c.node.value || ''; }),
          images: images.map(function (im) { return im.src; }),
          question_image: images.length ? images[0].src : null,
@@ -6772,7 +7557,7 @@ index 2f684ea..4f30538 100644
          warning: 'Sensitive: HTML, scripts, URLs and responses can contain session secrets and personal data. Review before sharing.',
          page: { location: String(win.location.href), title: doc.title, headings: Array.prototype.map.call(doc.querySelectorAll('h1,h2,h3'), function (n) { return n.textContent.trim(); }),
            httpHeaders: 'unavailable to page JavaScript', cookieNamesVisibleToJavaScript: cookies, inlineMoodleScripts: scripts },
-@@ -5226,6 +6042,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -5226,6 +6325,8 @@ var __ssW=window,__msePageWindow=window;
      }
      function debugTraffic(event) {
        if (!win.MSEBridge || !win.MSEBridge.debugEnabled()) return;
@@ -6781,7 +7566,7 @@ index 2f684ea..4f30538 100644
        var dump = snifDump(); dump.traffic = event;
        win.MSEBridge.sendDump('debug', dump);
      }
-@@ -5239,6 +6057,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5239,6 +6340,7 @@ var __ssW=window,__msePageWindow=window;
      }
      var snifText = '';
      function viewSnif() {
@@ -6789,7 +7574,7 @@ index 2f684ea..4f30538 100644
        body.appendChild(N(el('div', 'sec', 'Snif · local only')));
        body.appendChild(N(el('div', 'empty', 'May contain session keys and personal data. Review before sharing.')));
        var copy = el('button', 'btn solid', 'Copy');
-@@ -5264,8 +6083,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -5264,8 +6366,8 @@ var __ssW=window,__msePageWindow=window;
        var title = CONFIG.brand;
        var leading = 'info';
        if (state.route === 'answers' && state.question) {
@@ -6800,7 +7585,7 @@ index 2f684ea..4f30538 100644
        } else if (state.route === 'account') { sub = 'account'; }
        else if (state.route === 'gateway') { sub = 'AI gateway'; leading = 'back'; }
        else if (state.route === 'net') { sub = 'network'; leading = 'back'; }
-@@ -5328,6 +6147,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5328,6 +6430,7 @@ var __ssW=window,__msePageWindow=window;
          if (!q) return false;
          return applyAnswer(q, { label: label });
        },
@@ -6808,7 +7593,7 @@ index 2f684ea..4f30538 100644
        agent: function () { return state.agent; },
        runAgent: function () { runAgent(false); return true; },
        log: function () { return log.slice(-40); },
-@@ -5374,6 +6194,7 @@ var __ssW=window,__msePageWindow=window;
+@@ -5374,6 +6477,7 @@ var __ssW=window,__msePageWindow=window;
              : state.agent && state.agent.state === 'error' ? { state: 'error', text: state.agent.text }
              : state.agent && state.agent.state === 'running' ? { state: 'running', text: '' }
              : null,
@@ -6816,7 +7601,7 @@ index 2f684ea..4f30538 100644
            tier: state.tier,
            meta: state.meta,
            identity: identity(),
-@@ -5386,7 +6207,8 @@ var __ssW=window,__msePageWindow=window;
+@@ -5386,7 +6490,8 @@ var __ssW=window,__msePageWindow=window;
              supported: state.question.supported,
              identity: state.question.identity,
              questionId: state.question.questionId,
@@ -6827,14 +7612,14 @@ index 2f684ea..4f30538 100644
          };
        }
 diff --git a/package.json b/package.json
-index ae78558..a2f06e0 100644
+index ae78558..5627e66 100644
 --- a/package.json
 +++ b/package.json
 @@ -1,6 +1,6 @@
  {
    "name": "mse",
 -  "version": "2.8.0",
-+  "version": "2.14.0",
++  "version": "2.14.1",
    "private": true,
    "description": "MSE — Moodle answer panel (userscript) and the gateway/router stack behind it",
    "license": "UNLICENSED",
@@ -7172,7 +7957,7 @@ index 460786e..c80a1a0 100644
 +  assert.equal(invalid.status, 400);
  });
 diff --git a/tests/bot_280.py b/tests/bot_280.py
-index d16b8c2..99e0928 100644
+index d16b8c2..3cbaf78 100644
 --- a/tests/bot_280.py
 +++ b/tests/bot_280.py
 @@ -38,8 +38,8 @@ h_screen = screens.home(st_mock)
@@ -7181,7 +7966,7 @@ index d16b8c2..99e0928 100644
  assert 'data="dump:list"' not in html, "Old dump:list button should not be on home screen"
 -assert 'version 2.8.0' in html, "Version 2.8.0 should be displayed in footer"
 -print("ok 2 - Bug 6: button labeled 'дампы/логи' with data='dump:all' and version 2.8.0")
-+assert ('version 2.14.0' in html or 'version 2.13.1' in html or 'version 2.13.0' in html or 'version 2.12.0' in html or 'version 2.11.0' in html or 'version 2.10.0' in html or 'version 2.8.0' in html), "Version should be displayed in footer"
++assert ('version 2.14.1' in html or 'version 2.14.0' in html or 'version 2.13.1' in html or 'version 2.13.0' in html or 'version 2.12.0' in html or 'version 2.11.0' in html or 'version 2.10.0' in html or 'version 2.8.0' in html), "Version should be displayed in footer"
 +print("ok 2 - Bug 6: button labeled 'дампы/логи' with data='dump:all' and version 2.10.0")
  
  # 3. Test Bug 6: packaging dumps and logs into zip archive
@@ -7424,7 +8209,7 @@ index c8d31bf..66355e8 100644
  
      /* 3. the registration is pending, and the agent refuses until the owner allows the id */
 diff --git a/tests/onefile.test.js b/tests/onefile.test.js
-index 3d567b7..265986e 100644
+index 3d567b7..5f703e0 100644
 --- a/tests/onefile.test.js
 +++ b/tests/onefile.test.js
 @@ -17,9 +17,9 @@ const src = fs.readFileSync(path.join(ART, 'mse.user.js'), 'utf8');
@@ -7434,9 +8219,9 @@ index 3d567b7..265986e 100644
 -  assert.match(src, /^\/\/ @version\s+2\.8\.0$/m);
 -  assert.equal(report.version, '2.8.0');
 -  assert.equal(require('../package.json').version, '2.8.0');
-+  assert.match(src, /^\/\/ @version\s+2\.14\.0$/m);
-+  assert.equal(report.version, '2.14.0');
-+  assert.equal(require('../package.json').version, '2.14.0');
++  assert.match(src, /^\/\/ @version\s+2\.14\.1$/m);
++  assert.equal(report.version, '2.14.1');
++  assert.equal(require('../package.json').version, '2.14.1');
    assert.equal((src.match(/==UserScript==/g) || []).length, 1, 'exactly one userscript header');
    assert.equal((src.match(/==\/UserScript==/g) || []).length, 1, 'exactly one userscript footer');
    assert.equal((src.match(/^\s*\/\/\s*@require\b/gm) || []).length, 0, 'no @require');
@@ -7770,7 +8555,7 @@ index 0000000..8d87627
 +  }
 +});
 diff --git a/tests/router.test.js b/tests/router.test.js
-index 2e87aee..c0c1fbb 100644
+index 2e87aee..709a937 100644
 --- a/tests/router.test.js
 +++ b/tests/router.test.js
 @@ -45,7 +45,7 @@ const key = (n) => 'mse_' + String(n).repeat(48);
@@ -7787,7 +8572,7 @@ index 2e87aee..c0c1fbb 100644
    const st = await (await get('/admin/state', admin)).json();
    assert.equal(st.quota, 50);
 -  assert.equal(st.version, '2.8.0');
-+  assert.equal(st.version, '2.14.0');
++  assert.equal(st.version, '2.14.1');
    assert.ok(Array.isArray(st.log) && st.log.length > 0, 'the log tells what happened');
    assert.equal(st.backend, 'tailscale');
  });

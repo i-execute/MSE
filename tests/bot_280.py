@@ -38,7 +38,7 @@ h_screen = screens.home(st_mock)
 html = h_screen.to_msg().get("html", "")
 assert 'data="dump:all">дампы/логи<' in html, f"Expected 'дампы/логи' button, found: {html}"
 assert 'data="dump:list"' not in html, "Old dump:list button should not be on home screen"
-assert ('version 2.14.0' in html or 'version 2.13.1' in html or 'version 2.13.0' in html or 'version 2.12.0' in html or 'version 2.11.0' in html or 'version 2.10.0' in html or 'version 2.8.0' in html), "Version should be displayed in footer"
+assert ('version 2.14.1' in html or 'version 2.14.0' in html or 'version 2.13.1' in html or 'version 2.13.0' in html or 'version 2.12.0' in html or 'version 2.11.0' in html or 'version 2.10.0' in html or 'version 2.8.0' in html), "Version should be displayed in footer"
 print("ok 2 - Bug 6: button labeled 'дампы/логи' with data='dump:all' and version 2.10.0")
 
 # 3. Test Bug 6: packaging dumps and logs into zip archive

@@ -279,15 +279,15 @@ def test_5_client_diagnostics():
       assert.equal(pr.ok, false);
       assert.equal(pr.reachable, false);
       assert.equal(pr.netError, true);
-      assert.equal(pr.message, 'gateway unreachable from this network');
-      assert.ok(pr.diag && pr.diag.includes('problem with network or VPN'));
+      assert.equal(pr.message, 'gateway unreachable');
+      assert.ok(pr.diag && pr.diag.includes('transport:'));
 
       // 2. check() check
       const ch = await bridge.check('12345');
       assert.equal(ch.state, 'unreachable');
       assert.equal(ch.netError, true);
-      assert.equal(ch.message, 'gateway unreachable from this network');
-      assert.ok(ch.diag && ch.diag.includes('problem with network or VPN'));
+      assert.equal(ch.message, 'gateway unreachable');
+      assert.ok(ch.diag && ch.diag.includes('transport:'));
 
       console.log('Client diagnostics validated successfully in Node.');
     })().catch(e => {
@@ -297,7 +297,7 @@ def test_5_client_diagnostics():
     """
     res = subprocess.run(["node", "-e", node_test], cwd=str(ROOT), capture_output=True, text=True)
     assert res.returncode == 0, f"Node client diag test failed: {res.stderr}\n{res.stdout}"
-    print("  -> Passed: Client transforms TypeError into 'gateway unreachable from this network' with VPN diagnostics.")
+    print("  -> Passed: Client transforms TypeError into 'gateway unreachable' with transport diagnostics.")
 
 
 if __name__ == "__main__":

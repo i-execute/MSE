@@ -472,7 +472,8 @@ cmd_wait() {
   while [ "$waited" -lt "$timeout" ]; do
     if have curl; then
       # -k: the certificate of a fresh node can still be in flight; the check is "it answers", not "it is trusted"
-      if body="$(curl -fsSk --max-time 8 "$url/health" 2>"$TMP_REASON")"; then
+      # -4: bypass broken host IPv6 routing
+      if body="$(curl -4 -fsSk --max-time 8 "$url/health" 2>"$TMP_REASON")"; then
         case "$body" in
           *'"name"'*|*'"ok"'*|*'gateway'*)
             say "$url"
@@ -558,7 +559,7 @@ cmd_watchdog() {
     fi
     local health_code=0
     if have curl; then
-      health_code="$(curl -k -fsS -o /dev/null -w "%{http_code}" --max-time 8 "$url/health" 2>/dev/null || echo 0)"
+      health_code="$(curl -4 -k -fsS -o /dev/null -w "%{http_code}" --max-time 8 "$url/health" 2>/dev/null || echo 0)"
     fi
     local now_ts
     now_ts="$(python3 -c 'import datetime; print(datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00","Z"))' 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"

@@ -29,7 +29,7 @@ const VENDOR = LAYOUT.VENDOR;
 const OUT = LAYOUT.OUT;
 const SRC = LAYOUT.SRC;
 const BRAND = 'MSE';
-const VERSION = '2.14.0';
+const VERSION = '2.14.1';
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const read = (p) => fs.readFileSync(path.join(VENDOR, p), 'utf8');
@@ -301,7 +301,6 @@ const MATCHES = [
 const header = [
   '// ==UserScript==',
   `// @name         ${BRAND}`,
-  `// @name:ru      ${BRAND} — Moodle Solver Extension`,
   '// @namespace    https://github.com/mse',
   `// @version      ${VERSION}`,
   '// @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.',

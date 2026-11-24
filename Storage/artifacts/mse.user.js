@@ -1,8 +1,7 @@
 // ==UserScript==
 // @name         MSE
-// @name:ru      MSE — Moodle Solver Extension
 // @namespace    https://github.com/mse
-// @version      2.14.0
+// @version      2.14.1
 // @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @description Answers and hints for Moodle quizzes: the MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @author       MSE
@@ -1846,7 +1845,7 @@ var __ssW=window,__msePageWindow=window;
     keyKey: 'mse.gateway.key',
     keyMirrorKey: 'mse:local:gatewayKey',
     metaKey: 'mse.gateway.meta',
-    timeoutMs: 8000,
+    timeoutMs: 30000,
     agentTimeoutMs: 120000
   }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
 
@@ -2062,19 +2061,251 @@ var __ssW=window,__msePageWindow=window;
     return result;
   }
 
+  function getGmXhr() {
+    try {
+      if (typeof GM_xmlhttpRequest === 'function') return GM_xmlhttpRequest;
+    } catch (_) {}
+    try {
+      if (typeof window !== 'undefined' && typeof __ssW.GM_xmlhttpRequest === 'function') return __ssW.GM_xmlhttpRequest;
+    } catch (_) {}
+    try {
+      if (typeof globalThis !== 'undefined' && typeof globalThis.GM_xmlhttpRequest === 'function') return globalThis.GM_xmlhttpRequest;
+    } catch (_) {}
+    try {
+      if (typeof GM !== 'undefined' && GM && typeof GM.xmlHttpRequest === 'function') {
+        return function (opts) { return GM.xmlHttpRequest(opts); };
+      }
+    } catch (_) {}
+    try {
+      if (typeof window !== 'undefined' && __ssW.GM && typeof __ssW.GM.xmlHttpRequest === 'function') {
+        return function (opts) { return __ssW.GM.xmlHttpRequest(opts); };
+      }
+    } catch (_) {}
+    try {
+      if (typeof __mseGm !== 'undefined' && __mseGm && typeof __mseGm.xhr === 'function') return __mseGm.xhr;
+    } catch (_) {}
+    try {
+      if (typeof window !== 'undefined' && __ssW.__mseGm && typeof __ssW.__mseGm.xhr === 'function') return __ssW.__mseGm.xhr;
+    } catch (_) {}
+    try {
+      if (typeof globalThis !== 'undefined' && globalThis.__mseGm && typeof globalThis.__mseGm.xhr === 'function') return globalThis.__mseGm.xhr;
+    } catch (_) {}
+    return null;
+  }
+
+  function gmFetch(url, opts) {
+    var gm = getGmXhr();
+    if (!gm) return Promise.reject(new Error('GM_xmlhttpRequest not available'));
+
+    return new Promise(function (resolve, reject) {
+      var options = opts || {};
+      var method = (options.method || 'GET').toUpperCase();
+      var timeout = options.timeout || (/agent|\x2Fchat\x2Fcompletions/i.test(url) ? (CONFIG.agentTimeoutMs || 120000) : (CONFIG.timeoutMs || 30000));
+      var signal = options.signal;
+      var completed = false;
+      var abortHandler = null;
+
+      if (signal && signal.aborted) {
+        var ab = new Error('The operation was aborted');
+        ab.name = 'AbortError';
+        ab.transport = 'gm';
+        return reject(ab);
+      }
+
+      var reqHeaders = {};
+      if (options.headers) {
+        if (typeof options.headers.forEach === 'function') {
+          options.headers.forEach(function (v, k) { reqHeaders[k] = v; });
+        } else {
+          for (var hk in options.headers) {
+            if (Object.prototype.hasOwnProperty.call(options.headers, hk)) {
+              reqHeaders[hk] = options.headers[hk];
+            }
+          }
+        }
+      }
+
+      function cleanup() {
+        if (signal && abortHandler && signal.removeEventListener) {
+          try { signal.removeEventListener('abort', abortHandler); } catch (_) {}
+        }
+      }
+
+      var gmDetails = {
+        method: method,
+        url: String(url),
+        headers: reqHeaders,
+        data: options.body || null,
+        timeout: timeout,
+        onload: function (resp) {
+          if (completed) return;
+          completed = true;
+          cleanup();
+          var rawHeaders = resp.responseHeaders || '';
+          var parsedHeaders = {};
+          if (rawHeaders) {
+            var lines = String(rawHeaders).split(/\r?\n/);
+            for (var i = 0; i < lines.length; i++) {
+              var idx = lines[i].indexOf(':');
+              if (idx > 0) {
+                var k = lines[i].slice(0, idx).trim().toLowerCase();
+                var v = lines[i].slice(idx + 1).trim();
+                parsedHeaders[k] = v;
+              }
+            }
+          }
+          var headersObj = {
+            get: function (name) {
+              if (!name) return null;
+              var key = String(name).toLowerCase();
+              return Object.prototype.hasOwnProperty.call(parsedHeaders, key) ? parsedHeaders[key] : null;
+            },
+            has: function (name) {
+              if (!name) return false;
+              return Object.prototype.hasOwnProperty.call(parsedHeaders, String(name).toLowerCase());
+            }
+          };
+          var status = Number(resp.status) || 200;
+          var resObj = {
+            ok: status >= 200 && status < 300,
+            status: status,
+            statusText: resp.statusText || (status >= 200 && status < 300 ? 'OK' : 'Error'),
+            headers: headersObj,
+            transport: 'gm',
+            url: resp.finalUrl || String(url),
+            text: function () {
+              return Promise.resolve(String(resp.responseText != null ? resp.responseText : ''));
+            },
+            json: function () {
+              try {
+                return Promise.resolve(JSON.parse(resp.responseText || 'null'));
+              } catch (e) {
+                return Promise.reject(e);
+              }
+            },
+            clone: function () {
+              return this;
+            }
+          };
+          resolve(resObj);
+        },
+        onerror: function (errResp) {
+          if (completed) return;
+          completed = true;
+          cleanup();
+          var netErr = new TypeError('Load failed');
+          netErr.transport = 'gm';
+          netErr.status = (errResp && errResp.status) || 0;
+          netErr.details = (errResp && (errResp.error || errResp.responseText)) || 'GM_xmlhttpRequest failed';
+          reject(netErr);
+        },
+        ontimeout: function () {
+          if (completed) return;
+          completed = true;
+          cleanup();
+          var timeErr = new Error('The operation timed out');
+          timeErr.name = 'TimeoutError';
+          timeErr.transport = 'gm';
+          reject(timeErr);
+        },
+        onabort: function () {
+          if (completed) return;
+          completed = true;
+          cleanup();
+          var abErr = new Error('The operation was aborted');
+          abErr.name = 'AbortError';
+          abErr.transport = 'gm';
+          reject(abErr);
+        }
+      };
+
+      var reqHandle = null;
+      try {
+        reqHandle = gm(gmDetails);
+      } catch (callErr) {
+        completed = true;
+        cleanup();
+        return reject(callErr);
+      }
+
+      if (signal && signal.addEventListener) {
+        abortHandler = function () {
+          if (completed) return;
+          completed = true;
+          cleanup();
+          if (reqHandle && typeof reqHandle.abort === 'function') {
+            try { reqHandle.abort(); } catch (_) {}
+          }
+          var abErr = new Error('The operation was aborted');
+          abErr.name = 'AbortError';
+          abErr.transport = 'gm';
+          reject(abErr);
+        };
+        signal.addEventListener('abort', abortHandler);
+      }
+    });
+  }
+
+  var lastTransport = 'none';
+
   function tracedFetch(url, options) {
     var opts = options || {};
-    var request = {method: opts.method || 'GET', url: String(url), body: opts.body || null};
-    return __ssW.fetch(url, opts).then(function (response) {
+    var request = { method: opts.method || 'GET', url: String(url), body: opts.body || null };
+    var gm = getGmXhr();
+    var fetchPromise;
+    var currentTransport = 'fetch';
+
+    if (gm) {
+      currentTransport = 'gm';
+      lastTransport = 'gm';
+      try {
+        fetchPromise = gmFetch(url, opts);
+      } catch (err) {
+        if (typeof window !== 'undefined' && typeof __ssW.fetch === 'function') {
+          currentTransport = 'fetch';
+          lastTransport = 'fetch';
+          fetchPromise = __ssW.fetch(url, opts);
+        } else {
+          return Promise.reject(err);
+        }
+      }
+    } else if (typeof window !== 'undefined' && typeof __ssW.fetch === 'function') {
+      currentTransport = 'fetch';
+      lastTransport = 'fetch';
+      fetchPromise = __ssW.fetch(url, opts);
+    } else {
+      return Promise.reject(new Error('No HTTP transport available (neither GM_xmlhttpRequest nor fetch)'));
+    }
+
+    return fetchPromise.then(function (response) {
+      if (response && !response.transport) {
+        response.transport = currentTransport;
+      }
       if (__ssW.__mse && __ssW.__mse.onDebugTraffic && __ssW.MSEBridge && __ssW.MSEBridge.debugEnabled()) {
-        response.clone().text().then(function (raw) {
-          var parsed; try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
-          __ssW.__mse.onDebugTraffic({request:request, response:{status:response.status, body:parsed}});
-        }, function () {});
+        try {
+          var cloneP = (response && response.clone) ? response.clone() : response;
+          cloneP.text().then(function (raw) {
+            var parsed; try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
+            __ssW.__mse.onDebugTraffic({
+              request: request,
+              transport: currentTransport,
+              response: { status: response.status, body: parsed }
+            });
+          }, function () {});
+        } catch (_) {}
       }
       return response;
     }, function (error) {
-      if (__ssW.__mse && __ssW.__mse.onDebugTraffic && __ssW.MSEBridge && __ssW.MSEBridge.debugEnabled()) __ssW.__mse.onDebugTraffic({request:request, error:String(error && error.message || 'network')});
+      if (__ssW.__mse && __ssW.__mse.onDebugTraffic && __ssW.MSEBridge && __ssW.MSEBridge.debugEnabled()) {
+        __ssW.__mse.onDebugTraffic({
+          request: request,
+          transport: currentTransport,
+          error: String(error && error.message || 'network')
+        });
+      }
+      if (error && !error.transport) {
+        error.transport = currentTransport;
+      }
       throw error;
     });
   }
@@ -2105,7 +2336,8 @@ var __ssW=window,__msePageWindow=window;
               url: String(url),
               attempt: 1,
               delay: 500,
-              diag: 'gateway unreachable from this network (VPN or DNS/TLS drop), retrying...'
+              transport: lastTransport,
+              diag: 'gateway unreachable, retrying once...'
             });
           }
           return new Promise(function (resolve) {
@@ -2117,27 +2349,23 @@ var __ssW=window,__msePageWindow=window;
               return res2;
             }, function (err2) {
               gatewayInFlight--;
-              if (isLoadFailed(err2)) {
-                var wrapped = new TypeError('gateway unreachable from this network');
-                wrapped.originalError = err2;
-                wrapped.attempt = 2;
-                wrapped.url = String(url);
-                wrapped.diagnostic = 'gateway unreachable from this network (VPN or network drop): URL=' + url + ', attempt=2, DNS/TCP/TLS connection blocked by network or VPN';
-                throw wrapped;
-              }
-              throw err2;
+              var wrapped = new TypeError('gateway unreachable');
+              wrapped.originalError = err2;
+              wrapped.attempt = 2;
+              wrapped.url = String(url);
+              wrapped.transport = (err2 && err2.transport) || lastTransport;
+              wrapped.diagnostic = 'gateway unreachable: URL=' + url + ', attempt=2, transport=' + wrapped.transport;
+              throw wrapped;
             });
           });
         }
-        if (isLoadFailed(err)) {
-          var wrapped2 = new TypeError('gateway unreachable from this network');
-          wrapped2.originalError = err;
-          wrapped2.attempt = attempt + 1;
-          wrapped2.url = String(url);
-          wrapped2.diagnostic = 'gateway unreachable from this network (VPN or network drop): URL=' + url + ', attempt=' + (attempt + 1);
-          throw wrapped2;
-        }
-        throw err;
+        var wrapped2 = new TypeError('gateway unreachable');
+        wrapped2.originalError = err;
+        wrapped2.attempt = attempt + 1;
+        wrapped2.url = String(url);
+        wrapped2.transport = (err && err.transport) || lastTransport;
+        wrapped2.diagnostic = 'gateway unreachable: URL=' + url + ', attempt=' + (attempt + 1) + ', transport=' + wrapped2.transport;
+        throw wrapped2;
       });
     };
     var next = gatewayQueue.then(run, run);
@@ -2248,10 +2476,20 @@ var __ssW=window,__msePageWindow=window;
       if (!url) return Promise.reject(new Error('address is not set'));
       var started = Date.now();
       var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs);
-      return gatewayFetch(url + '/health', { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
+      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CONFIG.timeoutMs || 30000);
+      return gatewayFetch(url + '/health', {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { accept: 'application/json' },
+        signal: ctrl ? ctrl.signal : undefined,
+        timeout: CONFIG.timeoutMs || 30000
+      })
         .then(function (r) {
-          return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }, function () { return { ok: r.ok, status: r.status, json: null }; });
+          return r.json().then(function (j) {
+            return { ok: r.ok, status: r.status, json: j, transport: r.transport || lastTransport };
+          }, function () {
+            return { ok: r.ok, status: r.status, json: null, transport: r.transport || lastTransport };
+          });
         })
         .then(function (res) {
           clearTimeout(timer);
@@ -2267,14 +2505,16 @@ var __ssW=window,__msePageWindow=window;
             model: (j && (j.model || (Array.isArray(j.models) && j.models[0]))) || null,
             quota: j.quota || null,
             upstream: j.upstream || null,
+            transport: res.transport || lastTransport,
             message: !res.ok ? 'the address answered ' + res.status
-              :!mine ? 'something answers at this address, but it is not an MSE gateway'
+              : !mine ? 'something answers at this address, but it is not an MSE gateway'
               : 'AI gateway is up'
           };
         }, function (e) {
           clearTimeout(timer);
           var isNet = isLoadFailed(e);
-          var msg = isNet ? 'gateway unreachable from this network' : ('address offline: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network'));
+          var tr = (e && e.transport) || lastTransport;
+          var msg = isNet ? 'gateway unreachable' : ('address offline: ' + (e && e.name === 'AbortError' ? 'timeout' : (e && e.message) || 'network'));
           return {
             ok: false,
             reachable: false,
@@ -2283,8 +2523,9 @@ var __ssW=window,__msePageWindow=window;
             message: msg,
             netError: isNet,
             url: url,
-            attempt: e && e.attempt || 1,
-            diag: isNet ? ('URL: ' + url + ' · attempt #' + (e && e.attempt || 1) + ' · problem with network or VPN (DNS/TCP/TLS drop)') : (e && e.message)
+            transport: tr,
+            attempt: (e && e.attempt) || 1,
+            diag: 'transport: ' + tr + ' · attempt #' + ((e && e.attempt) || 1) + ' · URL: ' + url + ' · ' + ((e && e.message) || 'network error')
           };
         });
     },
@@ -2397,6 +2638,7 @@ var __ssW=window,__msePageWindow=window;
             } else {
               resObj = { state: effState, message: (j && j.hint) || (j && j.message) || 'key not accepted', device: d, meta: meta, ms: ms, model: model };
             }
+            resObj.transport = r.transport || lastTransport;
             try {
               lsSet('mse.cache.gw_check', JSON.stringify({ key: key, check: resObj, t: Date.now() }));
             } catch (_) {}
@@ -2405,15 +2647,17 @@ var __ssW=window,__msePageWindow=window;
         }, function (e) {
           var ms = Date.now() - started;
           var isNet = isLoadFailed(e);
-          var msg = isNet ? 'gateway unreachable from this network' : ('the gateway does not answer: ' + (e && e.message ? e.message : 'network'));
+          var tr = (e && e.transport) || lastTransport;
+          var msg = isNet ? 'gateway unreachable' : ('the gateway does not answer: ' + (e && e.message ? e.message : 'network'));
           return {
             state: 'unreachable',
             message: msg,
             ms: ms,
             netError: isNet,
             url: url,
-            attempt: e && e.attempt || 1,
-            diag: isNet ? ('URL: ' + url + ' · attempt #' + (e && e.attempt || 1) + ' · problem with network or VPN (DNS/TCP/TLS drop)') : (e && e.message)
+            transport: tr,
+            attempt: (e && e.attempt) || 1,
+            diag: 'transport: ' + tr + ' · attempt #' + ((e && e.attempt) || 1) + ' · URL: ' + url + ' · ' + ((e && e.message) || 'network error')
           };
         });
     },
@@ -2469,11 +2713,16 @@ var __ssW=window,__msePageWindow=window;
       lastAgentRequest = record;
       var reqHeaders = { 'content-type': 'application/json', accept: 'text/event-stream, application/json', authorization: 'Bearer ' + self.key() };
       if (payload.moodleId) reqHeaders['x-moodle-id'] = String(payload.moodleId);
+      var sig = payload.signal || (ctrl ? ctrl.signal : undefined);
+      if (payload.signal && payload.signal.addEventListener && ctrl) {
+        payload.signal.addEventListener('abort', function () { ctrl.abort(); });
+      }
       return gatewayFetch(url + '/mse/v1/agent', {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(body),
-        signal: ctrl ? ctrl.signal : undefined
+        signal: sig,
+        timeout: timeoutMs
       }).then(function (r) {
         if (/text\x2Fevent-stream/i.test(String(r.headers.get('content-type') || '')) && r.body && r.body.getReader) {
           var reader = r.body.getReader(), decoder = new TextDecoder(), pending = '', result = null;
@@ -2502,7 +2751,24 @@ var __ssW=window,__msePageWindow=window;
         }
         return r.text().then(function (raw) {
           var j = null;
-          try { j = JSON.parse(raw); } catch (e) {}
+          if (/text\x2Fevent-stream/i.test(String(r.headers.get('content-type') || '')) || /^(event|data):/m.test(raw)) {
+            var result = null;
+            raw.split(/\r?\n\r?\n/).forEach(function (block) {
+              var name = '', data = [];
+              block.split(/\r?\n/).forEach(function (line) {
+                if (line.indexOf(':') === 0) return;
+                if (line.indexOf('event:') === 0) name = line.slice(6).trim();
+                if (line.indexOf('data:') === 0) data.push(line.slice(5).trim());
+              });
+              var value; try { value = JSON.parse(data.join('\n')); } catch (_) { return; }
+              if (name === 'stage' && typeof onStage === 'function') onStage(value.stage);
+              if (name === 'result') result = value;
+            });
+            if (result) j = result;
+          }
+          if (!j) {
+            try { j = JSON.parse(raw); } catch (e) {}
+          }
           record.response = { status: r.status, json: j, body: j === null ? raw : undefined };
           return { status: r.status, j: j, retryAfter: Number(r.headers.get('retry-after') || 0) };
         });
@@ -2558,34 +2824,50 @@ var __ssW=window,__msePageWindow=window;
       return gatewayFetch(url + '/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + self.key() },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
+        timeout: CONFIG.agentTimeoutMs || 120000
       }).then(function (r) {
         if (!r.ok) return r.json().then(function (j) { throw new Error((j && j.error && j.error.message) || ('the gateway answered ' + r.status)); });
         if (!onChunk) return r.json();
          
-        var reader = r.body.getReader();
-        var dec = new TextDecoder();
-        var buf = '';
-        function pump() {
-          return reader.read().then(function (step) {
-            if (step.done) return true;
-            buf += dec.decode(step.value, { stream: true });
-            var lines = buf.split('\n');
-            buf = lines.pop();
-            lines.forEach(function (line) {
-              var m = /^data: (.*)$/.exec(line.trim());
-              if (!m) return;
-              if (m[1] === '[DONE]') return;
-              try {
-                var j = JSON.parse(m[1]);
-                var d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
-                if (d) onChunk(d);
-              } catch (e) {}
+        if (r.body && r.body.getReader) {
+          var reader = r.body.getReader();
+          var dec = new TextDecoder();
+          var buf = '';
+          function pump() {
+            return reader.read().then(function (step) {
+              if (step.done) return true;
+              buf += dec.decode(step.value, { stream: true });
+              var lines = buf.split('\n');
+              buf = lines.pop();
+              lines.forEach(function (line) {
+                var m = /^data: (.*)$/.exec(line.trim());
+                if (!m) return;
+                if (m[1] === '[DONE]') return;
+                try {
+                  var j = JSON.parse(m[1]);
+                  var d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+                  if (d) onChunk(d);
+                } catch (e) {}
+              });
+              return pump();
             });
-            return pump();
-          });
+          }
+          return pump();
         }
-        return pump();
+        return r.text().then(function (raw) {
+          raw.split('\n').forEach(function (line) {
+            var m = /^data: (.*)$/.exec(line.trim());
+            if (!m) return;
+            if (m[1] === '[DONE]') return;
+            try {
+              var j = JSON.parse(m[1]);
+              var d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+              if (d) onChunk(d);
+            } catch (e) {}
+          });
+          return true;
+        });
       });
     },
 
@@ -3915,6 +4197,7 @@ var __ssW=window,__msePageWindow=window;
       if (extra && extra.diag) line.diag = String(extra.diag);
       if (extra && extra.url) line.url = String(extra.url);
       if (extra && extra.attempt) line.attempt = Number(extra.attempt);
+      if (extra && extra.transport) line.transport = String(extra.transport);
       log.push(line);
       if (log.length > 120) log.splice(0, log.length - 120);
       ls.set(CONFIG.logKey, JSON.stringify(log));
@@ -5691,6 +5974,7 @@ var __ssW=window,__msePageWindow=window;
       var gw = state.gw;
       var br = win.MSEBridge;
       if (!br || !raw) return Promise.resolve(null);
+      if (gw.busy === 'check') return Promise.resolve(null);
       var epoch = ++state.modelEpoch;
       gw.busy = 'check';
       gw.probe = null;
@@ -5701,7 +5985,7 @@ var __ssW=window,__msePageWindow=window;
           if (epoch === state.modelEpoch && raw === br.url()) state.gatewayModel = null;
           gw.busy = null;
           var msg = r.message || 'the gateway does not answer';
-          var extra = { ms: r.ms, url: r.url || raw, attempt: r.attempt || 1 };
+          var extra = { ms: r.ms, url: r.url || raw, attempt: r.attempt || 1, transport: r.transport };
           if (r.diag) extra.diag = r.diag;
           logAdd('gateway', false, msg, extra);
           render();
@@ -5735,7 +6019,7 @@ var __ssW=window,__msePageWindow=window;
           }
           var ms = (res && res.ms != null) ? res.ms : (r && r.ms ? r.ms : 0);
           var statusText = (res.state === 'active' ? 'key accepted' : (res.message || res.state)) + (ms ? ' · ' + ms + ' ms' : '');
-          var extra = { ms: ms, url: res.url || raw, attempt: res.attempt || 1 };
+          var extra = { ms: ms, url: res.url || raw, attempt: res.attempt || 1, transport: res.transport || r.transport };
           if (res.diag) extra.diag = res.diag;
           logAdd('gateway', res.state === 'active', statusText, extra);
           render();
@@ -5744,13 +6028,15 @@ var __ssW=window,__msePageWindow=window;
       }, function (e) {
         gw.busy = null;
         var isNet = (win.MSEBridge && win.MSEBridge.isLoadFailed) ? win.MSEBridge.isLoadFailed(e) : (e && e.name === 'TypeError');
-        var msg = isNet ? 'gateway unreachable from this network' : ((e && e.message) || 'error');
-        gw.probe = { ok: false, message: msg, netError: isNet };
+        var tr = (e && e.transport) || 'unknown';
+        var msg = isNet ? 'gateway unreachable' : ((e && e.message) || 'error');
+        gw.probe = { ok: false, message: msg, netError: isNet, transport: tr };
         var extra = {
           ms: null,
           url: raw,
           attempt: (e && e.attempt) || 1,
-          diag: isNet ? ('URL: ' + raw + ' · attempt #' + ((e && e.attempt) || 1) + ' · problem with network or VPN (DNS/TCP/TLS blocked)') : ((e && e.message) || 'network')
+          transport: tr,
+          diag: 'transport: ' + tr + ' · attempt #' + ((e && e.attempt) || 1) + ' · URL: ' + raw + ' · ' + ((e && e.message) || 'network error')
         };
         logAdd('gateway', false, msg, extra);
         render();
@@ -5821,7 +6107,6 @@ var __ssW=window,__msePageWindow=window;
       frow.appendChild(toggle);
 
       var statusRow = null;
-      var statusHint = null;
       if (gw.check) {
         statusRow = el('div', 'row');
         var isActive = gw.check.state === 'active';
@@ -5829,23 +6114,20 @@ var __ssW=window,__msePageWindow=window;
         statusRow.appendChild(el('span', 'dot ' + (isActive ? 'ok' : (isUnreach ? 'bad' : 'warn'))));
         var msVal = gw.check.ms != null ? gw.check.ms : (gw.probe && gw.probe.ms != null ? gw.probe.ms : null);
         var msPart = msVal != null ? ' · ' + msVal + ' ms' : '';
-        var statusText = isActive ? 'key accepted' + msPart : (gw.check.message || 'key not accepted') + msPart;
+        var trVal = gw.check.transport || (gw.probe && gw.probe.transport) || '';
+        var trPart = trVal ? ' (' + trVal + ')' : '';
+        var statusText = isActive ? 'key accepted' + msPart + trPart : (gw.check.message || 'key not accepted') + msPart + trPart;
         statusRow.appendChild(el('span', 'txt', statusText));
-        if (isUnreach) {
-          statusHint = el('div', 'hint', 'problem with network or VPN: disable VPN or use Cloudflare tunnel');
-        }
       } else if (gw.probe) {
         statusRow = el('div', 'row');
         statusRow.appendChild(el('span', 'dot ' + (gw.probe.ok ? 'ok' : 'bad')));
-        statusRow.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered · ' + gw.probe.ms + ' ms' : gw.probe.message));
-        if (!gw.probe.ok && (gw.probe.netError || /unreachable|offline/i.test(gw.probe.message))) {
-          statusHint = el('div', 'hint', 'problem with network or VPN: disable VPN or use Cloudflare tunnel');
-        }
+        var prMs = gw.probe.ms != null ? ' · ' + gw.probe.ms + ' ms' : '';
+        var prTr = gw.probe.transport ? ' (' + gw.probe.transport + ')' : '';
+        statusRow.appendChild(el('span', 'txt', gw.probe.ok ? 'AI gateway answered' + prMs + prTr : (gw.probe.message || 'the address did not answer') + prMs + prTr));
       }
       if (statusRow) {
         body.appendChild(N(el('div', 'sec', 'status'), 0));
         body.appendChild(N(statusRow, 1));
-        if (statusHint) body.appendChild(N(statusHint, 1));
       }
 
       if (gw.check && gw.check.state === 'active') {
@@ -5904,6 +6186,7 @@ var __ssW=window,__msePageWindow=window;
       var copy = press(el('button', 'btn solid press', 'Copy'), function () {
         var lines = log.map(function (l) {
           var lineStr = new Date(l.t).toISOString() + ' [' + l.kind + '] ' + (l.ok ? 'OK' : 'FAIL') + ': ' + l.text + (l.ms != null ? ' (' + l.ms + ' ms)' : '');
+          if (l.transport) lineStr += ' | transport: ' + l.transport;
           if (l.diag) lineStr += ' | diag: ' + l.diag;
           if (l.url) lineStr += ' | url: ' + l.url;
           if (l.attempt) lineStr += ' | attempt #' + l.attempt;

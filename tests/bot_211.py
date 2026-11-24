@@ -60,7 +60,7 @@ print("ok 2 - A10: Inline 'добавить' and 'отклонить' buttons pr
 # 3. Verify footer has version
 h_screen = screens.home({"health": {}, "devices": []}, notice="")
 h_html = h_screen.to_msg().get("html", "")
-assert ("version 2.14.0" in h_html or "version 2.13.1" in h_html or "version 2.13.0" in h_html or "version 2.12.0" in h_html or "version 2.11.0" in h_html), f"Expected version in footer, got {h_html}"
+assert ("version 2.14.1" in h_html or "version 2.14.0" in h_html or "version 2.13.1" in h_html or "version 2.13.0" in h_html or "version 2.12.0" in h_html or "version 2.11.0" in h_html), f"Expected version in footer, got {h_html}"
 print("ok 3 - Version 2.12.0 present in home footer")
 
 print("\nALL BOT 2.11 TESTS PASSED")

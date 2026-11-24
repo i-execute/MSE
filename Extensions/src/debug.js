@@ -256,7 +256,7 @@
         var s = String(v);
         if (!s || s.length > 160) return;
         var isId = ID_KEYS.test(k);
-        var isName = NAME_KEYS.test(k) || (typeof v === 'string' && /[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+/.test(s) && /name/i.test(k));
+        var isName = NAME_KEYS.test(k) || (typeof v === 'string' && /[\u0410-\u044f\u0401\u0451]{2,}\s+[\u0410-\u044f\u0401\u0451]{2,}/.test(s) && /name/i.test(k));
         if (isId || isName) out.push({ where: p, key: k, value: s, kind: isId ? 'id' : 'name' });
       });
       return out;

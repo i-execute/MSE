@@ -46,6 +46,7 @@ for(const [index,name] of [[3,'mse-ui'],[0,'mse-bridge']]) {
  report.pageScripts[name]={bytes:clean.code.length,sha256:sha(clean.code),sanitizer:clean.stats};
 }
 script=script.replace(/^(\/\/ @version\s+)\S+/m,'$1'+version);
+script=script.replace(/^\/\/\s*@name:ru\s+.*\n/m, '');
 if(!script.includes('*://*/course/view.php*')){
  script=script.replace('// @match        *://*/my/index.php*\n','// @match        *://*/my/index.php*\n// @match        *://*/course/view.php*\n// @match        *://*/course/index.php*\n');
 }

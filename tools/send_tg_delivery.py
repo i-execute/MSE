@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send MSE 2.14.0 delivery files and summary to Telegram owner.
+"""Send MSE 2.14.1 delivery files and summary to Telegram owner.
 Usage:
     MSE_BOT_TOKEN=... python3 tools/send_tg_delivery.py
 """
@@ -19,7 +19,7 @@ ARTIFACTS = ROOT / "Storage" / "artifacts"
 CHAT_ID = os.environ.get("MSE_OWNER_ID") or os.environ.get("TELEGRAM_CHAT_ID") or "7610246474"
 
 def make_delivery_zip() -> Path:
-    zip_path = ARTIFACTS / "MSE-2.14.0.zip"
+    zip_path = ARTIFACTS / "MSE-2.14.1.zip"
     include_dirs = [
         "Extensions/src",
         "Extensions/tools",
@@ -33,12 +33,12 @@ def make_delivery_zip() -> Path:
     include_files = [
         "Storage/artifacts/mse.user.js",
         "Storage/artifacts/build-report.json",
-        "Storage/artifacts/mse-2.14.0.patch",
+        "Storage/artifacts/mse-2.14.1.patch",
         "Storage/get.sh",
         "package.json",
         "package-lock.json",
         "README.md",
-        "RELEASE_2.14.0.md",
+        "RELEASE_2.14.1.md",
         "CHANGES.md",
         "LICENSE",
     ]
@@ -114,16 +114,17 @@ def main():
         print("Delivery archive created successfully at:", zip_path)
         return 0
 
-    report_text = """<b>MSE 2.14.0 «ДОСТУП ИЗ КОРОБКИ» Delivered</b>
+    report_text = """<b>MSE 2.14.1 CRITICAL HOTFIX Delivered</b>
 
 <b>Key Highlights:</b>
-• <b>Port Persistence Across Reinstalls</b>: <code>install.sh</code> and <code>get.sh</code> preserve <code>MSE_PORT</code> and <code>MSE_UPSTREAM_PORT</code> from <code>/var/lib/mse/state.json</code> and env. Prevents Tailscale edge cache desync. Fresh ports allocated only with <code>--new-ports</code>.
-• <b>Tunnel Doctor (<code>mse-tunnel.sh doctor</code> + Bot/TUI)</b>: Comprehensive diagnosis of DNS (A/AAAA), external 443 latency/RTT, serve/funnel vs MSE_PORT match, and <code>tailscaled</code> journal parsing for drops (<code>no rules matched</code> &amp; <code>TLS EOF from fd7a:</code>). Provides clear verdict and ready-to-paste treatment command (<code>sudo mse-tunnel.sh funnel-reset</code>).
-• <b>Tunnel Auto-Recovery Watchdog</b>: Background watchdog (<code>mse-tunnel.sh watchdog</code>) checks external <code>/health</code> every minute; on 3 consecutive failures automatically resets funnel + restarts tailscaled and logs <code>tunnel watchdog: recovered</code> to <code>mse-router.log</code>.
-• <b>Cloudflared Named Tunnel as Primary Path</b>: Permanent CF Zero Trust tunnel (<code>cloudflared-named &lt;token&gt; &lt;domain&gt;</code>) configured via TUI; quick-tunnel fallback labeled as temporary; Telegram bot alerts owner on URL changes.
-• <b>Client Diagnostics on Network Drops</b>: Replaced raw "Load failed" with <code>gateway unreachable from this network</code> + detailed network log (URL, attempt #, VPN/network explanation: "problem with network or VPN"). Retains 500ms single retry.
-• <b>Known Issues Documentation</b>: Comprehensive «Известные хвори и их лечение» added to <code>README_RU.md</code>, <code>ios_ru.md</code>, and <code>README.md</code>.
-• <b>Audit &amp; Tests</b>: All tests pass (Gateway/Router 23/23, WebKit iOS 11/11, Bot selftest, 2.14 suite 5/5); <code>scripts/audit.py --strict</code> clean 0 hits x3."""
+• <b>Privileged GM_xmlhttpRequest Transport</b>: All gateway calls (<code>probe</code>, <code>check</code>, <code>register</code>, <code>agent</code>, <code>quota</code>, <code>dump</code>, <code>chat</code>) now execute via <code>GM_xmlhttpRequest</code>. Completely bypasses Safari/Stay page-level CSP (<code>connect-src</code>) and WebKit ITP cross-origin restrictions.
+• <b>Fallback to window.fetch</b>: Retained strictly as fallback when runner lacks GM capabilities (order: <code>GM -> window.fetch</code>).
+• <b>Upgraded Timeouts &amp; AbortController</b>: 30s standard timeout, 120s for agent/chat SSE. Proper cancellation via <code>signal.abort()</code> calling <code>handle.abort()</code>.
+• <b>Anti-Avalanche Queue Protection</b>: Strict cap of 1 retry (max 2 attempts per request); button debouncing prevents duplicate concurrent checks.
+• <b>Transport Diagnostic Tag</b>: Network log and diagnostics explicitly report active transport (<code>transport: gm</code> vs <code>transport: fetch</code>).
+• <b>Purged False VPN Errors &amp; Cringe Messages</b>: Removed all misleading "VPN problem / disable VPN" text and Russian strings; replaced with clean, objective English status and error indicators.
+• <b>Watchdog IPv6 Routing Fix</b>: Tunnel health checks enforce <code>curl -4</code> to avoid false failures on hosts with broken IPv6 default routes.
+• <b>Quality &amp; Tests</b>: Unit &amp; integration tests passed (<code>tests/mse_2141.py</code>, <code>tests/mse_214.py</code>, <code>tests/onefile.test.js</code>, <code>npm test</code>); <code>audit.py --strict</code> clean 0 hits x3."""
 
     print(f"Sending message to chat {CHAT_ID}...")
     res = call("sendMessage", {"chat_id": CHAT_ID, "text": report_text, "parse_mode": "HTML"})
@@ -135,8 +136,8 @@ def main():
     files_to_send = [
         zip_path,
         ARTIFACTS / "mse.user.js",
-        ARTIFACTS / "mse-2.14.0.patch",
-        ROOT / "RELEASE_2.14.0.md"
+        ARTIFACTS / "mse-2.14.1.patch",
+        ROOT / "RELEASE_2.14.1.md"
     ]
 
     for p in files_to_send:
@@ -144,7 +145,7 @@ def main():
             print(f"File not found: {p}", file=sys.stderr)
             continue
         print(f"Sending {p.name} ({p.stat().st_size} bytes)...")
-        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.14.0 — {p.name}"}, {"document": p})
+        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.14.1 — {p.name}"}, {"document": p})
         if res.get("ok"):
             print(f"Successfully sent {p.name}")
         else:
