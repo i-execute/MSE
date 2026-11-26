@@ -1112,7 +1112,7 @@ class Field:
             return "must be a numeric Telegram user id"
         if self.name == "TAILSCALE_KEY" and self.value and not TSKEY_RE.match(self.value):
             return "must look like tskey-auth-... or tskey-client-..."
-        if self.name == "QUOTA" and self.value and not (self.value.isdigit() and int(self.value) >= 0):
+        if self.name in ("QUOTA", "DUMP_QUOTA") and self.value and not (self.value.isdigit() and int(self.value) >= 0):
             return "must be a number of requests per day"
         if self.name in ("UPSTREAM_PORT", "PORT") and self.value:
             if not (self.value.isdigit() and 1 <= int(self.value) <= 65535):
@@ -1495,6 +1495,7 @@ class Setup:
         self.python_choices = detect_pythons()
         self.credentials = {"BOT_TOKEN": "", "OWNER_ID": "", "API_ID": "", "API_HASH": "", "TAILSCALE_KEY": ""}
         self.settings = {"MODEL": self.env.get("MSE_MODEL", ""), "QUOTA": self.env.get("MSE_DAILY_QUOTA", "200"),
+                         "DUMP_QUOTA": self.env.get("DUMP_QUOTA", "0"),
                          "UPSTREAM_PORT": self.env.get("MSE_UPSTREAM_PORT", "")}
         self.notes: list[str] = []
         self.started = time.time()
@@ -1592,7 +1593,9 @@ class Setup:
         for name, kind, note in self.stack.probe_all():
             rows.append(self.pill_for(kind) + " " + paint(pad(name, 9), theme.key) + paint(note, theme.text))
         rows.append("")
-        rows.append(fact("model", self.env.get("MSE_MODEL", "—")) + "   " + fact("quota", self.env.get("MSE_DAILY_QUOTA", "—") + "/day"))
+        dump_quota_val = self.env.get("DUMP_QUOTA", "0")
+        dump_quota_str = "unlimited" if dump_quota_val in ("0", "") else f"{dump_quota_val}/day"
+        rows.append(fact("model", self.env.get("MSE_MODEL", "—")) + "   " + fact("quota", self.env.get("MSE_DAILY_QUOTA", "—") + "/day") + "   " + fact("dump quota", dump_quota_str))
         rows.append(fact("address", self.env.get("MSE_PUBLIC_URL") or "not yet (Gateway Domain)"))
         rows.append(fact("exposed via", "tunnel (Cloudflared or Tailscale) → 127.0.0.1:" + self.stack.port))
         panel("stack health", rows, self.limit, theme.frame, pill("read-only", theme.badge_info))
@@ -1878,6 +1881,7 @@ class Setup:
         fields = [
             Field("MODEL", "model", False, current_model, model_hint, choices=models),
             Field("QUOTA", "quota", False, self.settings["QUOTA"], "Requests per day per device"),
+            Field("DUMP_QUOTA", "dump quota", False, self.settings["DUMP_QUOTA"], "Daily dumps for active devices (0 = unlimited)"),
             Field("UPSTREAM_PORT", "backend port", False, self.settings["UPSTREAM_PORT"], "127.0.0.1:<port> — where the AI backend lives"),
             Field("BOT_TOKEN", "bot token", True, self.contrib_or("BOT_TOKEN"), "Required. @BotFather -> /newbot (or /token); without it the bot stays off"),
             Field("OWNER_ID", "owner id", False, self.contrib_or("OWNER_ID"), "Your numeric Telegram id (the person the bot answers)"),
@@ -1895,18 +1899,20 @@ class Setup:
             return False
         self.settings["MODEL"] = fields[0].value.strip()
         self.settings["QUOTA"] = fields[1].value.strip()
-        self.settings["UPSTREAM_PORT"] = fields[2].value.strip()
-        self.credentials["BOT_TOKEN"] = fields[3].value.strip()
-        self.credentials["OWNER_ID"] = fields[4].value.strip()
-        self.credentials["API_ID"] = fields[5].value.strip()
-        self.credentials["API_HASH"] = fields[6].value.strip()
-        self.credentials["TAILSCALE_KEY"] = fields[7].value.strip()
+        self.settings["DUMP_QUOTA"] = fields[2].value.strip()
+        self.settings["UPSTREAM_PORT"] = fields[3].value.strip()
+        self.credentials["BOT_TOKEN"] = fields[4].value.strip()
+        self.credentials["OWNER_ID"] = fields[5].value.strip()
+        self.credentials["API_ID"] = fields[6].value.strip()
+        self.credentials["API_HASH"] = fields[7].value.strip()
+        self.credentials["TAILSCALE_KEY"] = fields[8].value.strip()
         if self.dry_run:
             self.notes.append("dry run: the settings were not written")
             return True
         updates = {
             "MSE_MODEL": self.settings["MODEL"],
             "MSE_DAILY_QUOTA": self.settings["QUOTA"],
+            "DUMP_QUOTA": self.settings["DUMP_QUOTA"],
             "MSE_UPSTREAM_PORT": self.settings["UPSTREAM_PORT"],
             "MSE_BOT_TOKEN": self.credentials["BOT_TOKEN"],
             "MSE_OWNER_ID": self.credentials["OWNER_ID"],
@@ -1952,6 +1958,14 @@ class Setup:
                 pass
         except Exception as exc:  # noqa: BLE001
             return False, "the router did not accept the quota (%s), it applies after a restart" % type(exc).__name__
+        try:
+            body = json.dumps({"dumpQuota": int(self.settings.get("DUMP_QUOTA") or 0)}).encode()
+            req = urllib.request.Request(f"http://127.0.0.1:{self.stack.port}/admin/dump-quota", data=body, method="POST",
+                                         headers={"content-type": "application/json", "x-admin-token": token})
+            with urllib.request.urlopen(req, timeout=8):
+                pass
+        except Exception:  # noqa: BLE001
+            pass
         model = self.settings["MODEL"].strip()
         if model:
             body = json.dumps({"model": model}).encode()

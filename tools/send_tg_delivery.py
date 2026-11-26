@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Send MSE 2.15.0 delivery files and summary to Telegram owner.
+"""Send MSE 2.16.0 delivery files and summary to Telegram owner.
 Usage:
-    MSE_BOT_TOKEN=... python3 tools/send_tg_delivery.py
+    python3 tools/send_tg_delivery.py
 """
 
 import os
@@ -19,7 +19,7 @@ ARTIFACTS = ROOT / "Storage" / "artifacts"
 CHAT_ID = os.environ.get("MSE_OWNER_ID") or os.environ.get("TELEGRAM_CHAT_ID") or "7610246474"
 
 def make_delivery_zip() -> Path:
-    zip_path = ARTIFACTS / "MSE-2.15.0.zip"
+    zip_path = ARTIFACTS / "MSE-2.16.0.zip"
     include_dirs = [
         "Extensions/src",
         "Extensions/tools",
@@ -33,11 +33,12 @@ def make_delivery_zip() -> Path:
     include_files = [
         "Storage/artifacts/mse.user.js",
         "Storage/artifacts/build-report.json",
-        "Storage/artifacts/mse-2.15.0.patch",
+        "Storage/artifacts/mse-2.16.0.patch",
         "Storage/get.sh",
         "package.json",
         "package-lock.json",
         "README.md",
+        "RELEASE_2.16.0.md",
         "RELEASE_2.15.0.md",
         "CHANGES.md",
         "LICENSE",
@@ -77,7 +78,6 @@ def load_token() -> str:
     return ""
 
 TOKEN = load_token()
-
 API = f"https://api.telegram.org/bot{TOKEN}/%s"
 
 def call(method: str, payload: dict | None = None, files: dict | None = None) -> dict:
@@ -114,16 +114,39 @@ def main():
         print("Delivery archive created successfully at:", zip_path)
         return 0
 
-    report_text = """<b>MSE 2.15.0 Delivered — Live Moodle Fixes &amp; Syncshare Purged</b>
+    report_text = """<b>🚀 MSE 2.16.0 Full Kit Delivered</b>
 
-<b>Key Highlights:</b>
-• <b>Полное удаление остатков Syncshare</b>: вырезаны все запросы к <code>syncshare.ru</code>, <code>fetchSolution</code>, <code>serviceUrl</code>, таймаут 10с и UI-фаза <i>«asking the database…»</i>. Вопрос открывается напрямую в вызов агента. Добавлен локальный кэш ответов (<code>mse.answers.cache</code>).
-• <b>Кнопка Report разблокирована</b>: таймаут 15с, статус 201 от роутера отображается как <code>sent</code>, ошибки/таймаут как <code>report failed</code>, через 3с возвращается надпись <code>Report</code>. Без бесконечных ретраев.
-• <b>Тап по ответу закрывает панель</b>: успешный <code>applyAnswer</code> вызывает <code>closePop()</code>, на странице остаётся только пилюля.
-• <b>Устранение задержки гейтвея (декаплинг очередей)</b>: запросы агента не ждут в общей очереди за 100КБ+ дебаг-дампами; дампы вынесены в <code>dumpQueue</code>, отправка дебага откладывается до ответа агента.
-• <b>Очистка шапки и центрирование модели</b>: строка «question» убрана из шапки режима answers; чип модели увеличен и отцентрирован (<code>margin: 0 auto</code>).
-• <b>Сниф-дампы с ответом</b>: событие <code>agent_response</code> наполняет дамп ответом модели и статусом завершения.
-• <b>Качество и тесты</b>: <code>tests/mse_215.py</code>, <code>tests/mse_2141.py</code>, <code>tests/onefile.test.js</code>, <code>npm test</code> — все GREEN; <code>audit.py --strict</code> — 0 hits x3."""
+<b>Ключевые изменения релиза 2.16.0:</b>
+• <b>Part A. Комбинированный хеш и надёжный DOM</b>:
+  - <code>questionIdentity</code> включает текст, отсортированные варианты (с картинками) и изображения вопроса — нет коллизий при одинаковом вопросе.
+  - Устойчивый парсинг: поддержка <code>.form-check</code>, таблиц, картинок-ответов, чистка MathJax/Katex.
+  - Неразрушающий ответ: исключены фиктивные строки в списке, вычисляется <code>closestMatch</code>, несопоставленный ответ выводится в блоке <code>.agent-unmatched-row</code>.
+  - Zero-Options Guard: при 0 распознанных опциях вызов агента блокируется с <code>options not captured</code>.
+  - Из экрана ответов удалены кнопки Snif и Report (нет случайных нажатий).
+• <b>Part B &amp; C. Квотирование дампов (DUMP_QUOTA)</b>:
+  - По умолчанию <code>0</code> (безлимитно для одобренных устройств).
+  - До 50 дампов/день для неодобренных (pending) устройств для диагностики.
+  - Эндпоинт <code>POST /admin/dump-quota</code> для изменения на лету без рестарта.
+  - Поддержка в TUI: валидация, отображение в Health &amp; Status, редактирование и пуш в роутер.
+• <b>Part D. Стабильность туннеля и принудительный IPv4</b>:
+  - Флаг <code>curl -4</code> на всех запросах — нет зависаний на IPv6.
+  - Автовосстановление Funnel при зависании TLS (перезапуск tailscaled).
+  - Автономный локальный вотчдог без сетевых запросов наружу.
+• <b>Part E. Вопросы на соответствие (Matching / Multi-Select)</b>:
+  - Фильтрация плейсхолдеров (<code>Выберите...</code>, <code>Choose...</code>, <code>0</code>, <code>--</code>) из списков вариантов и промпта.
+  - Очистка подвопросов от меток доступности Moodle (<code>Answer 1 Question 4</code>).
+  - Нажатие на ответ заполняет ВСЕ селекты вопроса на соответствие (а не только первый).
+  - Лишние невыбранные дистракторы автоматически исчезают из попапа после ответа агента.
+
+<b>Инструкция по обновлению на GitHub и сервере:</b>
+1. <b>Залить на GitHub:</b>
+   Распакуйте архив в репозиторий (или примените <code>git apply mse-2.16.0.patch</code>), сделайте коммит и пуш:
+   <code>git commit -am "MSE 2.16.0 release" &amp;&amp; git push</code>
+2. <b>Переустановка на сервере:</b>
+   <code>bash -c "$(curl -4 -fsSL https://raw.githubusercontent.com/i-execute/MSE/main/Storage/get.sh)"</code>
+   <i>(или в локальной папке: <code>sudo ./Server/stack/install.sh</code>)</i>
+3. <b>В браузере (Safari / Tampermonkey):</b>
+   Установите обновлённый userscript <code>mse.user.js</code> (v2.16.0)."""
 
     print(f"Sending message to chat {CHAT_ID}...")
     res = call("sendMessage", {"chat_id": CHAT_ID, "text": report_text, "parse_mode": "HTML"})
@@ -133,18 +156,18 @@ def main():
     print("Message sent successfully.")
 
     files_to_send = [
-        zip_path,
-        ARTIFACTS / "mse.user.js",
-        ARTIFACTS / "mse-2.15.0.patch",
-        ROOT / "RELEASE_2.15.0.md"
+        (zip_path, "MSE 2.16.0 — Полный архив проекта (Ready for GitHub push)"),
+        (ARTIFACTS / "mse.user.js", "MSE 2.16.0 — Пользовательский скрипт (Userscript)"),
+        (ARTIFACTS / "mse-2.16.0.patch", "MSE 2.16.0 — Git Patch для быстрого применения"),
+        (ROOT / "RELEASE_2.16.0.md", "MSE 2.16.0 — Описание релиза и документация")
     ]
 
-    for p in files_to_send:
+    for p, caption in files_to_send:
         if not p.exists():
             print(f"File not found: {p}", file=sys.stderr)
             continue
         print(f"Sending {p.name} ({p.stat().st_size} bytes)...")
-        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": f"MSE 2.15.0 — {p.name}"}, {"document": p})
+        res = call("sendDocument", {"chat_id": CHAT_ID, "caption": caption}, {"document": p})
         if res.get("ok"):
             print(f"Successfully sent {p.name}")
         else:

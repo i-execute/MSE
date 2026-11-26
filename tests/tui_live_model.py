@@ -54,7 +54,7 @@ try:
     with patch.object(m.subprocess, 'run'):
         ok, message = setup.push_settings()
     assert ok, message
-    assert seen == [('/admin/quota', {'quota': 12}, 'test-token'), ('/admin/model', {'model': 'live-model'}, 'test-token')], seen
+    assert seen == [('/admin/quota', {'quota': 12}, 'test-token'), ('/admin/dump-quota', {'dumpQuota': 0}, 'test-token'), ('/admin/model', {'model': 'live-model'}, 'test-token')], seen
     setup.settings['MODEL'] = 'unoffered'
     with patch.object(m.subprocess, 'run'):
         ok, message = setup.push_settings()

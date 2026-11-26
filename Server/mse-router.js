@@ -48,7 +48,7 @@ process.env.GOYGRAM_VAULT = process.env.GOYGRAM_VAULT || VAULT_FILE;
 process.env.MSE_BOT_VAULT = process.env.MSE_BOT_VAULT || VAULT_FILE;
 const PORT = Number(process.env.MSE_PORT);
 const HOST = process.env.MSE_HOST || '127.0.0.1';
-const VERSION = '2.14.1';
+const VERSION = '2.16.0';
 const UPSTREAM_HOST = process.env.MSE_UPSTREAM_HOST || '127.0.0.1';
 const UPSTREAM_PORT = Number(process.env.MSE_UPSTREAM_PORT);
 const UPSTREAM_TLS = String(process.env.MSE_UPSTREAM_TLS || '') === '1';
@@ -109,6 +109,7 @@ const CFG = {
   modelsSource: 'unknown',          // backend | state | none
   modelsAt: 0,
   dailyQuota: Number(process.env.MSE_DAILY_QUOTA || 200),
+  dumpQuota: Number(process.env.DUMP_QUOTA !== undefined ? process.env.DUMP_QUOTA : 0),
   allowOrigins: String(process.env.MSE_ALLOW_ORIGINS || '*').split(',').map((s) => s.trim()).filter(Boolean),
   timeoutMs: Number(process.env.MSE_TIMEOUT_MS || 120000),
   aiProxy: String(process.env.AI_PROXY || '').trim()
@@ -168,6 +169,9 @@ function loadState() {
       if (Number.isFinite(UPSTREAM_PORT) && UPSTREAM_PORT > 0) state.settings.upstreamPort = UPSTREAM_PORT;
       const q = Number(state.settings.dailyQuota);
       if (Number.isFinite(q) && q >= 0) CFG.dailyQuota = Math.floor(q);
+      const dq = process.env.DUMP_QUOTA !== undefined ? Number(process.env.DUMP_QUOTA) : (state.settings && state.settings.dumpQuota !== undefined ? Number(state.settings.dumpQuota) : 0);
+      if (Number.isFinite(dq) && dq >= 0) CFG.dumpQuota = Math.floor(dq);
+      else CFG.dumpQuota = 0;
       const envModel = String(process.env.MSE_MODEL || '').trim();
       if (envModel) {
         CFG.model = envModel;
@@ -667,29 +671,45 @@ function buildAgentPrompt(body) {
   const isNumeric = /^(numerical|calculated|calculatedsimple)$/.test(type);
   const isDdwtos = type === 'ddwtos' || Number(body.placesCount) > 0;
   const isCoderunner = type === 'coderunner';
+  const isMatch = type === 'match' || type === 'matching' ||
+    (Array.isArray(body.fields) && body.fields.length > 1 && body.fields.every((f) => f.kind === 'select'));
 
   let system = 'You are solving a Moodle quiz. Answer with ONE JSON object only, no explanations: ' +
     '{"answer": "<verbatim option text or exact answer value>", "confidence": <0..1>, "reason": "<up to 120 characters>"}. ' +
     'If there is no correct answer or data is missing, return {"error": "<short reason>"}. Add nothing outside the JSON.';
-  if (options && !isDdwtos) {
+  if (options && !isDdwtos && !isMatch) {
     system += ' MANDATORY: For choice questions, return the EXACT VERBATIM text of the chosen option as listed. Do NOT prefix with option numbers or index numbers.';
   }
 
   let user = 'Question: ' + String(body.question || '').slice(0, 3000) + '\n';
   if (Array.isArray(body.fields) && body.fields.length > 1) {
-    user += 'This question has ' + body.fields.length + ' inputs in order from left to right, joined by |:\n';
-    body.fields.forEach((f, i) => {
-      const lbl = f.label ? ' [' + f.label + ']' : '';
-      if (f.kind === 'select') {
-        user += (i + 1) + '.' + lbl + ' [Dropdown] Options: ' + (Array.isArray(f.options) ? f.options.join(' / ') : '') + '\n';
-      } else if (f.kind === 'place') {
-        user += (i + 1) + '.' + lbl + ' [Blank] Choose matching option from the options list below\n';
-      } else {
-        user += (i + 1) + '.' + lbl + ' [Text field] Enter value\n';
-      }
-    });
-    if (options) user += 'Available options:\n' + options + '\n';
-    user += 'Provide the answer for all ' + body.fields.length + ' inputs in exact order, joined by |.\n';
+    if (isMatch) {
+      user += 'This is a MATCHING question with ' + body.fields.length + ' items to match:\n';
+      body.fields.forEach((f, i) => {
+        const lbl = f.label ? f.label : ('Item ' + (i + 1));
+        const opts = Array.isArray(f.options) ? f.options.filter(Boolean).join(' / ') : '';
+        user += (i + 1) + '. "' + lbl + '" -> choose matching option from: [' + opts + ']\n';
+      });
+      user += '\nMATCHING INSTRUCTIONS:\n' +
+        'Match each numbered item (1 to ' + body.fields.length + ') to its correct option from the list.\n' +
+        'Return ONLY the chosen verbatim options in exact order 1 to ' + body.fields.length + ', separated by " | ".\n' +
+        'Do NOT prefix options with item names, numbers, or letters.\n' +
+        'Example answer format: {"answer": "OptionFor1 | OptionFor2 | OptionFor3 | ...", "confidence": 1.0, "reason": "..."}\n';
+    } else {
+      user += 'This question has ' + body.fields.length + ' inputs in order from left to right, joined by |:\n';
+      body.fields.forEach((f, i) => {
+        const lbl = f.label ? ' [' + f.label + ']' : '';
+        if (f.kind === 'select') {
+          user += (i + 1) + '.' + lbl + ' [Dropdown] Options: ' + (Array.isArray(f.options) ? f.options.join(' / ') : '') + '\n';
+        } else if (f.kind === 'place') {
+          user += (i + 1) + '.' + lbl + ' [Blank] Choose matching option from the options list below\n';
+        } else {
+          user += (i + 1) + '.' + lbl + ' [Text field] Enter value\n';
+        }
+      });
+      if (options) user += 'Available options:\n' + options + '\n';
+      user += 'Provide the answer for all ' + body.fields.length + ' inputs in exact order, joined by |.\n';
+    }
   } else if (isDdwtos) {
     const places = Number(body.placesCount) || 1;
     user += 'This is a drag-and-drop into text question with ' + places + ' blank(s) marked [[1]]' + (places > 1 ? ', [[2]], etc.' : '') + '.\n';
@@ -970,7 +990,26 @@ async function handleAgent(req, res, rec) {
   if (Array.isArray(rawAns)) {
     rawAns = rawAns.map((x) => String(x == null ? '' : x)).join(' | ');
   } else if (rawAns && typeof rawAns === 'object') {
-    rawAns = Object.values(rawAns).map((x) => String(x == null ? '' : x)).join(' | ');
+    if (Array.isArray(body.fields) && body.fields.length > 1) {
+      const mappedParts = [];
+      body.fields.forEach((f, i) => {
+        let v = null;
+        if (f.label && rawAns[f.label] !== undefined) v = rawAns[f.label];
+        else if (rawAns[String(i + 1)] !== undefined) v = rawAns[String(i + 1)];
+        else if (rawAns[String(i)] !== undefined) v = rawAns[String(i)];
+        else {
+          const fNorm = normOpt(f.label);
+          for (const k of Object.keys(rawAns)) {
+            if (normOpt(k) === fNorm) { v = rawAns[k]; break; }
+          }
+        }
+        if (v == null && Object.values(rawAns)[i] !== undefined) v = Object.values(rawAns)[i];
+        mappedParts.push(String(v == null ? '' : v));
+      });
+      rawAns = mappedParts.join(' | ');
+    } else {
+      rawAns = Object.values(rawAns).map((x) => String(x == null ? '' : x)).join(' | ');
+    }
   } else if (rawAns != null) {
     rawAns = String(rawAns);
   } else {
@@ -1003,14 +1042,22 @@ async function handleAgent(req, res, rec) {
       return reply(200, { ok: false, code: 'agent_error', ms, message: 'wrong number of answers: expected ' + body.fields.length + ', got ' + parts.length });
     }
     const matched = parts.map((part, i) => {
+      let cleanPart = String(part || '').trim();
+      cleanPart = cleanPart.replace(/^\d+[\.\)\:\-]\s*/, '').trim();
+      if (cleanPart.indexOf(':') >= 0) {
+        cleanPart = cleanPart.split(':').pop().trim();
+      }
+      if (cleanPart.indexOf('->') >= 0 || cleanPart.indexOf('→') >= 0) {
+        cleanPart = cleanPart.split(/->|→/).pop().trim();
+      }
       const f = body.fields[i];
       if (f && f.kind === 'select' && Array.isArray(f.options)) {
-        return matchOption(part, f.options);
+        return matchOption(cleanPart, f.options);
       }
       if (f && f.kind === 'place' && options.length) {
-        return matchOption(part, options);
+        return matchOption(cleanPart, options);
       }
-      return part;
+      return cleanPart;
     });
     if (matched.some((x) => x === null)) {
       serverLog('warn', 'agent_error', 'field option not in task: ' + answer, { deviceId: rec.deviceId });
@@ -1104,6 +1151,7 @@ async function handleAdmin(req, res, url) {
       model: CFG.model,
       models: CFG.models, modelsCount: CFG.models.length, modelsSource: CFG.modelsSource,
       quota: CFG.dailyQuota,
+      dumpQuota: CFG.dumpQuota,
       allow: state.allow,
       devices: Object.values(state.devices).map(publicDevice),
       log: state.log.slice(-50)
@@ -1244,6 +1292,15 @@ async function handleAdmin(req, res, url) {
     note('quota ' + CFG.dailyQuota);
     return send(req, res, 200, { ok: true, quota: CFG.dailyQuota });
   }
+  if (url.pathname === '/admin/dump-quota') {
+    const n = Number(body.dumpQuota !== undefined ? body.dumpQuota : body.quota);
+    if (!Number.isFinite(n) || n < 0) return oaiError(req, res, 400, 'dumpQuota must be a number >= 0', 'bad_quota');
+    CFG.dumpQuota = Math.floor(n);
+    state.settings = Object.assign({}, state.settings, { dumpQuota: CFG.dumpQuota });
+    saveState();
+    note('dumpQuota ' + CFG.dumpQuota);
+    return send(req, res, 200, { ok: true, dumpQuota: CFG.dumpQuota });
+  }
   return oaiError(req, res, 404, 'no such admin endpoint', 'not_found');
 }
 
@@ -1376,7 +1433,7 @@ const handler = async (req, res) => {
         serverLog('warn', 'invalid_key', 'dump rejected: unknown key', { ip: req.socket && req.socket.remoteAddress });
         return oaiError(req, res, 401, 'unknown key', 'invalid_key');
       }
-      if (rec.status !== 'active') {
+      if (rec.banned || rec.status === 'revoked' || (rec.status !== 'active' && rec.status !== 'pending')) {
         serverLog('warn', 'device_forbidden', 'dump rejected: device is ' + rec.status, { deviceId: rec.deviceId, status: rec.status });
         return oaiError(req, res, 403, 'device is ' + rec.status, 'device_' + rec.status);
       }
@@ -1384,7 +1441,12 @@ const handler = async (req, res) => {
       if (!body || !['report', 'debug'].includes(body.type) || !body.dump || typeof body.dump !== 'object')
         return oaiError(req, res, 400, 'type and dump required', 'bad_dump');
       if (rec.dumpDay !== day()) { rec.dumpDay = day(); rec.dumpUsed = 0; }
-      if ((rec.dumpUsed || 0) >= 50) return oaiError(req, res, 429, 'dump quota reached', 'dump_quota');
+      const isPending = rec.status === 'pending';
+      const quotaLimit = isPending ? 50 : (CFG.dumpQuota > 0 ? CFG.dumpQuota : 0);
+      if (quotaLimit > 0 && (rec.dumpUsed || 0) >= quotaLimit) {
+        serverLog('warn', 'dump_quota', 'dump quota reached for ' + rec.status, { deviceId: rec.deviceId, status: rec.status, used: rec.dumpUsed, limit: quotaLimit });
+        return oaiError(req, res, 429, 'dump quota reached', 'dump_quota');
+      }
       const meta = dumps.store(DATA_DIR, rec, body.type, body.dump, key);
       rec.dumpUsed = (rec.dumpUsed || 0) + 1;
       rec.seen = now();
@@ -1476,4 +1538,4 @@ if (require.main === module) {
   console.log('  state     :', STATE_FILE);
   });
 }
-module.exports = { server, CFG, state: () => state, deviceIdOf, registerDevice, deviceByKey, ADMIN_TOKEN, handler, refreshModels, get modelsReady() { return modelsReady; }, handleAgent };
+module.exports = { VERSION, server, CFG, state: () => state, deviceIdOf, registerDevice, deviceByKey, ADMIN_TOKEN, handler, refreshModels, get modelsReady() { return modelsReady; }, handleAgent, buildAgentPrompt };

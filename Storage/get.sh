@@ -54,7 +54,7 @@ have curl || die "curl is required (and could not be installed)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 say "MSE · fetching the installer"
-curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/Server/stack/install.sh" -o "$TMP/install.sh" \
+curl -4 -fsSL "https://raw.githubusercontent.com/$REPO/$REF/Server/stack/install.sh" -o "$TMP/install.sh" \
   || die "could not download the installer from $REPO@$REF"
 
 # the installer runs from a pipe above, so it may not be able to read stdin: give it an empty one

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MSE
 // @namespace    https://github.com/mse
-// @version      2.15.0
+// @version      2.16.0
 // @description  Answers and hints for Moodle quizzes, with a draggable MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @description Answers and hints for Moodle quizzes: the MSE button, a built-in traffic sniffer and the id of the signed-in user.
 // @author       MSE
@@ -4143,7 +4143,7 @@ var __ssW=window,__msePageWindow=window;
   }, (typeof __MSE_CONFIG__ === 'object' && __MSE_CONFIG__) || {});
 
    
-  var CSS = ":host,*{box-sizing:border-box}\n/\* MSE theme: black and white, nothing else.\n   The panel is a sheet of dark glass over a page we do not own: one paper, one rule, one ink, one accent.\n   The accent is white — a border that lights up — inspired by the Hotaru design system. *\/\n.mse{\n  --paper:#0a0a0b;--paper-2:#121214;--paper-3:#18181b;\n  --ink:#f4f4f5;--ink-2:#d4d4d8;--muted:#71717a;\n  --rule:#27272a;--rule-2:#3f3f46;--rule-3:#52525b;\n  --accent:#ffffff;--accent-soft:rgba(255,255,255,.14);--accent-line:rgba(255,255,255,.6);\n  --r:10px;--r-panel:14px;--pill:999px;\n  --ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);\n  --dur-short:.22s;--dur-glow:.76s;\n  --sp-1:4px;--sp-2:8px;--sp-3:12px;\n  --glow-xs:0 0 10px rgba(255,255,255,.09);\n  --glow-sm:0 0 16px rgba(255,255,255,.14);\n  --glow-md:0 0 26px rgba(255,255,255,.2),0 0 6px rgba(255,255,255,.12);\n  --glow-lg:0 0 44px rgba(255,255,255,.26),0 0 10px rgba(255,255,255,.16);\n  --glow-edge:inset 0 1px 0 rgba(255,255,255,.12);\n  --aura-control:0 0 0 1px rgba(255,255,255,.11),0 0 9px 0 rgba(255,255,255,.15);\n  --aura-control-lit:0 0 0 1px rgba(255,255,255,.22),0 0 14px 1px rgba(255,255,255,.24);\n  font:13px/1.4 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif;\n  color:var(--ink);-webkit-font-smoothing:antialiased;\n}\n\n/\* ---------- the pill: tiny, quiet; only the letters carry any light ---------- *\/\n.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;\n  height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);\n  background:var(--paper-2);border:1px solid var(--rule-2);color:var(--ink);\n  font:700 10.5px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.16em;text-indent:.16em;\n  text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);\n  cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;\n  transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}\n.pill.dragging{opacity:.9}\n.pill:active{transform:scale(.97)}\n.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;\n  background:var(--accent);color:#000;font:700 9px/14px -apple-system,sans-serif;text-align:center;text-indent:0;text-shadow:none}\n.pill.lit{animation:pill-press .9s linear}\n@keyframes pill-press{\n  0%,100%{text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);border-color:var(--rule-2)}\n  8%{text-shadow:0 0 12px rgba(255,255,255,.95),0 0 26px rgba(255,255,255,.5);border-color:var(--accent-line)}\n  40%{text-shadow:0 0 10px rgba(255,255,255,.62),0 0 20px rgba(255,255,255,.3);border-color:var(--rule-2)}}\n\n/\* ---------- the press: a white edge that flashes and goes down slowly, no colour, no fill ---------- *\/\n.press{position:relative;isolation:isolate}\n.press::before,.press::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;\n  opacity:0;transition:opacity .2s var(--ease-out)}\n.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 12px 1px rgba(255,255,255,.6),0 0 34px 6px rgba(255,255,255,.3),0 0 84px 20px rgba(255,255,255,.12)}\n.press::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.08);box-shadow:inset 0 0 12px 1px rgba(255,255,255,.28),inset 0 0 22px 2px rgba(255,255,255,.18)}\n.press.hot{animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}\n  4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}\n  18%{--press:.52;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.3}74%{--press:.15}to{--press:0}}\n@keyframes press-ink{\n  0%{text-shadow:0 0 12px rgba(255,255,255,0),0 0 26px rgba(255,255,255,0)}\n  4%{text-shadow:0 0 13px rgba(255,255,255,.75),0 0 30px rgba(255,255,255,.45)}\n  18%{text-shadow:0 0 11px rgba(255,255,255,.4),0 0 26px rgba(255,255,255,.22)}\n  46%{text-shadow:0 0 9px rgba(255,255,255,.22),0 0 22px rgba(255,255,255,.12)}\n  74%{text-shadow:0 0 8px rgba(255,255,255,.1),0 0 18px rgba(255,255,255,.06)}\n  to{text-shadow:0 0 6px rgba(255,255,255,0),0 0 14px rgba(255,255,255,0)}}\n.press.hot::before{opacity:var(--press)}\n.press.hot::after{opacity:calc(var(--press) * .9)}\n/\* the chosen row: a hairline that stays, no glow, no colour *\/\n.press.lit{border-color:var(--accent-line)!important;box-shadow:var(--glow-sm)}\n.press.lit::before{opacity:.5}\n.press.lit::after{opacity:.2}\n.press:active{transform:scale(.99)}\n\n/\* ---------- the panel ---------- *\/\n.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:290px;max-width:calc(100vw - 16px);\n  background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r-panel);\n  box-shadow:0 18px 48px rgba(0,0,0,.7),var(--glow-edge);overflow:hidden;\n  transform-origin:var(--ox,100%) var(--oy,100%);\n  opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);\n  transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}\n.pop.in{opacity:1;transform:none;filter:none;animation:sheet-in .32s var(--ease) forwards}\n@keyframes sheet-in{\n  0%{opacity:0;transform:translateY(-10px) scale(.88)}\n  55%{opacity:1}\n  78%{transform:translateY(1px) scale(1.012)}\n  to{opacity:1;transform:translateY(0) scale(1)}}\n.pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}\n.pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}\n@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}\n\n/\* the head: the name, the view, buttons, mini status bar — compact, no empty margins *\/\n.ph{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--rule)}\n.ph .t{flex:0 0 auto;min-width:0;font:700 11px/1 -apple-system,sans-serif;letter-spacing:.14em;\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:none}\n.ph .t em{font:400 10px/1 -apple-system,sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none;display:block;margin-top:3px}\n.ph .model-chip{flex:0 1 auto;margin:0 auto;text-align:center;min-width:0;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n  padding:3px 8px;border:1px solid rgba(255,255,255,.2);border-radius:7px;color:var(--ink-2);\n  font:500 10.5px/1.2 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.01em;\n  text-shadow:0 0 5px rgba(255,255,255,.55),0 0 11px rgba(255,255,255,.24);box-shadow:0 0 7px rgba(255,255,255,.08)}\n.mini-status{display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:6px;\n  background:transparent;border:1px solid transparent;cursor:pointer;\n  font:500 9.5px/1 -apple-system,sans-serif;color:var(--muted);\n  transition:border-color .18s var(--ease),color .18s var(--ease);flex:0 0 auto}\n.mini-status:hover{border-color:var(--rule-2);color:var(--ink)}\n.mini-status .dot{width:5px;height:5px;border-radius:50%;background:var(--rule-3)}\n.mini-status .dot.ok{background:var(--accent);box-shadow:0 0 5px rgba(255,255,255,.6)}\n.mini-status .dot.warn,.mini-status .dot.bad{background:var(--muted)}\n.ib{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;\n  border-radius:8px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);\n  font:600 12.5px/1 Georgia,serif;cursor:pointer;transition:border-color .18s var(--ease),color .18s var(--ease)}\n.ib:hover{border-color:var(--rule-3);color:var(--ink)}\n.ib.x{font:400 14px/1 -apple-system,sans-serif}\n.ib.back{font:400 13px/1 -apple-system,sans-serif}\n\n/\* the body: compact and tight, sized to content *\/\n.pb{max-height:min(50vh,320px);overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 10px}\n.pb::-webkit-scrollbar{width:0}\n.sec{font:700 9px/1 -apple-system,sans-serif;letter-spacing:.16em;color:var(--muted);margin:8px 0 4px}\n.sec:first-child{margin-top:0}\n.group{display:flex;flex-direction:column;gap:8px}\n.group + .sec{margin-top:8px}\n\n/\* ---------- answers: one row a tap wide, a box on the left, a letter, the text, the share ---------- *\/\n.ans{display:flex;align-items:center;gap:9px;width:100%;min-height:36px;margin:0;padding:10px 11px;\n  border-radius:var(--r);border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:400 12.5px/1.3 inherit;text-align:left;cursor:pointer;position:relative;isolation:isolate;\n  transition:border-color .18s var(--ease),background .18s var(--ease),box-shadow .18s var(--ease),transform .12s var(--ease)}\n.ans:hover{border-color:var(--rule-3);box-shadow:var(--glow-xs)}\n.ans:active{transform:scale(.985)}\n.ans::before,.ans::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .2s var(--ease-out)}\n.ans::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 12px 1px rgba(255,255,255,.6),0 0 34px 6px rgba(255,255,255,.3),0 0 84px 20px rgba(255,255,255,.12)}\n.ans::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.08);box-shadow:inset 0 0 12px 1px rgba(255,255,255,.28),inset 0 0 22px 2px rgba(255,255,255,.18)}\n.ans.lit,.ans.applied,.ans[data-lit]{border-color:#fff!important;box-shadow:var(--glow-md),var(--glow-edge),var(--aura-control-lit)!important;\n  animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n.ans.lit::before,.ans.applied::before{opacity:var(--press,.7)}\n.ans.lit::after,.ans.applied::after{opacity:calc(var(--press,.5) * .9)}\n.ans .mark{flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:1px solid var(--rule-3);\n  display:flex;align-items:center;justify-content:center;font:700 9px/1 inherit;color:#000;\n  transition:border-color .2s,box-shadow .2s}\n.ans.best .mark{border-color:var(--accent-line)}\n.ans.agent .mark,.mark.agent{background:var(--paper-3);border:1px solid rgba(255,255,255,.45)!important;\n  box-shadow:0 0 3px rgba(255,255,255,.2);transition:border-color .2s,box-shadow .2s}\n.ans.agent .mark::after,.mark.agent::after{content:\"\";display:block;width:6px;height:6px;border-radius:50%;\n  background:rgba(255,255,255,.65);box-shadow:0 0 3px rgba(255,255,255,.3);transition:background .2s,box-shadow .2s,transform .2s}\n.ans.lit .mark,.ans.applied .mark,.ans.agent.lit .mark,.ans.agent.applied .mark{border-color:#fff!important;\n  box-shadow:0 0 8px rgba(255,255,255,.95),0 0 16px rgba(255,255,255,.6)!important}\n.ans.lit .mark::after,.ans.applied .mark::after,.ans.agent.lit .mark::after,.ans.agent.applied .mark::after{background:#fff!important;\n  box-shadow:0 0 6px #fff,0 0 14px rgba(255,255,255,1)!important;transform:scale(1.15)}\n.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}\n.ans .pct{flex:0 0 auto;font:600 10px/1 -apple-system,sans-serif;color:var(--muted)}\n.ans.agent{border-style:dashed}\n.ans.ai{position:relative;isolation:isolate;overflow:hidden;border:1px solid rgba(255,255,255,.14);box-shadow:var(--aura-control),var(--glow-sm)}\n.ans.ai::before{content:\"\";position:absolute;top:0;left:-100%;width:200%;height:100%;\n  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.14) 50%,transparent 100%);\n  animation:auraFlow 3.5s ease-in-out infinite;pointer-events:none;z-index:0}\n.ans.ai > *{position:relative;z-index:1}\n.ans.ai.busy .lbl{color:var(--muted)}\n.tag{font:600 9px/1 -apple-system,sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:5px}\n.ans .tag.agent,.tag.agent{color:var(--ink);font-weight:700;letter-spacing:.14em;\n  text-shadow:0 0 6px rgba(255,255,255,.6),0 0 12px rgba(255,255,255,.25);opacity:1}\n\n/\* ---------- one status line, never a paragraph ---------- *\/\n.row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink-2);\n  font:400 11px/1.3 inherit;text-align:left;cursor:pointer;margin:5px 0 3px}\n.pb > .row:last-child{margin-bottom:0}\n.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--rule-3)}\n.row .dot.ok{background:var(--accent)}\n.row .dot.warn,.row .dot.bad{background:var(--muted)}\n.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.row .more{flex:0 0 auto;font-size:10px;color:var(--muted)}\n\n/\* ---------- controls and buttons (unified UI kit with Hotaru glow) ---------- *\/\n.frow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}\n.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:1 1 auto;min-width:0;height:28px;padding:0 10px;\n  border-radius:8px;border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:600 11px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.02em;\n  cursor:pointer;white-space:nowrap;user-select:none;-webkit-user-select:none;position:relative;isolation:isolate;\n  transition:border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease),transform .12s var(--ease)}\n.btn::before,.btn::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .2s var(--ease-out)}\n.btn::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 10px 1px rgba(255,255,255,.5),0 0 28px 4px rgba(255,255,255,.22)}\n.btn::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.07);box-shadow:inset 0 0 8px 1px rgba(255,255,255,.24)}\n.btn:hover{border-color:var(--accent-line);box-shadow:var(--glow-sm),var(--glow-edge),var(--aura-control-lit);color:#fff}\n.btn:active,.btn.press:active{transform:scale(.97)}\n.btn.solid,.btn.primary{background:transparent;color:#fff;border-color:var(--accent-line);box-shadow:0 0 6px rgba(255,255,255,.15)}\n.btn.solid:hover,.btn.primary:hover{border-color:#fff;box-shadow:var(--glow-md),var(--aura-control-lit)}\n.btn.sm{height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;flex:0 0 auto}\n.btn.lit,.btn[data-lit]{border-color:#fff!important;box-shadow:var(--glow-md),var(--aura-control-lit)!important;\n  animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n.btn.lit::before,.btn[data-lit]::before{opacity:var(--press,.7)}\n.btn.lit::after,.btn[data-lit]::after{opacity:calc(var(--press,.5) * .9)}\n.actions-row{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:4px 0 1px}\n.err-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;margin:4px 0 2px}\n.inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 10px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:12px/1 -apple-system,sans-serif;outline:none;margin:0 0 8px}\n.inp:focus{border-color:var(--accent-line)}\n\n/\* debug toggle: unified button style with immediate status light *\/\n.dbg-toggle{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 10px;margin:0;border-radius:8px;\n  border:1px solid var(--rule-2);background:var(--paper-2);cursor:pointer;position:relative;\n  font:600 11px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--ink);\n  transition:border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease)}\n.dbg-toggle:hover{border-color:var(--accent-line);box-shadow:0 0 8px rgba(255,255,255,.18);color:#fff}\n.dbg-toggle.on{border-color:var(--accent-line);box-shadow:0 0 6px rgba(255,255,255,.15)}\n.dbg-native{position:absolute;opacity:0;width:0;height:0;pointer-events:none}\n.dbg-light{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:var(--rule-2);border:1px solid var(--rule-3);\n  transition:background .12s,box-shadow .12s,border-color .12s}\n.dbg-light.on{background:var(--accent);border-color:#fff;\n  box-shadow:0 0 6px rgba(255,255,255,.9),0 0 12px rgba(255,255,255,.45)}\n.dbg-text{display:inline-flex;align-items:center}\n.dbg-title{font:600 11px/1 inherit;color:var(--ink)}\n\n/\* monochrome icons for settings and logs *\/\n.gear-icon,.log-icon{flex:0 0 auto;display:inline-block;vertical-align:middle;stroke:currentColor;fill:none}\n.row .gear-icon,.row .log-icon{width:14px;height:14px;color:var(--muted);transition:color .18s,filter .18s}\n.row:hover .gear-icon,.row:hover .log-icon{color:#fff;filter:drop-shadow(0 0 4px rgba(255,255,255,.5))}\n\n/\* agent status strip: flowing light aura, no harsh outline *\/\n.agent-status-strip{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;margin:4px 0;\n  border-radius:var(--r);border:1px solid rgba(255,255,255,.08);background:var(--paper-2);color:var(--ink);\n  font:400 11px/1.3 inherit;position:relative;isolation:isolate;overflow:hidden;box-shadow:0 0 10px rgba(255,255,255,.06)}\n.agent-status-strip::before{content:\"\";position:absolute;top:0;left:-100%;width:200%;height:100%;\n  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.12) 50%,transparent 100%);\n  animation:auraFlow 3.5s ease-in-out infinite;pointer-events:none;z-index:0}\n.agent-status-strip > *{position:relative;z-index:1}\n@keyframes auraFlow{0%{transform:translateX(0)}50%{transform:translateX(50%)}100%{transform:translateX(0)}}\n.agent-status-strip .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--accent);\n  box-shadow:0 0 5px rgba(255,255,255,.9)}\n.agent-status-strip .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n\n/\* shimmering flowing text for thinking / reasoning actions *\/\n.agent-shimmer{background:linear-gradient(90deg,var(--muted) 0%,#ffffff 50%,var(--muted) 100%);\n  background-size:200% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;\n  animation:textShimmer 2.2s linear infinite;font-weight:500;letter-spacing:.02em}\n@keyframes textShimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}\n\n/\* action icons: brain for reasoning, eye for looking at image, pencil for writing answer *\/\n.action-icon{flex:0 0 auto;width:14px;height:14px;display:inline-block;vertical-align:middle;stroke:currentColor;fill:none}\n.action-icon.brain-icon,.action-icon.eye-icon,.action-icon.pencil-icon{color:var(--ink);filter:drop-shadow(0 0 4px rgba(255,255,255,.5))}\n.reconnect-hint{font:400 10px/1.2 -apple-system,sans-serif;color:var(--muted);text-align:center;margin:3px 0 1px;letter-spacing:.02em}\n\n/\* compact status screen *\/\n.status-grid{display:flex;flex-direction:column;gap:5px;margin:3px 0 6px}\n.status-item{display:flex;align-items:center;justify-content:space-between;padding:6px 9px;border-radius:var(--r);\n  background:var(--paper-2);border:1px solid var(--rule);font-size:11px}\n.status-item .k{color:var(--muted);font-weight:500}\n.status-item .v{color:var(--ink);font-weight:600}\n\n/\* the copy value: a row that is a tap target, the key above the value *\/\n.val{display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;margin:0 0 6px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink);\n  font:400 11.5px/1.35 ui-monospace,Menlo,monospace;text-align:left;cursor:pointer}\n.val .k{flex:0 0 46px;font:600 9px/1.3 -apple-system,sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}\n.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}\n.val.human{font:400 11.5px/1.35 -apple-system,sans-serif}\n.val.human .v{overflow-wrap:break-word}\n.val .copy{flex:0 0 auto;font:600 9px/1 -apple-system,sans-serif;color:var(--muted);letter-spacing:.06em}\n.val[disabled]{opacity:.55;cursor:default}\n.models{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 10px}\n.chip{padding:4px 8px;border-radius:999px;border:1px solid var(--rule-2);background:var(--paper-2);\n  font:500 10px/1 ui-monospace,Menlo,monospace;color:var(--ink-2)}\n\n/\* ---------- the journal: lines with air, a mark on the left ---------- *\/\n.log{font:400 10px/1.4 ui-monospace,Menlo,monospace;color:var(--ink-2);display:flex;flex-direction:column;gap:2px}\n.log .ln{display:flex;gap:7px;padding:5px 0;border-bottom:1px solid var(--rule);word-break:break-word}\n.log .ln:last-child{border-bottom:0}\n.log .ln .g{flex:0 0 auto;width:5px;height:5px;margin-top:4px;border-radius:50%;background:var(--rule-3)}\n.log .ln.ok .g{background:var(--accent)}\n.log .ln.warn,.log .ln.bad{color:var(--muted)}\n.log .ln .t{flex:0 0 auto;color:var(--muted)}\n.log .ln .m{flex:1 1 auto;min-width:0}\n.empty{padding:6px 4px;text-align:center;color:var(--muted);font-size:11.5px;line-height:1.4}\n.spin{width:14px;height:14px;margin:8px auto;border-radius:50%;border:1.5px solid var(--rule-2);border-top-color:var(--ink);animation:sp .7s linear infinite}\n@keyframes sp{to{transform:rotate(360deg)}}\n.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:8px 12px;\n  border-radius:999px;background:var(--paper-3);border:1px solid var(--rule-3);color:var(--ink);\n  font:11.5px/1.3 inherit;text-align:center;opacity:0;pointer-events:none;\n  transition:opacity .2s,transform .2s;z-index:2147483647}\n.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}\n@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}\n";
+  var CSS = ":host,*{box-sizing:border-box}\n/\* MSE theme: black and white, nothing else.\n   The panel is a sheet of dark glass over a page we do not own: one paper, one rule, one ink, one accent.\n   The accent is white — a border that lights up — inspired by the Hotaru design system. *\/\n.mse{\n  --paper:#0a0a0b;--paper-2:#121214;--paper-3:#18181b;\n  --ink:#f4f4f5;--ink-2:#d4d4d8;--muted:#71717a;\n  --rule:#27272a;--rule-2:#3f3f46;--rule-3:#52525b;\n  --accent:#ffffff;--accent-soft:rgba(255,255,255,.14);--accent-line:rgba(255,255,255,.6);\n  --r:10px;--r-panel:14px;--pill:999px;\n  --ease:cubic-bezier(.16,1,.3,1);--ease-out:cubic-bezier(.12,.9,.24,1);\n  --dur-short:.22s;--dur-glow:.76s;\n  --sp-1:4px;--sp-2:8px;--sp-3:12px;\n  --glow-xs:0 0 10px rgba(255,255,255,.09);\n  --glow-sm:0 0 16px rgba(255,255,255,.14);\n  --glow-md:0 0 26px rgba(255,255,255,.2),0 0 6px rgba(255,255,255,.12);\n  --glow-lg:0 0 44px rgba(255,255,255,.26),0 0 10px rgba(255,255,255,.16);\n  --glow-edge:inset 0 1px 0 rgba(255,255,255,.12);\n  --aura-control:0 0 0 1px rgba(255,255,255,.11),0 0 9px 0 rgba(255,255,255,.15);\n  --aura-control-lit:0 0 0 1px rgba(255,255,255,.22),0 0 14px 1px rgba(255,255,255,.24);\n  font:13px/1.4 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif;\n  color:var(--ink);-webkit-font-smoothing:antialiased;\n}\n\n/\* ---------- the pill: tiny, quiet; only the letters carry any light ---------- *\/\n.pill{position:fixed;z-index:2147483646;display:flex;align-items:center;justify-content:center;\n  height:28px;min-width:0;padding:0 10px;border-radius:var(--pill);\n  background:var(--paper-2);border:1px solid var(--rule-2);color:var(--ink);\n  font:700 10.5px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.16em;text-indent:.16em;\n  text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);\n  cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;\n  transition:border-color .2s var(--ease),color .2s var(--ease),transform .12s var(--ease)}\n.pill.dragging{opacity:.9}\n.pill:active{transform:scale(.97)}\n.pill .num{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;\n  background:var(--accent);color:#000;font:700 9px/14px -apple-system,sans-serif;text-align:center;text-indent:0;text-shadow:none}\n.pill.lit{animation:pill-press .9s linear}\n@keyframes pill-press{\n  0%,100%{text-shadow:0 0 8px rgba(255,255,255,.5),0 0 18px rgba(255,255,255,.22);border-color:var(--rule-2)}\n  8%{text-shadow:0 0 12px rgba(255,255,255,.95),0 0 26px rgba(255,255,255,.5);border-color:var(--accent-line)}\n  40%{text-shadow:0 0 10px rgba(255,255,255,.62),0 0 20px rgba(255,255,255,.3);border-color:var(--rule-2)}}\n\n/\* ---------- the press: a white edge that flashes and goes down slowly, no colour, no fill ---------- *\/\n.press{position:relative;isolation:isolate}\n.press::before,.press::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;\n  opacity:0;transition:opacity .2s var(--ease-out)}\n.press::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 12px 1px rgba(255,255,255,.6),0 0 34px 6px rgba(255,255,255,.3),0 0 84px 20px rgba(255,255,255,.12)}\n.press::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.08);box-shadow:inset 0 0 12px 1px rgba(255,255,255,.28),inset 0 0 22px 2px rgba(255,255,255,.18)}\n.press.hot{animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n@keyframes press-light{0%{--press:0;animation-timing-function:cubic-bezier(.12,.9,.24,1)}\n  4%{--press:1;animation-timing-function:cubic-bezier(.5,0,.7,1)}\n  18%{--press:.52;animation-timing-function:cubic-bezier(.4,0,.6,1)}46%{--press:.3}74%{--press:.15}to{--press:0}}\n@keyframes press-ink{\n  0%{text-shadow:0 0 12px rgba(255,255,255,0),0 0 26px rgba(255,255,255,0)}\n  4%{text-shadow:0 0 13px rgba(255,255,255,.75),0 0 30px rgba(255,255,255,.45)}\n  18%{text-shadow:0 0 11px rgba(255,255,255,.4),0 0 26px rgba(255,255,255,.22)}\n  46%{text-shadow:0 0 9px rgba(255,255,255,.22),0 0 22px rgba(255,255,255,.12)}\n  74%{text-shadow:0 0 8px rgba(255,255,255,.1),0 0 18px rgba(255,255,255,.06)}\n  to{text-shadow:0 0 6px rgba(255,255,255,0),0 0 14px rgba(255,255,255,0)}}\n.press.hot::before{opacity:var(--press)}\n.press.hot::after{opacity:calc(var(--press) * .9)}\n/\* the chosen row: a hairline that stays, no glow, no colour *\/\n.press.lit{border-color:var(--accent-line)!important;box-shadow:var(--glow-sm)}\n.press.lit::before{opacity:.5}\n.press.lit::after{opacity:.2}\n.press:active{transform:scale(.99)}\n\n/\* ---------- the panel ---------- *\/\n.pop{position:fixed;z-index:2147483647;pointer-events:auto;width:290px;max-width:calc(100vw - 16px);\n  background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r-panel);\n  box-shadow:0 18px 48px rgba(0,0,0,.7),var(--glow-edge);overflow:hidden;\n  transform-origin:var(--ox,100%) var(--oy,100%);\n  opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px);\n  transition:opacity .26s var(--ease),transform .34s var(--ease),filter .26s var(--ease)}\n.pop.in{opacity:1;transform:none;filter:none;animation:sheet-in .32s var(--ease) forwards}\n@keyframes sheet-in{\n  0%{opacity:0;transform:translateY(-10px) scale(.88)}\n  55%{opacity:1}\n  78%{transform:translateY(1px) scale(1.012)}\n  to{opacity:1;transform:translateY(0) scale(1)}}\n.pop.out{opacity:0;transform:translateY(4px) scale(.97);filter:blur(2px)}\n.pop.in .rise{animation:rise .42s var(--ease) both;animation-delay:calc(var(--i,0) * 42ms + 60ms)}\n@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}\n\n/\* the head: the name, the view, buttons, mini status bar — compact, no empty margins *\/\n.ph{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--rule)}\n.ph .t{flex:0 0 auto;min-width:0;font:700 11px/1 -apple-system,sans-serif;letter-spacing:.14em;\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:none}\n.ph .t em{font:400 10px/1 -apple-system,sans-serif;font-style:normal;letter-spacing:0;color:var(--muted);text-shadow:none;display:block;margin-top:3px}\n.ph .model-chip{flex:0 1 auto;margin:0 auto;text-align:center;min-width:0;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n  padding:3px 8px;border:1px solid rgba(255,255,255,.2);border-radius:7px;color:var(--ink-2);\n  font:500 10.5px/1.2 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.01em;\n  text-shadow:0 0 5px rgba(255,255,255,.55),0 0 11px rgba(255,255,255,.24);box-shadow:0 0 7px rgba(255,255,255,.08)}\n.mini-status{display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:6px;\n  background:transparent;border:1px solid transparent;cursor:pointer;\n  font:500 9.5px/1 -apple-system,sans-serif;color:var(--muted);\n  transition:border-color .18s var(--ease),color .18s var(--ease);flex:0 0 auto}\n.mini-status:hover{border-color:var(--rule-2);color:var(--ink)}\n.mini-status .dot{width:5px;height:5px;border-radius:50%;background:var(--rule-3)}\n.mini-status .dot.ok{background:var(--accent);box-shadow:0 0 5px rgba(255,255,255,.6)}\n.mini-status .dot.warn,.mini-status .dot.bad{background:var(--muted)}\n.ib{flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;\n  border-radius:8px;border:1px solid var(--rule-2);background:transparent;color:var(--ink-2);\n  font:600 12.5px/1 Georgia,serif;cursor:pointer;transition:border-color .18s var(--ease),color .18s var(--ease)}\n.ib:hover{border-color:var(--rule-3);color:var(--ink)}\n.ib.x{font:400 14px/1 -apple-system,sans-serif}\n.ib.back{font:400 13px/1 -apple-system,sans-serif}\n\n/\* the body: compact and tight, sized to content *\/\n.pb{max-height:min(50vh,320px);overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 10px}\n.pb::-webkit-scrollbar{width:0}\n.sec{font:700 9px/1 -apple-system,sans-serif;letter-spacing:.16em;color:var(--muted);margin:8px 0 4px}\n.sec:first-child{margin-top:0}\n.group{display:flex;flex-direction:column;gap:8px}\n.group + .sec{margin-top:8px}\n\n/\* ---------- answers: one row a tap wide, a box on the left, a letter, the text, the share ---------- *\/\n.ans{display:flex;align-items:center;gap:9px;width:100%;min-height:36px;margin:0;padding:10px 11px;\n  border-radius:var(--r);border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:400 12.5px/1.3 inherit;text-align:left;cursor:pointer;position:relative;isolation:isolate;\n  transition:border-color .18s var(--ease),background .18s var(--ease),box-shadow .18s var(--ease),transform .12s var(--ease)}\n.ans:hover{border-color:var(--rule-3);box-shadow:var(--glow-xs)}\n.ans:active{transform:scale(.985)}\n.ans::before,.ans::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .2s var(--ease-out)}\n.ans::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 12px 1px rgba(255,255,255,.6),0 0 34px 6px rgba(255,255,255,.3),0 0 84px 20px rgba(255,255,255,.12)}\n.ans::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.08);box-shadow:inset 0 0 12px 1px rgba(255,255,255,.28),inset 0 0 22px 2px rgba(255,255,255,.18)}\n.ans.lit,.ans.applied,.ans[data-lit]{border-color:#fff!important;box-shadow:var(--glow-md),var(--glow-edge),var(--aura-control-lit)!important;\n  animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n.ans.lit::before,.ans.applied::before{opacity:var(--press,.7)}\n.ans.lit::after,.ans.applied::after{opacity:calc(var(--press,.5) * .9)}\n.ans .mark{flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:1px solid var(--rule-3);\n  display:flex;align-items:center;justify-content:center;font:700 9px/1 inherit;color:#000;\n  transition:border-color .2s,box-shadow .2s}\n.ans.best .mark{border-color:var(--accent-line)}\n.ans.agent .mark,.mark.agent{background:var(--paper-3);border:1px solid rgba(255,255,255,.45)!important;\n  box-shadow:0 0 3px rgba(255,255,255,.2);transition:border-color .2s,box-shadow .2s}\n.ans.agent .mark::after,.mark.agent::after{content:\"\";display:block;width:6px;height:6px;border-radius:50%;\n  background:rgba(255,255,255,.65);box-shadow:0 0 3px rgba(255,255,255,.3);transition:background .2s,box-shadow .2s,transform .2s}\n.ans.lit .mark,.ans.applied .mark,.ans.agent.lit .mark,.ans.agent.applied .mark{border-color:#fff!important;\n  box-shadow:0 0 8px rgba(255,255,255,.95),0 0 16px rgba(255,255,255,.6)!important}\n.ans.lit .mark::after,.ans.applied .mark::after,.ans.agent.lit .mark::after,.ans.agent.applied .mark::after{background:#fff!important;\n  box-shadow:0 0 6px #fff,0 0 14px rgba(255,255,255,1)!important;transform:scale(1.15)}\n.ans .lbl{flex:1 1 auto;min-width:0;word-break:break-word}\n.ans .pct{flex:0 0 auto;font:600 10px/1 -apple-system,sans-serif;color:var(--muted)}\n.ans.agent{border-style:dashed}\n.ans.ai{position:relative;isolation:isolate;overflow:hidden;border:1px solid rgba(255,255,255,.14);box-shadow:var(--aura-control),var(--glow-sm)}\n.ans.ai::before{content:\"\";position:absolute;top:0;left:-100%;width:200%;height:100%;\n  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.14) 50%,transparent 100%);\n  animation:auraFlow 3.5s ease-in-out infinite;pointer-events:none;z-index:0}\n.ans.ai > *{position:relative;z-index:1}\n.ans.ai.busy .lbl{color:var(--muted)}\n.tag{font:600 9px/1 -apple-system,sans-serif;letter-spacing:.12em;color:var(--muted);margin-left:5px}\n.ans .tag.agent,.tag.agent{color:var(--ink);font-weight:700;letter-spacing:.14em;\n  text-shadow:0 0 6px rgba(255,255,255,.6),0 0 12px rgba(255,255,255,.25);opacity:1}\n\n/\* ---------- one status line, never a paragraph ---------- *\/\n.row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink-2);\n  font:400 11px/1.3 inherit;text-align:left;cursor:pointer;margin:5px 0 3px}\n.pb > .row:last-child{margin-bottom:0}\n.row .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--rule-3)}\n.row .dot.ok{background:var(--accent)}\n.row .dot.warn,.row .dot.bad{background:var(--muted)}\n.row .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.row .more{flex:0 0 auto;font-size:10px;color:var(--muted)}\n\n/\* ---------- controls and buttons (unified UI kit with Hotaru glow) ---------- *\/\n.frow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}\n.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:1 1 auto;min-width:0;height:28px;padding:0 10px;\n  border-radius:8px;border:1px solid var(--rule-2);background:var(--paper-2);color:var(--ink);\n  font:600 11px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.02em;\n  cursor:pointer;white-space:nowrap;user-select:none;-webkit-user-select:none;position:relative;isolation:isolate;\n  transition:border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease),transform .12s var(--ease)}\n.btn::before,.btn::after{content:\"\";position:absolute;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .2s var(--ease-out)}\n.btn::before{top:-1px;right:-1px;bottom:-1px;left:-1px;box-shadow:0 0 10px 1px rgba(255,255,255,.5),0 0 28px 4px rgba(255,255,255,.22)}\n.btn::after{top:0;right:0;bottom:0;left:0;background:rgba(255,255,255,.07);box-shadow:inset 0 0 8px 1px rgba(255,255,255,.24)}\n.btn:hover{border-color:var(--accent-line);box-shadow:var(--glow-sm),var(--glow-edge),var(--aura-control-lit);color:#fff}\n.btn:active,.btn.press:active{transform:scale(.97)}\n.btn.solid,.btn.primary{background:transparent;color:#fff;border-color:var(--accent-line);box-shadow:0 0 6px rgba(255,255,255,.15)}\n.btn.solid:hover,.btn.primary:hover{border-color:#fff;box-shadow:var(--glow-md),var(--aura-control-lit)}\n.btn.sm{height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;flex:0 0 auto}\n.btn.lit,.btn[data-lit]{border-color:#fff!important;box-shadow:var(--glow-md),var(--aura-control-lit)!important;\n  animation:press-light 1.5s linear forwards,press-ink 1.5s linear forwards}\n.btn.lit::before,.btn[data-lit]::before{opacity:var(--press,.7)}\n.btn.lit::after,.btn[data-lit]::after{opacity:calc(var(--press,.5) * .9)}\n.actions-row{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:4px 0 1px}\n.err-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;margin:4px 0 2px}\n.inp{flex:1 1 auto;min-width:0;width:100%;height:32px;padding:0 10px;border-radius:var(--r);border:1px solid var(--rule-2);\n  background:var(--paper-2);color:var(--ink);font:12px/1 -apple-system,sans-serif;outline:none;margin:0 0 8px}\n.inp:focus{border-color:var(--accent-line)}\n\n/\* debug toggle: unified button style with immediate status light *\/\n.dbg-toggle{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 10px;margin:0;border-radius:8px;\n  border:1px solid var(--rule-2);background:var(--paper-2);cursor:pointer;position:relative;\n  font:600 11px/1 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--ink);\n  transition:border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease)}\n.dbg-toggle:hover{border-color:var(--accent-line);box-shadow:0 0 8px rgba(255,255,255,.18);color:#fff}\n.dbg-toggle.on{border-color:var(--accent-line);box-shadow:0 0 6px rgba(255,255,255,.15)}\n.dbg-native{position:absolute;opacity:0;width:0;height:0;pointer-events:none}\n.dbg-light{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:var(--rule-2);border:1px solid var(--rule-3);\n  transition:background .12s,box-shadow .12s,border-color .12s}\n.dbg-light.on{background:var(--accent);border-color:#fff;\n  box-shadow:0 0 6px rgba(255,255,255,.9),0 0 12px rgba(255,255,255,.45)}\n.dbg-text{display:inline-flex;align-items:center}\n.dbg-title{font:600 11px/1 inherit;color:var(--ink)}\n\n/\* monochrome icons for settings and logs *\/\n.gear-icon,.log-icon{flex:0 0 auto;display:inline-block;vertical-align:middle;stroke:currentColor;fill:none}\n.row .gear-icon,.row .log-icon{width:14px;height:14px;color:var(--muted);transition:color .18s,filter .18s}\n.row:hover .gear-icon,.row:hover .log-icon{color:#fff;filter:drop-shadow(0 0 4px rgba(255,255,255,.5))}\n\n/\* agent status strip: flowing light aura, no harsh outline *\/\n.agent-status-strip{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;margin:4px 0;\n  border-radius:var(--r);border:1px solid rgba(255,255,255,.08);background:var(--paper-2);color:var(--ink);\n  font:400 11px/1.3 inherit;position:relative;isolation:isolate;overflow:hidden;box-shadow:0 0 10px rgba(255,255,255,.06)}\n.agent-status-strip::before{content:\"\";position:absolute;top:0;left:-100%;width:200%;height:100%;\n  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.12) 50%,transparent 100%);\n  animation:auraFlow 3.5s ease-in-out infinite;pointer-events:none;z-index:0}\n.agent-status-strip > *{position:relative;z-index:1}\n@keyframes auraFlow{0%{transform:translateX(0)}50%{transform:translateX(50%)}100%{transform:translateX(0)}}\n.agent-status-strip .dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--accent);\n  box-shadow:0 0 5px rgba(255,255,255,.9)}\n.agent-status-strip .txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n\n/\* shimmering flowing text for thinking / reasoning actions *\/\n.agent-shimmer{background:linear-gradient(90deg,var(--muted) 0%,#ffffff 50%,var(--muted) 100%);\n  background-size:200% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;\n  animation:textShimmer 2.2s linear infinite;font-weight:500;letter-spacing:.02em}\n@keyframes textShimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}\n\n/\* action icons: brain for reasoning, eye for looking at image, pencil for writing answer *\/\n.action-icon{flex:0 0 auto;width:14px;height:14px;display:inline-block;vertical-align:middle;stroke:currentColor;fill:none}\n.action-icon.brain-icon,.action-icon.eye-icon,.action-icon.pencil-icon{color:var(--ink);filter:drop-shadow(0 0 4px rgba(255,255,255,.5))}\n.reconnect-hint{font:400 10px/1.2 -apple-system,sans-serif;color:var(--muted);text-align:center;margin:3px 0 1px;letter-spacing:.02em}\n\n.agent-unmatched-row{display:flex;align-items:center;gap:7px;padding:6px 9px;margin:4px 0 2px;\n  background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.2);border-radius:var(--r);font:400 11px/1.3 inherit}\n.agent-unmatched-row .dot.warn{background:#eab308;box-shadow:0 0 5px rgba(234,179,8,.8)}\n.ans.closest-match{border-color:rgba(255,255,255,.3);box-shadow:0 0 6px rgba(255,255,255,.1)}\n\n/\* compact status screen *\/\n.status-grid{display:flex;flex-direction:column;gap:5px;margin:3px 0 6px}\n.status-item{display:flex;align-items:center;justify-content:space-between;padding:6px 9px;border-radius:var(--r);\n  background:var(--paper-2);border:1px solid var(--rule);font-size:11px}\n.status-item .k{color:var(--muted);font-weight:500}\n.status-item .v{color:var(--ink);font-weight:600}\n\n/\* the copy value: a row that is a tap target, the key above the value *\/\n.val{display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;margin:0 0 6px;border-radius:var(--r);\n  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink);\n  font:400 11.5px/1.35 ui-monospace,Menlo,monospace;text-align:left;cursor:pointer}\n.val .k{flex:0 0 46px;font:600 9px/1.3 -apple-system,sans-serif;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}\n.val .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}\n.val.human{font:400 11.5px/1.35 -apple-system,sans-serif}\n.val.human .v{overflow-wrap:break-word}\n.val .copy{flex:0 0 auto;font:600 9px/1 -apple-system,sans-serif;color:var(--muted);letter-spacing:.06em}\n.val[disabled]{opacity:.55;cursor:default}\n.models{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 10px}\n.chip{padding:4px 8px;border-radius:999px;border:1px solid var(--rule-2);background:var(--paper-2);\n  font:500 10px/1 ui-monospace,Menlo,monospace;color:var(--ink-2)}\n\n/\* ---------- the journal: lines with air, a mark on the left ---------- *\/\n.log{font:400 10px/1.4 ui-monospace,Menlo,monospace;color:var(--ink-2);display:flex;flex-direction:column;gap:2px}\n.log .ln{display:flex;gap:7px;padding:5px 0;border-bottom:1px solid var(--rule);word-break:break-word}\n.log .ln:last-child{border-bottom:0}\n.log .ln .g{flex:0 0 auto;width:5px;height:5px;margin-top:4px;border-radius:50%;background:var(--rule-3)}\n.log .ln.ok .g{background:var(--accent)}\n.log .ln.warn,.log .ln.bad{color:var(--muted)}\n.log .ln .t{flex:0 0 auto;color:var(--muted)}\n.log .ln .m{flex:1 1 auto;min-width:0}\n.empty{padding:6px 4px;text-align:center;color:var(--muted);font-size:11.5px;line-height:1.4}\n.spin{width:14px;height:14px;margin:8px auto;border-radius:50%;border:1.5px solid var(--rule-2);border-top-color:var(--ink);animation:sp .7s linear infinite}\n@keyframes sp{to{transform:rotate(360deg)}}\n.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(6px);max-width:84vw;padding:8px 12px;\n  border-radius:999px;background:var(--paper-3);border:1px solid var(--rule-3);color:var(--ink);\n  font:11.5px/1.3 inherit;text-align:center;opacity:0;pointer-events:none;\n  transition:opacity .2s,transform .2s;z-index:2147483647}\n.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}\n@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}\n";
 
    
    
@@ -4401,11 +4401,42 @@ var __ssW=window,__msePageWindow=window;
     var LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
      
-    function questionIdentity(text) {
-      var t = String(text || '').trim().toLowerCase().replace(/[\s:.,!?*+\x2F-]/g, '');
+    function questionIdentity(textOrQ, options, images) {
+      var text = '';
+      var opts = [];
+      var imgs = [];
+
+      if (textOrQ && typeof textOrQ === 'object') {
+        text = textOrQ.text || '';
+        opts = textOrQ.options || (textOrQ.answers ? textOrQ.answers.map(function (a) {
+          return (a.text || '') + (a.imgSrc ? '::' + a.imgSrc : '');
+        }) : []);
+        imgs = textOrQ.images || textOrQ.image || [];
+      } else {
+        text = String(textOrQ || '');
+        if (Array.isArray(options)) opts = options;
+        if (Array.isArray(images)) imgs = images;
+      }
+
+      var normText = text.trim().toLowerCase().replace(/[\s:.,!?*+\x2F-]/g, '');
+      var normOpts = opts.map(function (o) {
+        var str = (typeof o === 'string') ? o : (o && (o.text || o.label || o.data || o.src) || '');
+        return String(str || '').trim().toLowerCase().replace(/[\s:.,!?*+\x2F-]/g, '');
+      }).sort().join('|');
+
+      var normImgs = imgs.map(function (im) {
+        var src = (typeof im === 'string') ? im : (im && (im.src || im.data || im.url || im.alt) || '');
+        return String(src || '').trim().slice(0, 200);
+      }).join('|');
+
+      var payload = normText;
+      if (normOpts || normImgs) {
+        payload += '#' + normOpts + '#' + normImgs;
+      }
+
       var n = 7;
-      for (var i = 0; i < t.length; i++) {
-        var c = t.charCodeAt(i);
+      for (var i = 0; i < payload.length; i++) {
+        var c = payload.charCodeAt(i);
         n = n + (c << 5) - c;
       }
       return n;
@@ -4428,7 +4459,7 @@ var __ssW=window,__msePageWindow=window;
       if (!node && input.id) node = doc.querySelector('label[for="' + input.id + '"]');
       if (!node) node = input.closest('label');
       if (!node) {
-        var holder = input.closest('.r0, .r1, [data-region="answer"], .answer > div') || input.parentNode;
+        var holder = input.closest('.r0, .r1, [data-region="answer"], .form-check, .answer > div, tr') || input.parentNode;
         node = holder && (holder.querySelector('[data-region="answer-label"], label') || holder);
       }
       if (!node) return String(input.getAttribute('value') || '');
@@ -4438,7 +4469,12 @@ var __ssW=window,__msePageWindow=window;
       Array.prototype.forEach.call(copy.querySelectorAll('.answernumber, .accesshide'), function (x) {
         if (x.parentNode) x.parentNode.removeChild(x);
       });
-      return textOf(copy);
+      var txt = textOf(copy);
+      if (!txt) {
+        var img = copy.querySelector('img');
+        if (img) txt = img.getAttribute('alt') || img.getAttribute('title') || '';
+      }
+      return txt || String(input.getAttribute('value') || '');
     }
     function typeOf(block) {
       var cls = String(block.className || '').split(/\s+/);
@@ -4461,6 +4497,88 @@ var __ssW=window,__msePageWindow=window;
       return m3 ? m3[1] : null;
     }
 
+    function isPlaceholderOption(opt) {
+      if (!opt) return true;
+      var val = String(opt.value != null ? opt.value : '').trim();
+      var txt = String(opt.textContent || opt.text || '').trim().toLowerCase();
+      if (val === '' || val === '-1') return true;
+      if (/^(\u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435|\u0432\u044b\u0431\u0440\u0430\u0442\u044c|choose|select|\-\-|\u043d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u043e|no selection|\u043e\u0442\u0432\u0435\u0442\u0438\u0442\u044c|none)\b/i.test(txt)) return true;
+      if (val === '0' && (/^(\u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435|\u0432\u044b\u0431\u0440\u0430\u0442\u044c|choose|select|\-\-|\u043d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u043e|no selection|\u043e\u0442\u0432\u0435\u0442\u0438\u0442\u044c|none)/i.test(txt) || /^[\.\-\s]+$/.test(txt) || !txt)) return true;
+      return false;
+    }
+
+    function extractControlLabel(node, block) {
+      var labelText = '';
+      var tr = node.closest ? node.closest('tr, .subquestion, .form-group, .row, li') : null;
+      if (tr) {
+        var candidates = tr.querySelectorAll('.text, [id*="itemtext"], [id*="_sub"], td:not(.control), th');
+        for (var ci = 0; ci < candidates.length; ci++) {
+          var cand = candidates[ci];
+          if (!cand.contains(node)) {
+            var clone = cand.cloneNode(true);
+            Array.prototype.forEach.call(clone.querySelectorAll('.accesshide, .visually-hidden'), function (x) {
+              if (x.parentNode) x.parentNode.removeChild(x);
+            });
+            var t = textOf(clone);
+            if (t && !/^(answer|\u043e\u0442\u0432\u0435\u0442|\u0432\u043e\u043f\u0440\u043e\u0441|question)\s*\d+/i.test(t)) {
+              labelText = t;
+              break;
+            }
+            if (!labelText) {
+              var img = cand.querySelector('img');
+              if (img) {
+                labelText = img.getAttribute('alt') || img.getAttribute('title') || img.src || '';
+                if (labelText) break;
+              }
+            }
+          }
+        }
+        if (!labelText) {
+          var cell = node.closest('td, th, .control');
+          if (cell && cell.previousElementSibling) {
+            var clonePrev = cell.previousElementSibling.cloneNode(true);
+            Array.prototype.forEach.call(clonePrev.querySelectorAll('.accesshide, .visually-hidden'), function (x) {
+              if (x.parentNode) x.parentNode.removeChild(x);
+            });
+            var tPrev = textOf(clonePrev);
+            if (tPrev && !/^(answer|\u043e\u0442\u0432\u0435\u0442|\u0432\u043e\u043f\u0440\u043e\u0441|question)\s*\d+/i.test(tPrev)) {
+              labelText = tPrev;
+            }
+          }
+        }
+      }
+      if (!labelText && node.getAttribute('aria-describedby')) {
+        var descs = String(node.getAttribute('aria-describedby') || '').split(/\s+/);
+        for (var di = 0; di < descs.length; di++) {
+          var did = descs[di];
+          if (!did || /_qtext$/i.test(did)) continue;
+          var descEl = block.querySelector('#' + did);
+          if (descEl) {
+            var cloneDesc = descEl.cloneNode(true);
+            Array.prototype.forEach.call(cloneDesc.querySelectorAll('.accesshide, .visually-hidden'), function (x) {
+              if (x.parentNode) x.parentNode.removeChild(x);
+            });
+            var tDesc = textOf(cloneDesc);
+            if (tDesc && !/^(answer|\u043e\u0442\u0432\u0435\u0442|\u0432\u043e\u043f\u0440\u043e\u0441|question)\s*\d+/i.test(tDesc)) {
+              labelText = tDesc;
+              break;
+            }
+          }
+        }
+      }
+      if (!labelText && node.id) {
+        var lbl = block.querySelector('label[for="' + node.id + '"]');
+        if (lbl && !lbl.classList.contains('visually-hidden') && !lbl.classList.contains('accesshide')) {
+          var tLbl = textOf(lbl);
+          if (tLbl && !/^(answer|\u043e\u0442\u0432\u0435\u0442|\u0432\u043e\u043f\u0440\u043e\u0441|question)\s*\d+/i.test(tLbl)) {
+            labelText = tLbl;
+          }
+        }
+      }
+      if (/^(answer|\u043e\u0442\u0432\u0435\u0442|\u0432\u043e\u043f\u0440\u043e\u0441|question)\s*\d+/i.test(labelText)) labelText = '';
+      return labelText.trim();
+    }
+
     function readQuestion(block) {
       var qtext = block.querySelector('.qtext') || block.querySelector('.formulation') || block;
       if (!qtext) return null;
@@ -4471,6 +4589,15 @@ var __ssW=window,__msePageWindow=window;
       var text = textOf(clone);
       if (!text && clone.querySelector('img')) text = '[image question]';
       var type = typeOf(block);
+
+       
+      var qimgs = [];
+      var bodyImgs = qtext.querySelectorAll('img');
+      for (var bi = 0; bi < bodyImgs.length; bi++) {
+        var bSrc = bodyImgs[bi].currentSrc || bodyImgs[bi].src || bodyImgs[bi].getAttribute('src') || '';
+        if (bSrc) qimgs.push(bSrc);
+      }
+
       var q = {
         node: block,
         text: text,
@@ -4479,26 +4606,33 @@ var __ssW=window,__msePageWindow=window;
         kind: (TYPE_INFO[type] || {}).kind || null,
         supported: !!TYPE_INFO[type],
         unsupported: UNSUPPORTED[type] || null,
-        identity: questionIdentity(text),
+        images: qimgs,
         questionId: qidOf(block),
         answers: [],
         controls: []
       };
+
        
       var inputs = block.querySelectorAll('input[type=radio], input[type=checkbox]');
       for (var i = 0; i < inputs.length; i++) {
         var inp = inputs[i];
-        if (!/^q\d+:\d+(_sub\d+)?_(answer|choice\d*)/.test(inp.name || '')) continue;
         if (String(inp.getAttribute('value')) === '-1') continue;  
         if (inp.closest && inp.closest('.qtype_multichoice_clearchoice, .clearchoice')) continue;
+        if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(inp.name || '')) continue;
+
         var caption = answerText(inp);
+        var holder = (inp.closest && inp.closest('.r0, .r1, [data-region="answer"], .form-check, fieldset, div[class*="answer"], table, label')) || inp.parentNode;
+        var optImg = (holder && holder.querySelector('img')) || (inp.parentElement && inp.parentElement.querySelector('img'));
+        var imgSrc = optImg ? (optImg.currentSrc || optImg.src || optImg.getAttribute('src') || '') : '';
+        var imgAlt = optImg ? (optImg.getAttribute('alt') || optImg.getAttribute('title') || '') : '';
+
         if (!caption) {
-          var holder = inp.closest('.r0, .r1, [data-region="answer"], label') || inp.parentNode;
-          var image = holder && holder.querySelector('img');
-          if (image) caption = image.getAttribute('alt') || ('image ' + (q.answers.length + 1));
+          if (imgAlt) caption = imgAlt;
+          else if (imgSrc) caption = '[image ' + (q.answers.length + 1) + ']';
+          else if (inp.value && inp.value !== 'on') caption = String(inp.value);
         }
         if (/^(\u043e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u043c\u043e\u0439 \u0432\u044b\u0431\u043e\u0440|clear my choice)$/i.test(String(caption || '').trim())) continue;
-        q.answers.push({ input: inp, kind: 'choice', text: caption, letter: LETTERS[q.answers.length] || '', checked: !!inp.checked });
+        q.answers.push({ input: inp, kind: 'choice', text: caption, letter: LETTERS[q.answers.length] || '', imgSrc: imgSrc, checked: !!inp.checked });
       }
 
        
@@ -4523,33 +4657,35 @@ var __ssW=window,__msePageWindow=window;
       }
 
        
-      var controlNodes = block.querySelectorAll('select, input[type=text][name], textarea[name], input.placeinput');
+      var controlNodes = block.querySelectorAll('select, input[type=text], input[type=number], textarea, input.placeinput');
       for (var cn = 0; cn < controlNodes.length; cn++) {
         var node = controlNodes[cn];
         var tag = node.tagName.toLowerCase();
-        var labelText = '';
-        var tr = node.closest ? node.closest('tr') : null;
-        if (tr) {
-          var tdText = tr.querySelector('td.text');
-          if (tdText) labelText = textOf(tdText) || (tdText.querySelector('img') && tdText.querySelector('img').getAttribute('alt')) || '';
-        }
-        if (!labelText && node.id) {
-          var lbl = block.querySelector('label[for="' + node.id + '"]');
-          if (lbl) labelText = textOf(lbl);
-        }
+        var nodeType = String(node.getAttribute('type') || '').toLowerCase();
+        if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(node.name || '')) continue;
+        if (tag === 'input' && nodeType === 'hidden' && !node.classList.contains('placeinput')) continue;
+
+        var labelText = extractControlLabel(node, block);
         if (tag === 'select') {
-          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
           q.controls.push({ kind: 'select', node: node, label: labelText || null });
         } else if (tag === 'input' && node.classList.contains('placeinput')) {
           var pMatch = /place(\d+)/.exec(node.className || '') || /_p(\d+)/.exec(node.name || '');
           var pNo = pMatch ? parseInt(pMatch[1], 10) : (q.controls.filter(function (c) { return c.kind === 'place'; }).length + 1);
           q.controls.push({ kind: 'place', placeNo: pNo, node: node });
         } else {
-          if (!/^q\d+:\d+_/.test(node.name || '')) continue;
-          if (/_:flagged|_:sequencecheck|_:qaid|_:qubaid/.test(node.name || '')) continue;
-          q.controls.push({ kind: 'text', node: node, label: labelText || null });
+          q.controls.push({ kind: tag === 'input' && nodeType === 'number' ? 'number' : 'text', node: node, label: labelText || null });
         }
       }
+
+       
+      var qopts = q.answers.map(function (a) { return (a.text || '') + (a.imgSrc ? '::' + a.imgSrc : ''); });
+      q.controls.filter(function (c) { return c.kind === 'select'; }).forEach(function (c) {
+        Array.prototype.forEach.call(c.node.options, function (o) {
+          if (!isPlaceholderOption(o)) qopts.push(o.textContent.trim());
+        });
+      });
+      q.identity = questionIdentity(text, qopts, qimgs);
+
       return q;
     }
 
@@ -4661,6 +4797,7 @@ var __ssW=window,__msePageWindow=window;
       }
 
       state.agent = { state: 'ok', answer: rawAns, model: model };
+      state.agentUnmatched = null;
 
       var ansParts = [];
       if (Array.isArray(rawAns)) {
@@ -4678,19 +4815,51 @@ var __ssW=window,__msePageWindow=window;
       state.agentPicks = ansParts;
       state.tappedPicks = state.tappedPicks || {};
 
+      var interactive = q.controls.filter(function (c) { return c.kind === 'select' || c.kind === 'text' || c.kind === 'place'; });
+      if (interactive.length > 1 && (ansParts.length === interactive.length || q.type === 'match' || q.type === 'matching')) {
+        var matchingRows = [];
+        interactive.forEach(function (ctrl, idx) {
+          var promptLabel = ctrl.label || ('Item ' + (idx + 1));
+          var ans = ansParts[idx] || '';
+          var cleanAns = String(ans || '').replace(/^[^:]+:\s*|^\d+[\.\)\:\-]\s*|^[^\->→]+[->→]\s{0,}/, '').trim();
+          matchingRows.push({
+            label: promptLabel + ': ' + cleanAns,
+            val: cleanAns,
+            prompt: promptLabel,
+            fullAnswer: rawAns,
+            controlIndex: idx,
+            selectIndex: ctrl.kind === 'select' ? idx : null,
+            correctness: 1,
+            agent: true,
+            agentPick: true
+          });
+        });
+        state.rows = matchingRows;
+        setBadge(ansParts.length);
+        return;
+      }
+
       var currentRows = (state.rows || []).slice();
       if (!currentRows.length && q.answers && q.answers.length) {
         currentRows = q.answers.map(function (answer) { return { label: answer.text, correctness: 0 }; });
       } else if (!currentRows.length && q.controls && q.controls.some(function (c) { return c.kind === 'select'; })) {
-        q.controls.filter(function (c) { return c.kind === 'select'; }).forEach(function (c, index) {
-          Array.prototype.forEach.call(c.node.options, function (o) {
-            if (o.value && !o.disabled) currentRows.push({ label: o.textContent.trim(), selectIndex: index, correctness: 0 });
+        var selects = q.controls.filter(function (c) { return c.kind === 'select'; });
+        if (selects.length === 1) {
+          Array.prototype.forEach.call(selects[0].node.options, function (o) {
+            if (!isPlaceholderOption(o)) currentRows.push({ label: o.textContent.trim(), selectIndex: 0, correctness: 0 });
           });
-        });
+        } else {
+          selects.forEach(function (c, index) {
+            var lbl = c.label || ('Item ' + (index + 1));
+            currentRows.push({ label: lbl, prompt: lbl, selectIndex: index, correctness: 0 });
+          });
+        }
       }
 
+      var unmatched = [];
       ansParts.forEach(function (part) {
-        var hit = currentRows.find(function (r) { return norm(r.label) === norm(part); });
+        var pNorm = norm(part);
+        var hit = currentRows.find(function (r) { return norm(r.label) === pNorm; });
         if (!hit) {
           var pTrim = String(part || '').trim();
           hit = currentRows.find(function (r, idx) {
@@ -4700,10 +4869,26 @@ var __ssW=window,__msePageWindow=window;
         if (hit) {
           hit.agent = true;
           hit.agentPick = true;
+          hit.fullAnswer = rawAns;
         } else {
-          currentRows.unshift({ label: part, correctness: 0, count: 0, agent: true, agentPick: true });
+          unmatched.push(part);
+           
+          var closest = null;
+          currentRows.forEach(function (r) {
+            var rNorm = norm(r.label);
+            if (!rNorm || !pNorm) return;
+            if (rNorm.indexOf(pNorm) >= 0 || pNorm.indexOf(rNorm) >= 0) {
+              closest = r;
+            }
+          });
+          if (closest) closest.closestMatch = true;
         }
       });
+
+      if (unmatched.length) {
+        state.agentUnmatched = unmatched.join(' | ');
+      }
+
       state.rows = currentRows;
       setBadge(ansParts.length || 1);
     }
@@ -4750,6 +4935,14 @@ var __ssW=window,__msePageWindow=window;
       }
 
       var parts = fullText.split('|').map(function (x) { return x.trim(); }).filter(Boolean);
+      if (row && row.fullAnswer) {
+        var faStr = String(row.fullAnswer);
+        var faArr = faStr.indexOf('|') >= 0 ? faStr.split('|') : (faStr.indexOf('\n') >= 0 ? faStr.split(/\r?\n/) : []);
+        faArr = faArr.map(function (x) { return x.trim(); }).filter(Boolean);
+        if (faArr.length === interactive.length && interactive.length > 1) {
+          parts = faArr;
+        }
+      }
       if (!parts.length) return {ok:false};
 
       if (places.length) {
@@ -4851,58 +5044,52 @@ var __ssW=window,__msePageWindow=window;
       }
 
        
-      var selects = q.controls.filter(function (c) { return c.kind === 'select'; });
-      if (typeof row.selectIndex === 'number' && selects[row.selectIndex]) {
-        var target = selects[row.selectIndex];
-        var matches = Array.prototype.filter.call(target.node.options, function (o) {
-          return norm(o.textContent) === norm(parts[0]) || String(o.value) === parts[0];
-        });
-        if (!matches.length && /^\d+$/.test(parts[0])) {
-          var numIdx = parseInt(parts[0], 10);
-          if (numIdx >= 0 && numIdx < target.node.options.length) matches = [target.node.options[numIdx]];
-        }
-        if (matches.length === 1) {
-          target.node.value = matches[0].value;
-          target.node.dispatchEvent(new win.Event('change', {bubbles:true}));
-          return {ok:true, how:'select'};
-        }
-        return {ok:false};
-      }
-
-       
-      if (interactive.length && interactive.length === parts.length) {
+      if (interactive.length > 1 && interactive.length === parts.length) {
         var planned = [];
         for (var idx = 0; idx < interactive.length; idx++) {
           var ctrl = interactive[idx];
           var val = parts[idx];
+          var cleanVal = String(val || '').replace(/^[^:]+:\s*|^\d+[\.\)\:\-]\s*|^[^\->→]+[->→]\s{0,}/, '').trim();
           if (ctrl.kind === 'select') {
             var opts = Array.prototype.filter.call(ctrl.node.options, function (o) {
-              return norm(o.textContent) === norm(val) || String(o.value) === val;
+              if (isPlaceholderOption(o)) return false;
+              return norm(o.textContent) === norm(cleanVal) || String(o.value) === cleanVal;
             });
-            if (!opts.length && /^\d+$/.test(val)) {
-              var nIdx = parseInt(val, 10);
-              if (nIdx >= 0 && nIdx < ctrl.node.options.length) opts = [ctrl.node.options[nIdx]];
+            if (!opts.length && /^\d+$/.test(cleanVal)) {
+              var nIdx = parseInt(cleanVal, 10);
+              if (nIdx >= 0 && nIdx < ctrl.node.options.length && !isPlaceholderOption(ctrl.node.options[nIdx])) {
+                opts = [ctrl.node.options[nIdx]];
+              }
             }
-            if (!opts.length && /^[a-z\u0430-\u044f]$/i.test(val.trim())) {
-              var letCode = val.trim().toLowerCase().charCodeAt(0);
+            if (!opts.length) {
+              opts = Array.prototype.filter.call(ctrl.node.options, function (o) {
+                if (isPlaceholderOption(o)) return false;
+                var no = norm(o.textContent);
+                var np = norm(cleanVal);
+                return no && np && (no.indexOf(np) >= 0 || np.indexOf(no) >= 0);
+              });
+            }
+            if (!opts.length && /^[a-z\u0430-\u044f]$/i.test(cleanVal.trim())) {
+              var letCode = cleanVal.trim().toLowerCase().charCodeAt(0);
               var letIdx = -1;
               if (letCode >= 97 && letCode <= 122) letIdx = letCode - 97;
               else {
-                var cyr = '\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043a\u043b\u043c\u043d\u043e\u043f\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044d\u044e\u044f';
-                letIdx = cyr.indexOf(val.trim().toLowerCase());
+                var cyr = '\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043a\u043b\u043c\u043d\u043e\u043f\u0441\u0442\u0443\u0444\u0445\u0446\u0448\u0449\u044d\u044e\u044f';
+                letIdx = cyr.indexOf(cleanVal.trim().toLowerCase());
               }
-              var validOpts = Array.prototype.filter.call(ctrl.node.options, function (o) { return !!o.value && !o.disabled; });
+              var validOpts = Array.prototype.filter.call(ctrl.node.options, function (o) { return !isPlaceholderOption(o); });
               if (letIdx >= 0 && letIdx < validOpts.length) opts = [validOpts[letIdx]];
             }
-            if (opts.length !== 1) return {ok:false};
+            if (opts.length < 1) return {ok:false};
             planned.push({ kind: 'select', node: ctrl.node, value: opts[0].value });
           } else if (ctrl.kind === 'text') {
-            planned.push({ kind: 'text', node: ctrl.node, value: val });
+            planned.push({ kind: 'text', node: ctrl.node, value: cleanVal });
           }
         }
         planned.forEach(function (act) {
           if (act.kind === 'select') {
             act.node.value = act.value;
+            act.node.dispatchEvent(new win.Event('input', {bubbles:true}));
             act.node.dispatchEvent(new win.Event('change', {bubbles:true}));
           } else if (act.kind === 'text') {
             act.node.value = act.value;
@@ -4924,6 +5111,38 @@ var __ssW=window,__msePageWindow=window;
           }
         });
         return {ok:true, how: interactive.every(function (c) { return c.kind === 'select'; }) ? 'select' : (interactive.every(function (c) { return c.kind === 'text'; }) ? 'text' : 'multi')};
+      }
+
+       
+      var selects = q.controls.filter(function (c) { return c.kind === 'select'; });
+      if (typeof row.selectIndex === 'number' && selects[row.selectIndex]) {
+        var target = selects[row.selectIndex];
+        var singleVal = String(row.val != null ? row.val : parts[0] || '').replace(/^[^:]+:\s*|^\d+[\.\)\:\-]\s*|^[^\->→]+[->→]\s{0,}/, '').trim();
+        var matches = Array.prototype.filter.call(target.node.options, function (o) {
+          if (isPlaceholderOption(o)) return false;
+          return norm(o.textContent) === norm(singleVal) || String(o.value) === singleVal;
+        });
+        if (!matches.length && /^\d+$/.test(singleVal)) {
+          var numIdx = parseInt(singleVal, 10);
+          if (numIdx >= 0 && numIdx < target.node.options.length && !isPlaceholderOption(target.node.options[numIdx])) {
+            matches = [target.node.options[numIdx]];
+          }
+        }
+        if (!matches.length) {
+          matches = Array.prototype.filter.call(target.node.options, function (o) {
+            if (isPlaceholderOption(o)) return false;
+            var no = norm(o.textContent);
+            var np = norm(singleVal);
+            return no && np && (no.indexOf(np) >= 0 || np.indexOf(no) >= 0);
+          });
+        }
+        if (matches.length >= 1) {
+          target.node.value = matches[0].value;
+          target.node.dispatchEvent(new win.Event('input', {bubbles:true}));
+          target.node.dispatchEvent(new win.Event('change', {bubbles:true}));
+          return {ok:true, how:'select'};
+        }
+        return {ok:false};
       }
 
        
@@ -5372,6 +5591,10 @@ var __ssW=window,__msePageWindow=window;
         if (aiAllowed()) appendAi(q);
         return;
       }
+      if (state.error === 'options not captured' || ((q.type === 'multichoice' || q.type === 'multichoiceset' || q.type === 'truefalse') && (!q.answers || !q.answers.length))) {
+        body.appendChild(N(el('div', 'empty', 'options not captured')));
+        return;
+      }
       if (state.error) {
         body.appendChild(N(el('div', 'empty', state.error)));
         var again = press(el('button', 'btn', 'retry'), function () {
@@ -5385,9 +5608,25 @@ var __ssW=window,__msePageWindow=window;
       var rows = (state.rows || []).slice();
       if (!rows.length && q.answers.length) rows = q.answers.map(function (answer) { return {label:answer.text, correctness:0}; });
       if (!rows.length && q.controls.some(function (c) { return c.kind === 'select'; })) {
-        q.controls.filter(function (c) { return c.kind === 'select'; }).forEach(function (c, index) {
-          Array.prototype.forEach.call(c.node.options, function (o) { if (o.value && !o.disabled) rows.push({label:o.textContent.trim(), selectIndex:index, correctness:0}); });
-        });
+        var selects = q.controls.filter(function (c) { return c.kind === 'select'; });
+        if (selects.length === 1) {
+          Array.prototype.forEach.call(selects[0].node.options, function (o) {
+            if (!isPlaceholderOption(o)) rows.push({label:o.textContent.trim(), selectIndex:0, correctness:0});
+          });
+        } else {
+          selects.forEach(function (c, index) {
+            var lbl = c.label || ('Item ' + (index + 1));
+            rows.push({ label: lbl, prompt: lbl, selectIndex: index, correctness: 0 });
+          });
+        }
+      }
+
+       
+      if (state.agent && state.agent.state === 'ok') {
+        var pickedRows = rows.filter(function (r) { return r.agent || r.agentPick; });
+        if (pickedRows.length) {
+          rows = pickedRows;
+        }
       }
       if (!rows.length) {
         body.appendChild(N(el('div', 'empty', 'no answers yet')));
@@ -5411,6 +5650,8 @@ var __ssW=window,__msePageWindow=window;
           if (r.correctness > 0 || (r.agent && state.tappedPicks && state.tappedPicks[r.label])) {
             a.classList.add('lit', 'applied');
             a.setAttribute('data-lit', 'true');
+          } else if (r.closestMatch) {
+            a.classList.add('closest-match');
           }
           a.addEventListener('click', function () {
             flash(a);
@@ -5423,10 +5664,15 @@ var __ssW=window,__msePageWindow=window;
                 if (r.agent) {
                   state.tappedPicks = state.tappedPicks || {};
                   state.tappedPicks[r.label] = true;
+                  if (res.how === 'multi') {
+                    (state.rows || []).forEach(function (rowItem) {
+                      state.tappedPicks[rowItem.label] = true;
+                    });
+                  }
                   var allDone = state.agentPicks && state.agentPicks.length && state.agentPicks.every(function (p) {
                     return state.tappedPicks[p];
                   });
-                  if (allDone) setBadge(0);
+                  if (allDone || res.how === 'multi') setBadge(0);
                 } else {
                   setBadge(0);
                 }
@@ -5440,27 +5686,14 @@ var __ssW=window,__msePageWindow=window;
           list.appendChild(N(a, i));
         });
       }
-      if (aiAllowed() && (!state.agent || state.agent.state !== 'ok')) appendAi(q);
-      var actions = el('div', 'frow');
-      actions.style.margin = '6px 0 0';
-      var snif = press(el('button', 'btn', 'Snif'), function () {
-        snifText = JSON.stringify(snifDump(), null, 2);
-        state.route = 'snif';
-        render();
-      });
-      snif.setAttribute('data-mse', 'snif');
-      snif.style.minHeight = '44px';
-      snif.style.minWidth = '100px';
-      actions.appendChild(snif);
-      if (!state.agent || state.agent.state !== 'error') {
-        var report = press(el('button', 'btn', 'Report'), function () {
-          reportCurrent(report);
-        });
-        report.setAttribute('data-mse', 'report');
-        report.style.minHeight = '44px';
-        actions.appendChild(report);
+      if (state.agentUnmatched) {
+        var unmatchedRow = el('div', 'row agent-unmatched-row');
+        unmatchedRow.setAttribute('data-mse', 'agent-unmatched');
+        unmatchedRow.appendChild(el('span', 'dot warn'));
+        unmatchedRow.appendChild(el('span', 'txt', 'agent suggests: ' + state.agentUnmatched + ' (not in options)'));
+        body.appendChild(N(unmatchedRow, 1));
       }
-      body.appendChild(N(actions, 1));
+      if (aiAllowed() && (!state.agent || state.agent.state !== 'ok')) appendAi(q);
     }
 
     function actionIcon(stage) {
@@ -5523,12 +5756,6 @@ var __ssW=window,__msePageWindow=window;
         var errRow = el('div', 'row err-row');
         errRow.appendChild(el('span', 'dot bad'));
         errRow.appendChild(el('span', 'txt', 'agent: ' + (ai.text || 'no response')));
-        var rep = press(el('button', 'btn sm', 'Report'), function (ev) {
-          if (ev) ev.stopPropagation();
-          reportCurrent(rep);
-        });
-        rep.setAttribute('data-mse', 'report');
-        errRow.appendChild(rep);
         body.appendChild(N(errRow, 1));
         return;
       }
@@ -5635,6 +5862,12 @@ var __ssW=window,__msePageWindow=window;
     function runAgent(automatic, retryCount) {
       var q = state.question;
       if (!q) return;
+      if ((q.type === 'multichoice' || q.type === 'multichoiceset' || q.type === 'truefalse') && (!q.answers || !q.answers.length)) {
+        state.error = 'options not captured';
+        logAdd('agent', false, 'options not captured for ' + q.type, { qtype: q.type, identity: q.identity });
+        render();
+        return;
+      }
       if (state.agent && state.agent.state === 'running' && !retryCount) return;
       if (!win.MSEBridge || !win.MSEBridge.url()) {
         state.agent = { state: 'error', text: 'AI gateway is not set' };
@@ -5651,7 +5884,7 @@ var __ssW=window,__msePageWindow=window;
           return {
             kind: 'select',
             label: c.label || null,
-            options: Array.prototype.filter.call(c.node.options, function (o) { return !!o.value && !o.disabled; }).map(function (o) { return o.textContent.trim(); })
+            options: Array.prototype.filter.call(c.node.options, function (o) { return !isPlaceholderOption(o); }).map(function (o) { return o.textContent.trim(); })
           };
         }
         if (c.kind === 'place') return { kind: 'place', label: 'Blank ' + (c.placeNo || (idx + 1)) };
@@ -5664,7 +5897,7 @@ var __ssW=window,__msePageWindow=window;
         options: q.answers.map(function (a) { return a.text; }),
         multiple: q.type === 'multichoiceset' || q.answers.some(function (a) { return a.input && a.input.type === 'checkbox'; }),
         fields: fields.length ? fields : null,
-        selects: q.controls.filter(function (c) { return c.kind === 'select'; }).map(function (c) { return Array.prototype.filter.call(c.node.options, function (o) { return !!o.value && !o.disabled; }).map(function (o) { return o.textContent.trim(); }); }),
+        selects: q.controls.filter(function (c) { return c.kind === 'select'; }).map(function (c) { return Array.prototype.filter.call(c.node.options, function (o) { return !isPlaceholderOption(o); }).map(function (o) { return o.textContent.trim(); }); }),
         placesCount: q.controls.filter(function (c) { return c.kind === 'place'; }).length,
         textCount: q.controls.filter(function (c) { return c.kind === 'text'; }).length,
         image: images.length ? images : null
@@ -5684,6 +5917,13 @@ var __ssW=window,__msePageWindow=window;
           applyAgentAnswer(res.answer, res.model, false);
           render();
           debugTraffic({ event: 'agent_response', ok: true, answer: res.answer, model: res.model });
+          return;
+        }
+        if (res.code === 'agent_error' && res.answer) {
+          logAdd('agent', false, 'agent: ' + String(res.answer).slice(0, 40) + ' (not in options)', { ms: ms });
+          applyAgentAnswer(res.answer, res.model, false);
+          render();
+          debugTraffic({ event: 'agent_response', ok: false, code: res.code, answer: res.answer, model: res.model });
           return;
         }
         debugTraffic({ event: 'agent_response', ok: false, status: res.status, code: res.code, message: res.message });
@@ -5770,16 +6010,30 @@ var __ssW=window,__msePageWindow=window;
       state.loading = false;
       state.ai = null;
       state.error = null;
+      state.agentUnmatched = null;
+
+      if ((q.type === 'multichoice' || q.type === 'multichoiceset' || q.type === 'truefalse') && (!q.answers || !q.answers.length)) {
+        state.error = 'options not captured';
+        logAdd('agent', false, 'options not captured for ' + q.type, { qtype: q.type, identity: q.identity });
+        render();
+        return;
+      }
 
       var initialRows = [];
       if (q.answers && q.answers.length) {
         initialRows = q.answers.map(function (answer) { return { label: answer.text, correctness: 0 }; });
       } else if (q.controls && q.controls.some(function (c) { return c.kind === 'select'; })) {
-        q.controls.filter(function (c) { return c.kind === 'select'; }).forEach(function (c, index) {
-          Array.prototype.forEach.call(c.node.options, function (o) {
-            if (o.value && !o.disabled) initialRows.push({ label: o.textContent.trim(), selectIndex: index, correctness: 0 });
+        var selects = q.controls.filter(function (c) { return c.kind === 'select'; });
+        if (selects.length === 1) {
+          Array.prototype.forEach.call(selects[0].node.options, function (o) {
+            if (!isPlaceholderOption(o)) initialRows.push({ label: o.textContent.trim(), selectIndex: 0, correctness: 0 });
           });
-        });
+        } else {
+          selects.forEach(function (c, index) {
+            var lbl = c.label || ('Item ' + (index + 1));
+            initialRows.push({ label: lbl, prompt: lbl, selectIndex: index, correctness: 0 });
+          });
+        }
       }
       state.rows = initialRows;
 

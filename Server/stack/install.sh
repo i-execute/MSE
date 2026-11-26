@@ -234,7 +234,7 @@ install_deps() {
         apt-get)
           # the distribution node is old on many images: the NodeSource setup script is the reliable way
           if have curl; then
-            curl -fsSL "https://deb.nodesource.com/setup_20.x" -o /tmp/mse-nodesource.sh 2>/dev/null \
+            curl -4 -fsSL "https://deb.nodesource.com/setup_20.x" -o /tmp/mse-nodesource.sh 2>/dev/null \
               && run bash /tmp/mse-nodesource.sh >/dev/null 2>&1 && run rm -f /tmp/mse-nodesource.sh || true
           fi
           pkg_install nodejs || true
@@ -591,7 +591,7 @@ start_services() {
   if have curl; then
     ready=0
     for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-      if curl -fsS "http://127.0.0.1:${MSE_PORT}/health" >/dev/null 2>&1; then ready=1; break; fi
+      if curl -4 -fsS "http://127.0.0.1:${MSE_PORT}/health" >/dev/null 2>&1; then ready=1; break; fi
       sleep 1
     done
     if [ "$ready" = "1" ]; then
@@ -618,7 +618,7 @@ start_services() {
 # ------------------------------------------------------------------ tunnel
 wait_for_router() {
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    curl -fsS "http://127.0.0.1:${MSE_PORT}/health" >/dev/null 2>&1 && return 0
+    curl -4 -fsS "http://127.0.0.1:${MSE_PORT}/health" >/dev/null 2>&1 && return 0
     sleep 1
   done
   return 0
@@ -636,7 +636,7 @@ setup_tunnel() {
       distro="$(. /etc/os-release 2>/dev/null && echo "$ID")"
       codename="$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME")"
       if [ -n "$distro" ] && [ -n "$codename" ]; then
-        curl -fsSL "https://pkgs.tailscale.com/stable/$distro/$codename.noarmor.gpg" \
+        curl -4 -fsSL "https://pkgs.tailscale.com/stable/$distro/$codename.noarmor.gpg" \
           | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null 2>&1 || true
         echo "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/$distro $codename main" \
           > /etc/apt/sources.list.d/tailscale.list
@@ -679,10 +679,24 @@ setup_tunnel() {
     https://*)
       env_set MSE_PUBLIC_URL "$url"
       say "  tunnel:    $url"
+      # verify external connectivity; if TLS handshake or connection fails, auto-restart tailscaled
+      if have curl; then
+        for attempt in 1 2; do
+          if curl -4 -fsSk --max-time 8 "$url/health" >/dev/null 2>&1; then break; fi
+          note "external curl check failed (TLS/connect), restarting tailscaled (attempt $attempt/2)..."
+          if have systemctl; then
+            systemctl restart tailscaled >/dev/null 2>&1 || true
+          elif have service; then
+            service tailscaled restart >/dev/null 2>&1 || true
+          fi
+          sleep 10
+          MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh funnel "${MSE_PORT}" >/dev/null 2>&1 || true
+        done
+      fi
       # the certificate of a fresh node is not ready the second funnel comes on: wait for the outside to answer,
       # and only then let the router read the address (its /health must carry it, and the owner checks it from a phone)
       say "  tunnel:    waiting for https from the outside (up to 60s)"
-      if have mse-tunnel.sh MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh wait --timeout 60 --quiet; then
+      if MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh wait --timeout 60 --quiet; then
         # the address the tunnel reports after the wait is the same one: take it only if it is really an address, so a
         # silent helper can never blank what the funnel already wrote
         fresh="$(MSE_ENV_FILE="$ENV_FILE" MSE_STATE_DIR="$STATE_DIR" mse-tunnel.sh url 2>/dev/null | tail -1 || true)"
@@ -713,7 +727,7 @@ restart_router_after_tunnel() {
   if have curl; then
     ok=0
     for _ in 1 2 3 4 5 6 7 8 9 10; do
-      if curl -fsS "http://127.0.0.1:${MSE_PORT}/health" >/dev/null 2>&1; then ok=1; break; fi
+      if curl -4 -fsS "http://127.0.0.1:${MSE_PORT}/health" >/dev/null 2>&1; then ok=1; break; fi
       sleep 1
     done
     [ "$ok" = "1" ] && say "  router:    answers, with the address in /health" \

@@ -68,7 +68,7 @@ cmd_notify_bot() {
   token="$(env_get MSE_BOT_TOKEN)"
   owner="$(env_get MSE_OWNER_ID)"
   if [ -n "$token" ] && [ -n "$owner" ] && have curl; then
-    curl -fsS -X POST "https://api.telegram.org/bot${token}/sendMessage" \
+    curl -4 -fsS -X POST "https://api.telegram.org/bot${token}/sendMessage" \
       -d "chat_id=${owner}" \
       --data-urlencode "text=${msg}" >/dev/null 2>&1 || true
   fi
@@ -84,7 +84,7 @@ cmd_cf_install() {
   say "cloudflared: checking latest release from GitHub..."
   local download_url=""
   if have curl; then
-    download_url="$(curl -fsSL https://api.github.com/repos/cloudflare/cloudflared/releases/latest 2>/dev/null | grep -o "https://github.com/cloudflare/cloudflared/releases/download/[^\"]*/cloudflared-linux-${arch}" | head -1 || true)"
+    download_url="$(curl -4 -fsSL https://api.github.com/repos/cloudflare/cloudflared/releases/latest 2>/dev/null | grep -o "https://github.com/cloudflare/cloudflared/releases/download/[^\"]*/cloudflared-linux-${arch}" | head -1 || true)"
   fi
   if [ -z "$download_url" ]; then
     # Pinned fallback
@@ -98,7 +98,7 @@ cmd_cf_install() {
     target_bin="/opt/mse/bin/cloudflared"
   fi
   mkdir -p "$(dirname "$target_bin")" 2>/dev/null || true
-  curl -fsSL "$download_url" -o "$target_bin" || die "failed to download cloudflared"
+  curl -4 -fsSL "$download_url" -o "$target_bin" || die "failed to download cloudflared"
   chmod +x "$target_bin"
   say "cloudflared: installed to $target_bin"
 }
@@ -231,7 +231,7 @@ cmd_install() {
   if have "$TS_BIN"; then say "tailscale: already installed ($(ts version 2>/dev/null | head -1))"; return 0; fi
   say "tailscale: installing…"
   if have curl; then
-    curl -fsSL https://tailscale.com/install.sh | sh
+    curl -4 -fsSL https://tailscale.com/install.sh | sh
   else
     die "no curl: install tailscale by hand (https://tailscale.com/download)"
   fi
@@ -309,6 +309,33 @@ PY
   fi
 }
 
+verify_funnel_external() {
+  local url="$1" port="${2:-$GATEWAY_PORT}"
+  have curl || return 0
+  local attempt=0 max_attempts=2
+  while [ "$attempt" -lt "$max_attempts" ]; do
+    if curl -4 -fsSk --max-time 8 "$url/health" >/dev/null 2>&1; then
+      say "tunnel: external https check ok"
+      return 0
+    fi
+    note "tunnel: external check failed (TLS/connect), auto-restarting tailscaled (attempt $((attempt + 1))/$max_attempts)..."
+    if have systemctl; then
+      systemctl restart tailscaled 2>/dev/null || true
+    elif have service; then
+      service tailscaled restart 2>/dev/null || true
+    fi
+    sleep 10
+    ts funnel --bg --yes "$port" >/dev/null 2>&1 || ts funnel --bg "$port" >/dev/null 2>&1 || true
+    attempt=$((attempt + 1))
+  done
+  if curl -4 -fsSk --max-time 8 "$url/health" >/dev/null 2>&1; then
+    say "tunnel: external https check ok"
+    return 0
+  fi
+  note "tunnel: external check did not succeed after $max_attempts recovery attempts"
+  return 1
+}
+
 cmd_funnel() {
   local port="${1:-$GATEWAY_PORT}"
   [ -n "$port" ] || die "MSE_PORT is not configured"
@@ -319,6 +346,7 @@ cmd_funnel() {
   [ -n "$host" ] || die "tailscale did not report the node address (tailscale status --json)"
   url="https://$host"
   write_state funnel "$port" "$url"
+  verify_funnel_external "$url" "$port" || true
   say "$url"
 }
 
@@ -549,35 +577,66 @@ cmd_watchdog() {
   mkdir -p "$STATE_DIR" 2>/dev/null || true
 
   watchdog_step() {
-    local url; url="$(cmd_url)"
-    if [ -z "$url" ]; then
-      return 0
-    fi
+    local port="${GATEWAY_PORT:-$(env_get MSE_PORT 8788)}"
     local prev_fails=0
     if [ -f "$watchdog_state_file" ]; then
       prev_fails="$(python3 -c 'import json,sys; print(int(json.load(open(sys.argv[1])).get("failures", 0)))' "$watchdog_state_file" 2>/dev/null || echo 0)"
     fi
-    local health_code=0
-    if have curl; then
-      health_code="$(curl -4 -k -fsS -o /dev/null -w "%{http_code}" --max-time 8 "$url/health" 2>/dev/null || echo 0)"
-    fi
     local now_ts
     now_ts="$(python3 -c 'import datetime; print(datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00","Z"))' 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-    if [ "$health_code" = "200" ]; then
-      python3 - "$watchdog_state_file" "0" "ok" "$url" "$now_ts" <<'PY' 2>/dev/null || true
+    # 1. Local router health check (IPv4 only, no external host curl)
+    local router_ok=1
+    if have curl; then
+      if ! curl -4 -fsS --max-time 5 "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
+        router_ok=0
+      fi
+    fi
+
+    # 2. Tailscaled daemon check
+    local ts_ok=1
+    if have "$TS_BIN"; then
+      if ! timeout 10 ts status >/dev/null 2>&1; then
+        ts_ok=0
+      fi
+    fi
+
+    # 3. Serve status check
+    local serve_ok=1
+    if [ "$ts_ok" = "1" ] && have "$TS_BIN"; then
+      local serve_status=""
+      serve_status="$(ts serve status --json 2>/dev/null || ts serve status 2>/dev/null || true)"
+      if [ -z "$serve_status" ] || ! echo "$serve_status" | grep -q "127.0.0.1:$port"; then
+        serve_ok=0
+      fi
+    fi
+
+    if [ "$ts_ok" = "0" ]; then
+      note "watchdog: tailscaled daemon unresponsive -> restarting tailscaled"
+      if have systemctl; then
+        systemctl restart tailscaled 2>/dev/null || true
+      elif have service; then
+        service tailscaled restart 2>/dev/null || true
+      fi
+    elif [ "$serve_ok" = "0" ]; then
+      note "watchdog: serve dropped -> restoring funnel on port $port"
+      ts funnel --bg --yes "$port" >/dev/null 2>&1 || ts funnel --bg "$port" >/dev/null 2>&1 || true
+    fi
+
+    if [ "$router_ok" = "1" ] && [ "$ts_ok" = "1" ] && [ "$serve_ok" = "1" ]; then
+      python3 - "$watchdog_state_file" "0" "ok" "$now_ts" <<'PY' 2>/dev/null || true
 import json,sys
-path,fails,status,url,at=sys.argv[1:6]
-json.dump({"failures":int(fails),"status":status,"url":url,"at":at}, open(path,"w"), indent=1)
+path,fails,status,at=sys.argv[1:5]
+json.dump({"failures":int(fails),"status":status,"at":at}, open(path,"w"), indent=1)
 PY
       return 0
     fi
 
     local fails=$((prev_fails + 1))
-    python3 - "$watchdog_state_file" "$fails" "fail" "$url" "$now_ts" <<'PY' 2>/dev/null || true
+    python3 - "$watchdog_state_file" "$fails" "fail" "$now_ts" <<'PY' 2>/dev/null || true
 import json,sys
-path,fails,status,url,at=sys.argv[1:6]
-json.dump({"failures":int(fails),"status":status,"url":url,"at":at}, open(path,"w"), indent=1)
+path,fails,status,at=sys.argv[1:5]
+json.dump({"failures":int(fails),"status":status,"at":at}, open(path,"w"), indent=1)
 PY
 
     if [ "$fails" -ge 3 ]; then
@@ -599,10 +658,10 @@ PY
       else
         cmd_funnel_reset "$GATEWAY_PORT" >/dev/null 2>&1 || true
       fi
-      python3 - "$watchdog_state_file" "0" "recovered" "$url" "$now_ts" <<'PY' 2>/dev/null || true
+      python3 - "$watchdog_state_file" "0" "recovered" "$now_ts" <<'PY' 2>/dev/null || true
 import json,sys
-path,fails,status,url,at=sys.argv[1:6]
-json.dump({"failures":int(fails),"status":status,"url":url,"recovered_at":at}, open(path,"w"), indent=1)
+path,fails,status,at=sys.argv[1:5]
+json.dump({"failures":int(fails),"status":status,"recovered_at":at}, open(path,"w"), indent=1)
 PY
     fi
   }
@@ -697,7 +756,7 @@ if url:
     health_url = url.rstrip('/') + '/health'
     try:
         proc = subprocess.run(
-            ['curl', '-k', '-fsS', '-o', '/dev/null', '-w', '%{http_code}:%{time_total}', '--max-time', '6', health_url],
+            ['curl', '-4', '-k', '-fsS', '-o', '/dev/null', '-w', '%{http_code}:%{time_total}', '--max-time', '6', health_url],
             capture_output=True, text=True, timeout=8
         )
         if proc.returncode == 0:
